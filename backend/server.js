@@ -4,6 +4,7 @@ import dotenv from 'dotenv'
 
 import authRouter from './routes/authRouter.js'
 import messageRouter from './routes/messageRouter.js'
+import userRouter from './routes/userRouter.js'
 import connectToDB from './db/connectdb.js'
 import cookieParser  from 'cookie-parser'
 
@@ -16,6 +17,7 @@ app.use(cookieParser());
 
 app.use("/api/auth/", authRouter);
 app.use("/api/messages/", messageRouter);
+app.use("/api/users/", userRouter);
 
 app.listen(port, (err)=>{
     if(err){

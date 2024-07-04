@@ -10,7 +10,7 @@ const conversationSchema = new mongoose.Schema({
     //contains id of messages.....
     messages: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'message',   //'message' here is the collection name but not model
+        ref: 'message', 
         default: []
     }]
 
