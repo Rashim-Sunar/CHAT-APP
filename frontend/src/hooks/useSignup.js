@@ -1,8 +1,10 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
+import { useAuthContext } from "../context/Auth-Context";
 
 const useSignup = () => {
   const [loading, setLoading] = useState(false);
+  const {setAuthUser} = useAuthContext();
 
   const signup = async ({email,userName,password,confirmPassword,gender}) => {
     const success = handleInputErrors({email,userName,password,confirmPassword,gender});
@@ -20,12 +22,17 @@ const useSignup = () => {
         if(data.error){
             throw new Error(data.error);
         }
+
+        //Localstorage....After saving the form data in db, we get response from backend, saving it in localstorage.
+        localStorage.setItem("chat-user", JSON.stringify(data));
+        //Context.....
+        setAuthUser(data);
     } catch (error) {
         toast.error(error.message);
     } finally {
         setLoading(false);
     }
-  };
+  }
 
   return {loading, signup};
 };
