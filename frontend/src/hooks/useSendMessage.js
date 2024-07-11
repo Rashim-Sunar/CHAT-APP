@@ -7,6 +7,7 @@ const useSendMessage = () => {
     const {messages, setMessages, selectedConversation} = useConversation();
 
     const sendMessage = async(message) => {
+        setLoading(true);
         try {
             const res = await fetch(`/api/messages/send/${selectedConversation._id}`, {
                 method: "POST",
@@ -17,7 +18,9 @@ const useSendMessage = () => {
             const data = await res.json();
             if(data.error) throw new Error(data.error);
             // console.log(data);
-            setMessages({...messages,data});
+            console.log(data?.newMessage);
+            setMessages([...messages, data?.newMessage]);
+            
         } catch (error) {
             toast.error(error.message);
         }finally{
