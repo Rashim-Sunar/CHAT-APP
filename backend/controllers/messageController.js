@@ -40,7 +40,7 @@ export const sendMessage = async(req, res) => {
     await Promise.all([newMessage.save(), conversation.save()]);
 
     res.status(201).json({
-        status: 'success',
+        // status: 'success',
         newMessage
     });
 
