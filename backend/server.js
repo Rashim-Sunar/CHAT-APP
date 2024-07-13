@@ -10,12 +10,12 @@ import connectToDB from './db/connectdb.js'
 import cookieParser  from 'cookie-parser'
 import {app, server} from './socket/socket.js';
 
-const port = process.env.PORT || 5000;
-
 const __dirname = path.resolve();
 
 dotenv.config({});
 
+
+const port = process.env.PORT || 5000;
 app.use(express.json());
 app.use(cookieParser());
 
