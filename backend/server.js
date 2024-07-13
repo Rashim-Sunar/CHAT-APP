@@ -7,8 +7,8 @@ import messageRouter from './routes/messageRouter.js'
 import userRouter from './routes/userRouter.js'
 import connectToDB from './db/connectdb.js'
 import cookieParser  from 'cookie-parser'
+import {app, server} from './socket/socket.js';
 
-const app = express();
 const port = process.env.PORT || 5000;
 dotenv.config({});
 
@@ -19,7 +19,7 @@ app.use("/api/auth/", authRouter);
 app.use("/api/messages/", messageRouter);
 app.use("/api/users/", userRouter);
 
-app.listen(port, (err)=>{
+server.listen(port, (err)=>{
     if(err){
        return console.log("Internal server occured:", err);
         
