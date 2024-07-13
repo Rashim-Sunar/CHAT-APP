@@ -1,5 +1,7 @@
 import Conversation from '../models/conversationModel.js'
 import Message from '../models/messageModel.js';
+import { getReceiverSocketId } from '../socket/socket.js';
+import { io } from '../socket/socket.js';
 
 export const sendMessage = async(req, res) => {
     try {
@@ -36,8 +38,13 @@ export const sendMessage = async(req, res) => {
       
     // await newMessage.save();
     // await conversation.save();
-
+    //This will be on parallel.....
     await Promise.all([newMessage.save(), conversation.save()]);
+
+    //SOCKET FUNCTIONALITY GOES HERE....
+    const receiverSocketId = getReceiverSocketId(receiverId);
+    //If receiver socketId, then instead of emmitting the event to every users, send only to the receiver..
+    io.to(receiverSocketId).emit("newMessage", newMessage);
 
     res.status(201).json({
         // status: 'success',

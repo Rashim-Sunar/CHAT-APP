@@ -13,6 +13,11 @@ const io = new Server(server, {
     }
 });
 
+//function to get the receiver socketId from the message reciver.....
+export const getReceiverSocketId = (receiverId) => {
+    return userSocketMap[receiverId]; 
+}
+
 const userSocketMap = {}; //{userId: socketId}
 
 io.on('connection', (socket) => {
