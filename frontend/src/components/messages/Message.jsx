@@ -14,6 +14,8 @@ const Message = ({ message }) => {
  	// console.log(fromMe)
  	// console.log(message.senderId, sender._id)
 	 const formattedTime = extractTime(message.createdAt);
+	 console.log(message);
+	 const shakeClass = message.shouldShake ? "shake" : "";
 
 	return (
 		<div className={`chat ${chatClassName}`}>
@@ -22,7 +24,7 @@ const Message = ({ message }) => {
 					<img alt='Tailwind CSS chat bubble component' src={profilePic} />
 				</div>
 			</div>
-			<div className={`chat-bubble text-white ${bubbleBgColor} pb-3`}>{message.message}</div>
+			<div className={`chat-bubble text-white ${bubbleBgColor} pb-3 ${shakeClass}`}>{message.message}</div>
 			<div className='chat-footer opacity-50 text-xs flex gap-1 items-center'>{formattedTime}</div>
 		</div>
 	);
