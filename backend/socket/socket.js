@@ -13,12 +13,23 @@ const io = new Server(server, {
     }
 });
 
+const userSocketMap = {}; //{userId: socketId}
+
 io.on('connection', (socket) => {
     console.log("A new user connected with id: ", socket.id);
+
+    const userId = socket.handshake.query.userId; //Getting userId from frontend SocketContext.jsx
+    if(userId != 'undefined') userSocketMap[userId] = socket.id;
+
+    //io.emit() is used to send events to all connected clients...
+    io.emit("getOnlineUsers", Object.keys(userSocketMap)); //WHenever a new user connected to socket send all connected users to him...
+
 
     //socket.on() is used to listen the events. can be used in both client and server side..
     socket.on('disconnect', () => {
         console.log("User disconnected: "+socket.id);
+        delete userSocketMap[userId];
+        io.emit("getOnlineUsers", Object.keys(userSocketMap));
     })
 })
 
