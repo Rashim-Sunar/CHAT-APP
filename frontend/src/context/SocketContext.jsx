@@ -16,7 +16,8 @@ export const SocketContextProvider = ({children}) => {
 
     useEffect(() => {
         if(authUser){
-            const socket = io("http://localhost:5000", {
+            console.log("AuthUser: ",authUser)
+            const socket = io("http://localhost:8000", {
                 query: {                //Sending to backend socket using query...In backend socket.js, we can get it by useing socket.handshake
                     userId: authUser?.data?.user?._id
                 }
