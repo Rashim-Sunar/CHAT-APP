@@ -2,11 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background: linear-gradient(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.2)), url("/bg.png");
-  background-repeat: no-repeat;
-  background-size: cover;
-  background-position: center;
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.6s ease-out forwards;
 }
 
 
@@ -27,8 +35,6 @@ body {
 ::-webkit-scrollbar-thumb:hover {
 	background: #242424;
 }
-
-
 
 /* SHAKE ANIMATION ON HORIZONTAL DIRECTION */
 .shake {

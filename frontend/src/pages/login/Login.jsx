@@ -1,111 +1,123 @@
-import React, { useState } from 'react'
-import {Link} from 'react-router-dom'
-import useLogin from '../../hooks/useLogin.js';
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
+import useLogin from "../../hooks/useLogin.js";
 
 const Login = () => {
-	const [inputs, setInputs] = useState({
-		email: "",
-		password: ""
-	});
+  const [inputs, setInputs] = useState({
+    email: "",
+    password: "",
+  });
 
-	const {loading, login} = useLogin();
+  const { loading, login } = useLogin();
 
-	const handleChange = (event) => {
-		setInputs(val => ({...val, [event.target.name] : event.target.value}));
-	}
+  const handleChange = (event) => {
+    setInputs((prev) => ({
+      ...prev,
+      [event.target.name]: event.target.value,
+    }));
+  };
 
-	const handleSubmit = async(event) => {
-		event.preventDefault();
-		await login(inputs);
-	}
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    await login(inputs);
+  };
 
-    	return (
-    		<div className='flex flex-col items-center justify-center min-w-96 mx-auto'>
-    			<div className='w-full p-6 rounded-lg shadow-md bg-gray-400 bg-clip-padding backdrop-filter backdrop-blur-lg bg-opacity-0'>
-    				<h1 className='text-3xl font-semibold text-center text-gray-300'>
-    					Login
-    					<span className='text-blue-500'> ChatApp</span>
-    				</h1>
-    
-    				<form onSubmit={handleSubmit}>
-    					<div>
-    						<label className='label p-2'>
-    							<span className='text-base label-text'>Email</span>
-    						</label>
-    						<input type='email' name='email' value={inputs.email || ""} onChange={handleChange} placeholder='Enter user email' className='w-full input input-bordered h-10' />
-    					</div>
-    
-    					<div>
-    						<label className='label'>
-    							<span className='text-base label-text'>Password</span>
-    						</label>
-    						<input
-    							type='password'
-								name='password'
-								value={inputs.value}
-								onChange={handleChange}
-    							placeholder='Enter Password'
-    							className='w-full input input-bordered h-10'
-    						/>
-    					</div>
-    					<Link to="/signup" className='text-sm  hover:underline hover:text-blue-600 mt-2 inline-block'>
-    						{"Don't"} have an account?
-    					</Link>
-    
-    					<div>
-    						<button className='btn btn-block btn-sm mt-2'
-							disabled={loading}>
-								{!loading ? "Login" : (<span className='loading loading-spinner loading-md'></span>)} 
-							</button>
-    					</div>
-    				</form>
-    			</div>
-    		</div>
-    	);
-    };
-    export default Login;
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4 sm:px-6">
+      
+      {/* Card */}
+      <div className="w-full max-w-3xl bg-white rounded-3xl 
+                      shadow-[0_20px_60px_rgba(0,0,0,0.08)]
+                      p-6 sm:p-10 md:p-12 transition-all duration-300">
 
+        {/* Header */}
+        <div className="text-center mb-8 sm:mb-10">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl 
+                         font-bold text-slate-800 tracking-tight">
+            Welcome Back
+          </h1>
 
+          <p className="text-slate-500 mt-3 text-base sm:text-lg">
+            Sign in to continue to{" "}
+            <span className="text-indigo-600 font-semibold">
+              ChatApp
+            </span>
+          </p>
+        </div>
 
-// STARTER CODE FOR FRONTEND
-/*
-    const Login = () => {
-    	return (
-    		<div className='flex flex-col items-center justify-center min-w-96 mx-auto'>
-    			<div className='w-full p-6 rounded-lg shadow-md bg-gray-400 bg-clip-padding backdrop-filter backdrop-blur-lg bg-opacity-0'>
-    				<h1 className='text-3xl font-semibold text-center text-gray-300'>
-    					Login
-    					<span className='text-blue-500'> ChatApp</span>
-    				</h1>
-    
-    				<form>
-    					<div>
-    						<label className='label p-2'>
-    							<span className='text-base label-text'>Username</span>
-    						</label>
-    						<input type='text' placeholder='Enter username' className='w-full input input-bordered h-10' />
-    					</div>
-    
-    					<div>
-    						<label className='label'>
-    							<span className='text-base label-text'>Password</span>
-    						</label>
-    						<input
-    							type='password'
-    							placeholder='Enter Password'
-    							className='w-full input input-bordered h-10'
-    						/>
-    					</div>
-    					<a href='#' className='text-sm  hover:underline hover:text-blue-600 mt-2 inline-block'>
-    						{"Don't"} have an account?
-    					</a>
-    
-    					<div>
-    						<button className='btn btn-block btn-sm mt-2'>Login</button>
-    					</div>
-    				</form>
-    			</div>
-    		</div>
-    	);
-    };
-    export default Login; */
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-8 max-w-2xl mx-auto">
+
+          {/* Email */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Email
+            </label>
+            <input
+              type="email"
+              name="email"
+              value={inputs.email}
+              onChange={handleChange}
+              placeholder="you@example.com"
+              className="w-full h-12 sm:h-14 px-4 sm:px-6 rounded-xl 
+                         bg-white text-slate-800
+                         border border-slate-300
+                         focus:outline-none 
+                         focus:ring-2 focus:ring-indigo-500
+                         focus:border-indigo-500
+                         transition duration-200"
+              required
+            />
+          </div>
+
+          {/* Password */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Password
+            </label>
+            <input
+              type="password"
+              name="password"
+              value={inputs.password}
+              onChange={handleChange}
+              placeholder="Enter your password"
+              className="w-full h-12 sm:h-14 px-4 sm:px-6 rounded-xl 
+                         bg-white text-slate-800
+                         border border-slate-300
+                         focus:outline-none 
+                         focus:ring-2 focus:ring-indigo-500
+                         focus:border-indigo-500
+                         transition duration-200"
+              required
+            />
+          </div>
+
+          {/* Signup Link */}
+          <div className="flex justify-start">
+            <Link
+              to="/signup"
+              className="text-sm text-slate-500 hover:text-indigo-600 transition"
+            >
+              Don’t have an account?
+            </Link>
+          </div>
+
+          {/* Button */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full h-12 sm:h-14 rounded-xl font-semibold text-white
+                       bg-indigo-600 hover:bg-indigo-700
+                       transition-all duration-300
+                       active:scale-[0.98]
+                       shadow-md disabled:opacity-70"
+          >
+            {!loading ? "Login" : "Signing in..."}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default Login;
