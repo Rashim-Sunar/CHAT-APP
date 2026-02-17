@@ -1,70 +1,90 @@
-import React, { useEffect } from 'react'
-import Messages from './Messages'
-import MessageInput from './MessageInput'
-import { TiMessages } from "react-icons/ti";
+import { useEffect, useState } from "react";
+import { HiOutlineDotsVertical } from "react-icons/hi";
+import { IoArrowBack } from "react-icons/io5";
+import Messages from "./Messages";
+import MessageInput from "./MessageInput";
 import useGetConversation from "../../zustand/useConversation";
-import { useAuthContext } from '../../context/Auth-Context';
-
 
 const MessageContainer = () => {
-  const {selectedConversation, setSelectedConversation} = useGetConversation();
+  const { selectedConversation, setSelectedConversation } =
+    useGetConversation();
 
-  useEffect(()=>{
-    //Cleanup function (unmount) ->Whenever user logout selectedconvesation will be null...
+  const [showDetails, setShowDetails] = useState(false);
+
+  // Cleanup when component unmounts
+  useEffect(() => {
     return () => setSelectedConversation(null);
-  },[setSelectedConversation]);
+  }, [setSelectedConversation]);
+
+  // If no chat selected
+  if (!selectedConversation) {
+    return (
+      <div className="h-full flex items-center justify-center text-slate-400 text-lg">
+        Select a conversation to start chatting
+      </div>
+    );
+  }
+
   return (
-    <div className='md:min-w-[450px] flex flex-col'>
-      {!selectedConversation ? (<NoChatSelected/>) : (
-          <>
-          {/* Header*/}
-          <div className='bg-slate-500 px-4 py-2 mb-2'>
-              <span className='label-text text-gray-900'>To:</span>
-              <span className='text-gray-900 font-bold'> {selectedConversation.userName}</span>
-          </div>
+    <div className="flex flex-col h-full relative">
 
-          <Messages/>
-          <MessageInput/>
-      </>
+      {/* ================= HEADER ================= */}
+      <div className="px-4 md:px-6 py-3 border-b border-slate-200 
+                      flex items-center justify-between bg-white">
+
+        {/* Left Section */}
+        <div className="flex items-center gap-3">
+
+          {/* Back Button (Mobile Only) */}
+          <button
+            onClick={() => setSelectedConversation(null)}
+            className="md:hidden text-slate-600"
+          >
+            <IoArrowBack size={22} />
+          </button>
+
+          <img
+            src={selectedConversation.profilePic}
+            alt="avatar"
+            className="w-9 h-9 md:w-10 md:h-10 rounded-full object-cover"
+          />
+
+          <h3 className="font-semibold text-slate-800 text-sm md:text-base">
+            {selectedConversation.userName}
+          </h3>
+        </div>
+
+        {/* 3 Dot Menu (Mobile Only) */}
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="lg:hidden text-slate-600"
+        >
+          <HiOutlineDotsVertical size={20} />
+        </button>
+      </div>
+
+      {/* ================= MOBILE DETAILS PANEL ================= */}
+      {showDetails && (
+        <div className="lg:hidden bg-slate-50 border-b border-slate-200 
+                        p-4 animate-fadeIn text-sm text-slate-500 space-y-2">
+          <p>Shared images will appear here.</p>
+          <p>Shared links will appear here.</p>
+          <p>Other user info will appear here.</p>
+        </div>
       )}
+
+      {/* ================= MESSAGES ================= */}
+      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 bg-slate-50">
+        <Messages />
+      </div>
+
+      {/* ================= INPUT ================= */}
+      <div className="border-t border-slate-200 bg-white">
+        <MessageInput />
+      </div>
+
     </div>
-  )
-}
-
-export default MessageContainer;
-
-const NoChatSelected = () => {
-  const {authUser} = useAuthContext();
-  const user = authUser?.data?.user?.userName;
-	return (
-		<div className='flex items-center justify-center w-full h-full'>
-			<div className='px-4 text-center sm:text-lg md:text-xl text-gray-200 font-semibold flex flex-col items-center gap-2'>
-				<p>Welcome 👋 {user} ❄</p>
-				<p>Select a chat to start messaging</p>
-				<TiMessages className='text-3xl md:text-6xl text-center' />
-			</div>
-		</div>
-	);
+  );
 };
 
-
-
-// STARTER CODE GOES HERE.....
-// const MessageContainer = () => {
-//   return (
-//     <div className='md:min-w-[450px] flex flex-col'>
-//         <>
-//             {/* Header*/}
-//             <div className='bg-slate-500 px-4 py-2 mb-2'>
-//                 <span className='label-text'>To: </span>
-//                 <span className='text-gray-900 font-bold'>Aakash Cahurasiya</span>
-//             </div>
-
-//             <Messages/>
-//             <MessageInput/>
-//         </>
-//     </div>
-//   )
-// }
-
-// export default MessageContainer
+export default MessageContainer;

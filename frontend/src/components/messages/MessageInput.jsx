@@ -1,63 +1,43 @@
-import React, { useState } from 'react'
-import { BsFillSendFill } from "react-icons/bs"
-import useSendMessage from '../../hooks/useSendMessage'
+import { useState } from "react";
+import { BsFillSendFill } from "react-icons/bs";
+import useSendMessage from "../../hooks/useSendMessage";
 
 const MessageInput = () => {
-  const {loading, sendMessage} = useSendMessage();
-
+  const { loading, sendMessage } = useSendMessage();
   const [message, setMessage] = useState("");
 
-  const handleSubmit = async(event) => {
-    event.preventDefault();
-    if(!message) return;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!message.trim()) return;
     await sendMessage(message);
-    setMessage(" ");
-  }
+    setMessage("");
+  };
 
   return (
-    <form className='px-4 my-3' onSubmit={handleSubmit}>
-        <div className='w-full relative'>
-            <input 
-                type='text' 
-                className='w-full text-sm block border rounded-lg p-2.5 bg-gray-600 text-white'
-                placeholder='Send a message'
-                onChange={(event) => setMessage(event.target.value)}
-                value={message}
-            />
-            <button type='submit' className='absolute text-white inset-y-0 end-0 flex items-center pe-3 justify-center'>
-                {!loading ? (<BsFillSendFill/>) : <span className='loading loading-spinner'></span> }
-            </button>
-        </div>
+    <form
+      onSubmit={handleSubmit}
+      className="flex items-center gap-3 p-4"
+    >
+      <input
+        type="text"
+        placeholder="Type a message..."
+        className="flex-1 h-12 px-4 rounded-full border border-slate-300 
+                   focus:outline-none focus:ring-2 focus:ring-indigo-500
+                   transition duration-200"
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+      />
+
+      <button
+        type="submit"
+        className="w-12 h-12 rounded-full bg-indigo-600 text-white 
+                   flex items-center justify-center
+                   hover:bg-indigo-700 transition duration-200"
+      >
+        <BsFillSendFill />
+      </button>
     </form>
-  )
-}
+  );
+};
 
-export default MessageInput
-
-
-
-
-//INITIAL CODE GOES HERE.....
-// import { BsFillSendFill } from "react-icons/bs"
-
-// const MessageInput = () => {
-//   return (
-//     <form className='px-4 my-3'>
-//         <div className='w-full relative'>
-//             <input 
-//                 type='text' 
-//                 className='w-full text-sm block border rounded-lg p-2.5 bg-gray-600 text-white'
-//                 placeholder='Send a message'
-//             />
-//             <button type='submit' className='absolute text-white inset-y-0 end-0 flex items-center pe-3 justify-center'>
-//                 <BsFillSendFill/>
-//             </button>
-//         </div>
-//     </form>
-//   )
-// }
-
-// export default MessageInput
-
-
-
+export default MessageInput;
