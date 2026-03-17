@@ -1,6 +1,7 @@
 import { useAuthContext } from "../../context/Auth-Context";
 import useConversation from "../../zustand/useConversation";
 import { extractTime } from "../../Utils/extractTime";
+import { getAvatarByGender } from "../../Utils/getAvatarByGender";
 
 const Message = ({ message }) => {
   const { authUser } = useAuthContext();
@@ -10,8 +11,8 @@ const Message = ({ message }) => {
   const fromMe = message.senderId === sender._id;
 
   const profilePic = fromMe
-    ? sender.profilePic
-    : selectedConversation?.profilePic;
+    ? getAvatarByGender(sender?.gender)
+    : getAvatarByGender(selectedConversation?.gender);
 
   const formattedTime = extractTime(message.createdAt);
 

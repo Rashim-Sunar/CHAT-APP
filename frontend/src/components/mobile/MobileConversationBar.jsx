@@ -2,6 +2,7 @@ import { useState } from "react";
 import { IoSearchSharp } from "react-icons/io5";
 import useConversation from "../../zustand/useConversation";
 import useGetConversations from "../../hooks/useGetConversations";
+import { getAvatarByGender } from "../../Utils/getAvatarByGender";
 
 const MobileConversationBar = () => {
   const { conversations } = useGetConversations();
@@ -57,7 +58,7 @@ const MobileConversationBar = () => {
                   }`}
               >
                 <img
-                  src={conversation.profilePic}
+                  src={getAvatarByGender(conversation.gender)}
                   alt="avatar"
                   className="w-full h-full object-cover"
                 />

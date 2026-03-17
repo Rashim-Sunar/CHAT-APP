@@ -4,6 +4,7 @@ import { IoArrowBack } from "react-icons/io5";
 import Messages from "./Messages";
 import MessageInput from "./MessageInput";
 import useGetConversation from "../../zustand/useConversation";
+import { getAvatarByGender } from "../../Utils/getAvatarByGender";
 
 const MessageContainer = () => {
   const { selectedConversation, setSelectedConversation } =
@@ -44,7 +45,7 @@ const MessageContainer = () => {
           </button>
 
           <img
-            src={selectedConversation.profilePic}
+            src={getAvatarByGender(selectedConversation.gender)}
             alt="avatar"
             className="w-9 h-9 md:w-10 md:h-10 rounded-full object-cover"
           />

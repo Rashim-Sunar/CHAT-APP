@@ -1,5 +1,6 @@
 import { useSocketContext } from "../../context/SocketContext";
 import useGetConversation from "../../zustand/useConversation";
+import { getAvatarByGender } from "../../Utils/getAvatarByGender";
 
 const Conversation = ({ conversation }) => {
   const { selectedConversation, setSelectedConversation } =
@@ -24,7 +25,7 @@ const Conversation = ({ conversation }) => {
       {/* Avatar */}
       <div className="relative">
         <img
-          src={conversation.profilePic}
+          src={getAvatarByGender(conversation.gender)}
           alt="avatar"
           className="w-11 h-11 rounded-full object-cover"
         />
