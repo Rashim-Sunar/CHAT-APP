@@ -13,6 +13,7 @@ import userRouter from './routes/userRouter.js';
 import connectToDB from './db/connectdb.js';
 import cookieParser from 'cookie-parser';
 import { app, server } from './socket/socket.js';
+import { authLimiter, messageLimiter, apiLimiter } from './middlewares/rateLimiter.js';
 
 // const __dirname = path.resolve();
 
@@ -33,11 +34,11 @@ app.use(express.json());
 app.use(cookieParser());
 
 // ----------------------------------------
-// API Routes
+// API Routes  (rate limiters applied per tier)
 // ----------------------------------------
-app.use('/api/auth/', authRouter);
-app.use('/api/messages/', messageRouter);
-app.use('/api/users/', userRouter);
+app.use('/api/auth/', authLimiter, authRouter);
+app.use('/api/messages/', messageLimiter, messageRouter);
+app.use('/api/users/', apiLimiter, userRouter);
 
 // ----------------------------------------
 // Static File Serving (Frontend Build)
