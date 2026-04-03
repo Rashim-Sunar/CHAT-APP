@@ -12,5 +12,10 @@ declare namespace NodeJS {
     JWT_SECRET: string; // Secret key used for signing and verifying JWT tokens
 
     MONGO_DB_URI: string; // MongoDB connection string
+
+    CLOUDINARY_CLOUD_NAME: string;
+    CLOUDINARY_API_KEY: string;
+    CLOUDINARY_API_SECRET: string;
+    MAX_UPLOAD_SIZE_BYTES?: string;
   }
 }

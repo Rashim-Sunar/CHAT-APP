@@ -6,7 +6,11 @@
 import express from 'express';
 import protectRoute from '../middlewares/protectRoute.js';
 
-import { sendMessage, getMessage } from '../controllers/messageController.js';
+import {
+	sendMessage,
+	getMessage,
+	createUploadSignature,
+} from '../controllers/messageController.js';
 
 const router = express.Router();
 
@@ -16,6 +20,13 @@ const router = express.Router();
 // @access  Private
 // ----------------------------------------
 router.get('/:id', protectRoute, getMessage);
+
+// ----------------------------------------
+// @desc    Creates a signed Cloudinary upload payload
+// @route   POST /api/messages/upload-signature
+// @access  Private
+// ----------------------------------------
+router.post('/upload-signature', protectRoute, createUploadSignature);
 
 // ----------------------------------------
 // @desc    Sends a message to a specific user
