@@ -5,10 +5,17 @@
 
 import mongoose, { Document, Types } from 'mongoose';
 
+export type MessageType = 'text' | 'image' | 'video' | 'file';
+
 export interface IMessage {
   senderId: Types.ObjectId;
   receiverId: Types.ObjectId;
-  message: string;
+  messageType: MessageType;
+  text?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
 }
 
 // Extends IMessage with mongoose document properties
@@ -29,9 +36,30 @@ const messageSchema = new mongoose.Schema<IMessage>(
       ref: 'user', // Reference to receiver user document
       required: true,
     },
-    message: {
+    messageType: {
       type: String,
-      required: true, // Stores actual message content
+      enum: ['text', 'image', 'video', 'file'],
+      required: true,
+    },
+    text: {
+      type: String,
+      trim: true,
+    },
+    fileUrl: {
+      type: String,
+      trim: true,
+    },
+    fileName: {
+      type: String,
+      trim: true,
+    },
+    fileSize: {
+      type: Number,
+      min: 0,
+    },
+    mimeType: {
+      type: String,
+      trim: true,
     },
   },
   { timestamps: true } // Adds createdAt & updatedAt for message tracking

@@ -19,8 +19,8 @@ const Messages = () => {
   return (
     // overflow-auto -->When messages are many then there seem a scroll bar...
     <div className='px-4 flex-1 overflow-auto'> 
-      {!loading && messages.length > 0 && messages.map((message) => (
-        <div key={message._id} ref={lastMessageRef}>
+      {!loading && messages.length > 0 && messages.map((message, index) => (
+        <div key={message._id || `${message.createdAt}-${index}`} ref={lastMessageRef}>
             <Message message={message}/>
         </div>
       ))}

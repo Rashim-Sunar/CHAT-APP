@@ -15,6 +15,7 @@ const useListenMessages = () => {
   } = useConversation();
 
   useEffect(() => {
+    // Subscribe once per socket instance; cleanup removes exact handler reference.
     if (!socket) return;
 
     const currentUserId = authUser?.data?.user?._id;
@@ -22,15 +23,21 @@ const useListenMessages = () => {
     const onNewMessage = (newMessage) => {
       // Root cause was a shared global array (`messages`) that received all events,
       // so whichever chat was open rendered foreign messages. We now route by conversation.
-      const incomingConversationKey =
-        newMessage?.conversationId ||
-        getConversationKey(newMessage?.senderId, newMessage?.receiverId);
+      // Frontend store buckets are keyed by participant ids, not conversation document id.
+      // Using a single deterministic key here ensures fetch, send, and socket writes all hit
+      // the same in-memory conversation bucket.
+      const incomingConversationKey = getConversationKey(
+        newMessage?.senderId,
+        newMessage?.receiverId
+      );
 
       if (!incomingConversationKey || !currentUserId) return;
 
       appendMessageToConversation(incomingConversationKey, newMessage);
       upsertConversationFromMessage(newMessage, currentUserId);
 
+      // Compare incoming conversation with currently open chat.
+      // Only non-active conversations increment unread and trigger notification sound.
       const activeConversation = useConversation.getState().selectedConversation;
       const activeConversationKey = getConversationKey(
         activeConversation?._id,
@@ -49,6 +56,7 @@ const useListenMessages = () => {
 
     socket.on("newMessage", onNewMessage);
 
+    // Prevent duplicate listeners during remounts or dependency changes.
     return () => socket.off("newMessage", onNewMessage);
   },[socket, authUser, appendMessageToConversation, incrementUnread, upsertConversationFromMessage]);
 }

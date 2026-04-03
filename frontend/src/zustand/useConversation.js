@@ -1,6 +1,18 @@
 import { create } from "zustand";
 import { getConversationKey } from "../Utils/conversationKey";
 
+const getPreviewText = (incomingMessage) => {
+    const messageType = incomingMessage?.messageType || "text";
+
+    if (messageType === "image") return "Photo";
+    if (messageType === "video") return "Video";
+    if (messageType === "file") {
+        return incomingMessage?.fileName || "File";
+    }
+
+    return incomingMessage?.text || incomingMessage?.message || "";
+};
+
 // Normalize arrays coming from mixed transport paths (REST + socket) by _id.
 // Messages without _id are kept to avoid dropping optimistic/local-only entries.
 const dedupeMessages = (messages = []) => {
@@ -33,7 +45,7 @@ const upsertConversationWithMessage = (
         (conversation) => String(conversation._id) === partnerId
     );
 
-    const lastMessage = incomingMessage.message;
+    const lastMessage = getPreviewText(incomingMessage);
     const lastMessageAt = incomingMessage.createdAt;
 
     if (existingIndex >= 0) {
@@ -76,6 +88,7 @@ const useConversation = create((set, get) => ({
     // Conversation-scoped buckets prevent cross-chat leakage from realtime events.
     messagesByConversation: {},
     unreadByConversation: {},
+    uploadQueue: [],
 
     // Selecting a conversation marks it as active and clears unread for that key.
     // We key unread by deterministic conversation id to keep behavior stable
@@ -183,6 +196,29 @@ const useConversation = create((set, get) => ({
     // Selector helper to keep components simple and avoid undefined checks.
     getMessagesForConversation: (conversationKey) =>
         get().messagesByConversation[conversationKey] || [],
+
+    // Upload queue powers responsive UI for parallel media uploads.
+    addUploadJobs: (jobs) =>
+        set((state) => ({
+            uploadQueue: [...state.uploadQueue, ...jobs],
+        })),
+
+    updateUploadJob: (jobId, patch) =>
+        set((state) => ({
+            uploadQueue: state.uploadQueue.map((job) =>
+                job.id === jobId ? { ...job, ...patch } : job
+            ),
+        })),
+
+    removeUploadJob: (jobId) =>
+        set((state) => ({
+            uploadQueue: state.uploadQueue.filter((job) => job.id !== jobId),
+        })),
+
+    clearCompletedUploads: () =>
+        set((state) => ({
+            uploadQueue: state.uploadQueue.filter((job) => job.status === "uploading"),
+        })),
 }));
 
 export default useConversation;
