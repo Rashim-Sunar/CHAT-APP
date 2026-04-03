@@ -3,11 +3,14 @@ import useConversation from "../../zustand/useConversation";
 import useGetConversations from "../../hooks/useGetConversations";
 import toast from "react-hot-toast";
 import { useState } from "react";
+import { useAuthContext } from "../../context/Auth-Context";
 
 const SearchInput = () => {
   const [search, setSearch] = useState("");
   const { conversations } = useGetConversations();
   const { setSelectedConversation } = useConversation();
+  const { authUser } = useAuthContext();
+  const currentUserId = authUser?.data?.user?._id;
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -22,7 +25,7 @@ const SearchInput = () => {
     );
 
     if (conversation) {
-      setSelectedConversation(conversation);
+      setSelectedConversation(conversation, currentUserId);
       setSearch("");
     } else {
       toast.error("User not found");

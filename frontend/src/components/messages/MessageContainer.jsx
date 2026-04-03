@@ -5,17 +5,20 @@ import Messages from "./Messages";
 import MessageInput from "./MessageInput";
 import useGetConversation from "../../zustand/useConversation";
 import { getAvatarByGender } from "../../Utils/getAvatarByGender";
+import { useAuthContext } from "../../context/Auth-Context";
 
 const MessageContainer = () => {
   const { selectedConversation, setSelectedConversation } =
     useGetConversation();
+  const { authUser } = useAuthContext();
+  const currentUserId = authUser?.data?.user?._id;
 
   const [showDetails, setShowDetails] = useState(false);
 
   // Cleanup when component unmounts
   useEffect(() => {
-    return () => setSelectedConversation(null);
-  }, [setSelectedConversation]);
+    return () => setSelectedConversation(null, currentUserId);
+  }, [setSelectedConversation, currentUserId]);
 
   // If no chat selected
   if (!selectedConversation) {
@@ -38,7 +41,7 @@ const MessageContainer = () => {
 
           {/* Back Button (Mobile Only) */}
           <button
-            onClick={() => setSelectedConversation(null)}
+            onClick={() => setSelectedConversation(null, currentUserId)}
             className="md:hidden text-slate-600"
           >
             <IoArrowBack size={22} />
