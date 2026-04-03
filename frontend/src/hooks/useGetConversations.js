@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react"
 import toast from "react-hot-toast";
+import useConversation from "../zustand/useConversation";
 
 const useGetConversations = () => {
   const [loading, setLoading] = useState(false);
-  const [conversations, setConversations] = useState([]);
+    const { conversations, setConversations } = useConversation();
 
   useEffect(() => {
+        if (conversations.length > 0) return;
+
     const getConversations = async() => {
         setLoading(true);
         try {
@@ -15,7 +18,7 @@ const useGetConversations = () => {
             });
             const usersData = await res.json();
             if(usersData.error){
-                throw new Error(data.error);
+                throw new Error(usersData.error);
             }
             
             const userDataArray = usersData?.data?.users || [];           
@@ -29,7 +32,7 @@ const useGetConversations = () => {
     }
 
     getConversations();
-  }, []);
+    }, [conversations.length, setConversations]);
 
   return {loading, conversations};
 }

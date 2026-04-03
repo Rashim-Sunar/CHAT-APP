@@ -2,21 +2,55 @@ import { useEffect } from "react";
 import { useSocketContext } from "../context/SocketContext"
 import useConversation from '../zustand/useConversation'
 import notificationSound from '../assets/sound/notification.mp3'
+import { useAuthContext } from "../context/Auth-Context";
+import { getConversationKey } from "../Utils/conversationKey";
 
 const useListenMessages = () => {
   const {socket} = useSocketContext();
-  const {messages, setMessages} = useConversation();
+  const { authUser } = useAuthContext();
+  const {
+    appendMessageToConversation,
+    incrementUnread,
+    upsertConversationFromMessage,
+  } = useConversation();
 
   useEffect(() => {
-    socket?.on("newMessage", (newMessage)=>{
-        newMessage.shouldShake = true;
-        const sound = new Audio(notificationSound);
-        sound.play();
-        setMessages([...messages, newMessage]);
-    });
+    if (!socket) return;
 
-    return () => socket.off("newMessage");
-  },[socket, setMessages, messages]);
+    const currentUserId = authUser?.data?.user?._id;
+
+    const onNewMessage = (newMessage) => {
+      // Root cause was a shared global array (`messages`) that received all events,
+      // so whichever chat was open rendered foreign messages. We now route by conversation.
+      const incomingConversationKey =
+        newMessage?.conversationId ||
+        getConversationKey(newMessage?.senderId, newMessage?.receiverId);
+
+      if (!incomingConversationKey || !currentUserId) return;
+
+      appendMessageToConversation(incomingConversationKey, newMessage);
+      upsertConversationFromMessage(newMessage, currentUserId);
+
+      const activeConversation = useConversation.getState().selectedConversation;
+      const activeConversationKey = getConversationKey(
+        activeConversation?._id,
+        currentUserId
+      );
+
+      if (activeConversationKey !== incomingConversationKey) {
+        incrementUnread(incomingConversationKey);
+
+        const sound = new Audio(notificationSound);
+        sound.play().catch(() => {
+          // Ignore autoplay blocks - message state is already updated.
+        });
+      }
+    };
+
+    socket.on("newMessage", onNewMessage);
+
+    return () => socket.off("newMessage", onNewMessage);
+  },[socket, authUser, appendMessageToConversation, incrementUnread, upsertConversationFromMessage]);
 }
 
 export default useListenMessages

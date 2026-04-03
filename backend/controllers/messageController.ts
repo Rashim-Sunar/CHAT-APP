@@ -52,13 +52,28 @@ export const sendMessage = async (
     // Save both message and conversation concurrently
     await Promise.all([newMessage.save(), conversation.save()]);
 
+    const messageWithTimestamps = newMessage as unknown as MessageDocument & {
+      createdAt: Date;
+      updatedAt: Date;
+    };
+
+    const realtimeMessagePayload = {
+      _id: String(newMessage._id),
+      senderId: String(newMessage.senderId),
+      receiverId: String(newMessage.receiverId),
+      conversationId: String(conversation._id),
+      message: newMessage.message,
+      createdAt: messageWithTimestamps.createdAt,
+      updatedAt: messageWithTimestamps.updatedAt,
+    };
+
     // Emit real-time message to receiver if online
     const receiverSocketId = getReceiverSocketId(receiverId);
     if (receiverSocketId) {
-      io.to(receiverSocketId).emit('newMessage', newMessage);
+      io.to(receiverSocketId).emit('newMessage', realtimeMessagePayload);
     }
 
-    res.status(201).json({ newMessage });
+    res.status(201).json({ newMessage: realtimeMessagePayload });
   } catch (error: unknown) {
     // Log error for debugging
     console.log(

@@ -1,12 +1,21 @@
 import { useState } from "react"
 import useConversation from "../zustand/useConversation"
 import toast from 'react-hot-toast'
+import { useAuthContext } from "../context/Auth-Context"
+import { getConversationKey } from "../Utils/conversationKey"
 
 const useSendMessage = () => {
     const [loading, setLoading] = useState(false);
-    const {messages, setMessages, selectedConversation} = useConversation();
+    const { authUser } = useAuthContext();
+    const {
+        selectedConversation,
+        appendMessageToConversation,
+        upsertConversationFromMessage,
+    } = useConversation();
 
     const sendMessage = async(message) => {
+        if (!selectedConversation?._id) return;
+
         setLoading(true);
         try {
             const res = await fetch(`/api/messages/send/${selectedConversation._id}`, {
@@ -17,9 +26,24 @@ const useSendMessage = () => {
 
             const data = await res.json();
             if(data.error) throw new Error(data.error);
-            // console.log(data);
-            // console.log(data?.newMessage);
-            setMessages([...messages, data?.newMessage]);
+
+            const currentUserId = authUser?.data?.user?._id;
+            const outgoingMessage = data?.newMessage;
+
+            const conversationKey =
+                outgoingMessage?.conversationId ||
+                getConversationKey(
+                    outgoingMessage?.senderId,
+                    outgoingMessage?.receiverId
+                );
+
+            if (conversationKey && outgoingMessage) {
+                appendMessageToConversation(conversationKey, outgoingMessage);
+
+                if (currentUserId) {
+                    upsertConversationFromMessage(outgoingMessage, currentUserId);
+                }
+            }
             
         } catch (error) {
             toast.error(error.message);

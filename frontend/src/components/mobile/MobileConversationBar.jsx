@@ -3,11 +3,14 @@ import { IoSearchSharp } from "react-icons/io5";
 import useConversation from "../../zustand/useConversation";
 import useGetConversations from "../../hooks/useGetConversations";
 import { getAvatarByGender } from "../../Utils/getAvatarByGender";
+import { useAuthContext } from "../../context/Auth-Context";
 
 const MobileConversationBar = () => {
   const { conversations } = useGetConversations();
   const { selectedConversation, setSelectedConversation } =
     useConversation();
+  const { authUser } = useAuthContext();
+  const currentUserId = authUser?.data?.user?._id;
 
   const [search, setSearch] = useState("");
 
@@ -46,7 +49,9 @@ const MobileConversationBar = () => {
           return (
             <div
               key={conversation._id}
-              onClick={() => setSelectedConversation(conversation)}
+              onClick={() =>
+                setSelectedConversation(conversation, currentUserId)
+              }
               className="flex flex-col items-center cursor-pointer min-w-[65px]"
             >
               <div
