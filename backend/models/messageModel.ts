@@ -16,6 +16,7 @@ export interface IMessage {
   fileName?: string;
   fileSize?: number;
   mimeType?: string;
+  publicId?: string;
 }
 
 // Extends IMessage with mongoose document properties
@@ -58,6 +59,10 @@ const messageSchema = new mongoose.Schema<IMessage>(
       min: 0,
     },
     mimeType: {
+      type: String,
+      trim: true,
+    },
+    publicId: {
       type: String,
       trim: true,
     },

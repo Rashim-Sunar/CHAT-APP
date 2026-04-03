@@ -9,7 +9,7 @@ import Conversation, { ConversationDocument } from '../models/conversationModel.
 import Message, { MessageDocument } from '../models/messageModel.js';
 import { getReceiverSocketId, io } from '../socket/socket.js';
 import type { AuthenticatedRequest } from '../types/express/index.js';
-import type { CreateUploadSignatureDto, SendMessageDto } from '../types/dtos/message.js';
+import type { CreateFileDeliveryUrlDto, CreateUploadSignatureDto, SendMessageDto } from '../types/dtos/message.js';
 import { getCloudinary } from '../Utils/cloudinary.js';
 import {
   sanitizeFileName,
@@ -18,6 +18,14 @@ import {
   resolveCloudinaryResourceType,
   getMaxUploadSizeBytes,
 } from '../Utils/fileValidation.js';
+
+const getFileFormat = (fileName: string): string => {
+  const extension = fileName.split('.').pop()?.toLowerCase() || '';
+
+  // Cloudinary's private_download_url requires a format hint for raw assets.
+  // If a file has no extension, fall back to a generic binary payload.
+  return extension || 'bin';
+};
 
 type RealtimeMessagePayload = {
   _id: string;
@@ -31,6 +39,7 @@ type RealtimeMessagePayload = {
   fileName: string | null;
   fileSize: number | null;
   mimeType: string | null;
+  publicId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -68,13 +77,19 @@ const isCloudinaryPathValidForType = (
 };
 
 // Produces one canonical message shape for both REST responses and socket events.
-// Keeping this centralized guarantees frontend parsing consistency across transports.
+//
+// This is the normalization boundary for the entire chat system. Any payload
+// leaving the backend should already contain the exact fields the frontend
+// needs to render the message without guessing which legacy field name to use.
+// Keeping this logic centralized also prevents REST responses and socket
+// events from drifting apart over time.
 const buildRealtimePayload = (
   messageDoc: MessageDocument & { createdAt: Date; updatedAt: Date },
   conversationId: string
 ): RealtimeMessagePayload => {
   // Backward compatibility: older documents used `message` instead of `text`
-  // and may not have messageType set. Keep history readable after migration.
+  // and may not have messageType set. We read all historical shapes here so
+  // previously stored conversations remain visible after schema evolution.
   const legacyTextFromDoc =
     typeof (messageDoc as unknown as { message?: unknown }).message === 'string'
       ? ((messageDoc as unknown as { message?: string }).message as string)
@@ -104,13 +119,20 @@ const buildRealtimePayload = (
     fileName: messageDoc.fileName || null,
     fileSize: typeof messageDoc.fileSize === 'number' ? messageDoc.fileSize : null,
     mimeType: messageDoc.mimeType || null,
+    publicId: typeof (messageDoc as unknown as { publicId?: unknown }).publicId === 'string'
+      ? ((messageDoc as unknown as { publicId?: string }).publicId as string)
+      : null,
     createdAt: messageDoc.createdAt,
     updatedAt: messageDoc.updatedAt,
   };
 };
 
 // Validates and normalizes payloads for text/media messages before persistence.
-// This guards against malformed clients and enforces server-side trust boundaries.
+//
+// This is intentionally strict. The server treats the client as untrusted and
+// rejects malformed media payloads before they ever reach MongoDB or Socket.IO.
+// That keeps message history consistent and prevents invalid media records from
+// leaking into the chat timeline.
 const validateSendPayload = (
   body: SendMessageDto
 ): { valid: true; payload: Required<Pick<SendMessageDto, 'messageType'>> & SendMessageDto } | { valid: false; reason: string } => {
@@ -197,11 +219,14 @@ export const createUploadSignature = async (
     const senderId = String(req.user || 'unknown');
     const publicId = `chat_uploads/${senderId}/${timestamp}_${crypto.randomUUID()}_${safeName}`;
 
-    // Signature only includes immutable fields we want clients to use.
+    // The upload signature only covers immutable fields that the client should
+    // be allowed to submit. This prevents the browser from mutating the upload
+    // contract after the signature has been issued.
     const signature = cloudinary.utils.api_sign_request(
       {
         timestamp,
         public_id: publicId,
+        access_mode: 'public',
       },
       process.env.CLOUDINARY_API_SECRET
     );
@@ -213,6 +238,7 @@ export const createUploadSignature = async (
       signature,
       publicId,
       resourceType,
+      accessMode: 'public',
       maxFileSizeBytes: getMaxUploadSizeBytes(),
     });
   } catch (error: unknown) {
@@ -222,6 +248,52 @@ export const createUploadSignature = async (
     );
 
     res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Generates a signed delivery URL for assets that are not publicly reachable.
+ *
+ * Why this exists:
+ * - Some raw files are uploaded with delivery restrictions or account-level
+ *   access controls, which makes the plain `secure_url` fail with 401/403.
+ * - A signed delivery URL lets the browser access the asset without exposing
+ *   the API secret or switching the asset to unsigned delivery.
+ */
+export const createFileDeliveryUrl = async (
+  req: AuthenticatedRequest<unknown, unknown, CreateFileDeliveryUrlDto>,
+  res: Response
+): Promise<void> => {
+  try {
+    const { publicId, fileName, messageType, attachment = false } = req.body;
+
+    if (!publicId || !fileName) {
+      res.status(400).json({ error: 'publicId and fileName are required' });
+      return;
+    }
+
+    const cloudinary = getCloudinary();
+    const format = getFileFormat(fileName);
+
+    // Raw files are the common case for PDFs and office documents, but this
+    // helper also supports other restricted assets when the upload or delivery
+    // policy requires a signed URL instead of a public CDN path.
+    const resourceType = messageType === 'image' || messageType === 'video' ? messageType : 'raw';
+
+    const signedUrl = cloudinary.utils.private_download_url(publicId, format, {
+      resource_type: resourceType,
+      type: 'upload',
+      attachment,
+    });
+
+    res.status(200).json({ signedUrl });
+  } catch (error: unknown) {
+    console.log(
+      'Error in createFileDeliveryUrl:',
+      error instanceof Error ? error.message : String(error)
+    );
+
+    res.status(500).json({ error: 'Failed to generate signed delivery URL' });
   }
 };
 
@@ -271,6 +343,7 @@ export const sendMessage = async (
       fileName: payload.fileName,
       fileSize: payload.fileSize,
       mimeType: payload.mimeType,
+      publicId: payload.publicId,
     });
 
     // Link message to conversation

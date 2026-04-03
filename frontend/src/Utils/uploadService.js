@@ -37,6 +37,7 @@ const uploadWithProgress = ({ file, signaturePayload, onProgress }) =>
     formData.append("timestamp", String(signaturePayload.timestamp));
     formData.append("signature", signaturePayload.signature);
     formData.append("public_id", signaturePayload.publicId);
+    formData.append("access_mode", signaturePayload.accessMode || "public");
 
     xhr.send(formData);
   });
@@ -98,6 +99,7 @@ export const uploadFilesToCloudinary = async ({
           ? "video"
           : "file",
       fileUrl: cloudinaryResult.secure_url,
+      publicId: cloudinaryResult.public_id,
       fileName: file.name,
       fileSize: file.size,
       mimeType: file.type,

@@ -16,6 +16,7 @@ export interface SendMessageDto {
   fileName?: string;
   fileSize?: number;
   mimeType?: string;
+  publicId?: string;
 }
 
 /**
@@ -25,4 +26,15 @@ export interface CreateUploadSignatureDto {
   fileName: string;
   mimeType: string;
   fileSize: number;
+}
+
+/**
+ * @desc    Data required to generate a signed Cloudinary delivery URL
+ *          for assets that cannot be accessed through the plain public CDN URL.
+ */
+export interface CreateFileDeliveryUrlDto {
+  publicId: string;
+  fileName: string;
+  messageType?: MessageType;
+  attachment?: boolean;
 }
