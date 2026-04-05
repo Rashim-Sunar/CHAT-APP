@@ -6,6 +6,7 @@ import MessageInput from "./MessageInput";
 import useConversation from "../../zustand/useConversation";
 import { getAvatarByGender } from "../../Utils/getAvatarByGender";
 import { useAuthContext } from "../../context/Auth-Context";
+import UserDetailsPanel from "../details/UserDetailsPanel";
 
 const MessageContainer = () => {
   const { selectedConversation, setSelectedConversation } = useConversation();
@@ -17,6 +18,10 @@ const MessageContainer = () => {
   useEffect(() => {
     return () => setSelectedConversation(null, currentUserId);
   }, [setSelectedConversation, currentUserId]);
+
+  useEffect(() => {
+    setShowDetails(false);
+  }, [selectedConversation?._id]);
 
   if (!selectedConversation) {
     return (
@@ -50,19 +55,12 @@ const MessageContainer = () => {
 
         <button
           onClick={() => setShowDetails(!showDetails)}
-          className="lg:hidden text-slate-600"
+          className="xl:hidden text-slate-600 h-8 w-8 rounded-lg hover:bg-slate-100 flex items-center justify-center"
+          aria-label="Open user details"
         >
           <HiOutlineDotsVertical size={20} />
         </button>
       </div>
-
-      {showDetails && (
-        <div className="lg:hidden bg-slate-50 border-b border-slate-200 p-4 animate-fadeIn text-sm text-slate-500 space-y-2">
-          <p>Shared images will appear here.</p>
-          <p>Shared links will appear here.</p>
-          <p>Other user info will appear here.</p>
-        </div>
-      )}
 
       <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 bg-slate-50">
         <Messages />
@@ -70,6 +68,10 @@ const MessageContainer = () => {
 
       <div className="border-t border-slate-200 bg-white">
         <MessageInput />
+      </div>
+
+      <div className="xl:hidden">
+        <UserDetailsPanel isOpen={showDetails} onClose={() => setShowDetails(false)} variant="drawer" />
       </div>
     </div>
   );

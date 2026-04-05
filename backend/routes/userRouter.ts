@@ -4,7 +4,7 @@
 // ----------------------------------------
 
 import express from 'express';
-import { getUsersForSidebar } from '../controllers/userController.js';
+import { getUserDetails, getUsersForSidebar } from '../controllers/userController.js';
 import protectRoute from '../middlewares/protectRoute.js';
 
 const router = express.Router();
@@ -15,5 +15,12 @@ const router = express.Router();
 // @access  Private
 // ----------------------------------------
 router.get('/', protectRoute, getUsersForSidebar);
+
+// ----------------------------------------
+// @desc    Retrieves selected user details with shared media/links/documents
+// @route   GET /api/users/:id/details
+// @access  Private
+// ----------------------------------------
+router.get('/:id/details', protectRoute, getUserDetails);
 
 export default router;
