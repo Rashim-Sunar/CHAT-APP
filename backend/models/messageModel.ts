@@ -17,6 +17,8 @@ export interface IMessage {
   fileSize?: number;
   mimeType?: string;
   publicId?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 // Extends IMessage with mongoose document properties
@@ -69,6 +71,13 @@ const messageSchema = new mongoose.Schema<IMessage>(
   },
   { timestamps: true } // Adds createdAt & updatedAt for message tracking
 );
+
+// Supports fast pair-wise message lookups sorted by newest first.
+messageSchema.index({ senderId: 1, receiverId: 1, createdAt: -1 });
+messageSchema.index({ receiverId: 1, senderId: 1, createdAt: -1 });
+
+// Supports filtering recent messages by content category for details side panel.
+messageSchema.index({ messageType: 1, createdAt: -1 });
 
 // Create and export Message model
 const Message = mongoose.model('message', messageSchema);

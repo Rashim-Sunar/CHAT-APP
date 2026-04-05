@@ -35,6 +35,9 @@ const conversationSchema = new mongoose.Schema<IConversation>(
   { timestamps: true } // Adds createdAt & updatedAt for conversation tracking
 );
 
+// Helps conversation lookup by participants in message send/read operations.
+conversationSchema.index({ participants: 1 });
+
 // Create and export Conversation model
 const Conversation = mongoose.model('conversation', conversationSchema);
 

@@ -160,3 +160,34 @@ export interface FileValidationResult {
   valid: boolean;
   reason?: string;
 }
+
+export interface SharedMediaItem {
+  url: string;
+  type: "image" | "video";
+  createdAt: string;
+}
+
+export interface SharedLinkItem {
+  url: string;
+  title: string;
+  createdAt: string;
+}
+
+export interface SharedDocumentItem {
+  name: string;
+  url: string;
+  size?: number;
+  createdAt: string;
+}
+
+export interface UserDetails {
+  user: {
+    _id: string;
+    username: string;
+    profilePic?: string;
+    status: "online" | "offline";
+  };
+  media: SharedMediaItem[];
+  links: SharedLinkItem[];
+  documents: SharedDocumentItem[];
+}
