@@ -116,6 +116,7 @@ export interface ConversationState {
   messagesByConversation: Record<string, Message[]>;
   unreadByConversation: Record<string, number>;
   uploadQueue: UploadJob[];
+  detailsRefreshVersion: number;
   setSelectedConversation: (
     selectedConversation: Conversation | null,
     currentUserId?: string
@@ -130,6 +131,7 @@ export interface ConversationState {
   ) => void;
   removeMessageFromConversation: (conversationKey: string, messageId: string) => void;
   syncConversationPreview: (conversationKey: string, currentUserId: string) => void;
+  bumpDetailsRefreshVersion: () => void;
   incrementUnread: (conversationKey: string) => void;
   upsertConversationFromMessage: (incomingMessage: Message, currentUserId: string) => void;
   getMessagesForConversation: (conversationKey: string) => Message[];

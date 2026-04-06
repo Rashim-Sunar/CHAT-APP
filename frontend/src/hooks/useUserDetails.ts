@@ -3,7 +3,7 @@ import useConversation from "../zustand/useConversation";
 import type { ApiErrorResponse, UserDetails } from "../types";
 
 const useUserDetails = () => {
-  const { selectedConversation } = useConversation();
+  const { selectedConversation, detailsRefreshVersion } = useConversation();
   const [details, setDetails] = useState<UserDetails | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +59,7 @@ const useUserDetails = () => {
     return () => {
       abortController.abort();
     };
-  }, [fetchDetails]);
+  }, [fetchDetails, detailsRefreshVersion]);
 
   const refetch = useCallback(() => {
     void fetchDetails();

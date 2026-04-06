@@ -251,6 +251,22 @@ const emitMessageUpdateToParticipants = (
   });
 };
 
+const deleteCloudinaryAsset = async (message: MessageDocument): Promise<void> => {
+  const publicId = typeof message.publicId === 'string' ? message.publicId.trim() : '';
+  if (!publicId) return;
+
+  const cloudinary = getCloudinary();
+  const resourceType =
+    message.messageType === 'image' || message.messageType === 'video'
+      ? message.messageType
+      : 'raw';
+
+  await cloudinary.uploader.destroy(publicId, {
+    resource_type: resourceType,
+    invalidate: true,
+  });
+};
+
 /**
  * Creates a short-lived, signed Cloudinary upload contract.
  *
@@ -637,6 +653,15 @@ export const deleteMessage = async (
       await message.save();
     } else {
       if (deletedForEveryone) {
+        try {
+          await deleteCloudinaryAsset(message);
+        } catch (cloudinaryError: unknown) {
+          console.log(
+            'Cloudinary cleanup failed for deleteMessage:',
+            cloudinaryError instanceof Error ? cloudinaryError.message : String(cloudinaryError)
+          );
+        }
+
         const messageWithTimestamps = message as MessageDocument & {
           createdAt: Date;
           updatedAt: Date;
@@ -653,6 +678,15 @@ export const deleteMessage = async (
 
       message.deletedForEveryone = true;
       await message.save();
+
+      try {
+        await deleteCloudinaryAsset(message);
+      } catch (cloudinaryError: unknown) {
+        console.log(
+          'Cloudinary cleanup failed for deleteMessage:',
+          cloudinaryError instanceof Error ? cloudinaryError.message : String(cloudinaryError)
+        );
+      }
     }
 
     const messageWithTimestamps = message as MessageDocument & {

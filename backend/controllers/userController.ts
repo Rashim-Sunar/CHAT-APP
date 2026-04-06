@@ -38,6 +38,13 @@ const MAX_ITEMS_PER_SECTION = 120;
 const MAX_LINK_SOURCE_MESSAGES = 300;
 const URL_REGEX = /(https?:\/\/[^\s]+)/gi;
 
+const isVisibleToUser = (message: { deletedForEveryone?: boolean; deletedFor?: unknown[] }, userId: string): boolean => {
+  if (message.deletedForEveryone) return false;
+
+  const deletedFor = Array.isArray(message.deletedFor) ? message.deletedFor.map((value) => String(value)) : [];
+  return !deletedFor.includes(String(userId));
+};
+
 const normalizeUrl = (rawUrl: string): string => {
   const trimmed = rawUrl.trim().replace(/[),.;!?]+$/g, '');
   return trimmed;
@@ -161,7 +168,7 @@ export const getUserDetails = async (
       })
         .sort({ createdAt: -1 })
         .limit(MAX_ITEMS_PER_SECTION)
-        .select('fileUrl messageType createdAt')
+        .select('fileUrl messageType createdAt deletedForEveryone deletedFor')
         .lean(),
       Message.find({
         ...pairFilter,
@@ -170,7 +177,7 @@ export const getUserDetails = async (
       })
         .sort({ createdAt: -1 })
         .limit(MAX_ITEMS_PER_SECTION)
-        .select('fileName fileUrl fileSize createdAt')
+        .select('fileName fileUrl fileSize createdAt deletedForEveryone deletedFor')
         .lean(),
       Message.find({
         ...pairFilter,
@@ -178,12 +185,14 @@ export const getUserDetails = async (
       })
         .sort({ createdAt: -1 })
         .limit(MAX_LINK_SOURCE_MESSAGES)
-        .select('text createdAt')
+        .select('text createdAt deletedForEveryone deletedFor')
         .lean(),
     ]);
 
     const media: UserDetailsResponse['media'] = [];
     mediaMessages.forEach((message) => {
+      if (!isVisibleToUser(message, String(loggedinUserId))) return;
+
       const fileUrl = typeof message.fileUrl === 'string' ? message.fileUrl : '';
       const messageType = message.messageType;
       const createdAt =
@@ -201,6 +210,8 @@ export const getUserDetails = async (
 
     const documents: UserDetailsResponse['documents'] = [];
     documentMessages.forEach((message) => {
+      if (!isVisibleToUser(message, String(loggedinUserId))) return;
+
       const fileUrl = typeof message.fileUrl === 'string' ? message.fileUrl : '';
       if (!fileUrl) return;
 
@@ -219,6 +230,8 @@ export const getUserDetails = async (
     const links: UserDetailsResponse['links'] = [];
 
     textMessages.forEach((message) => {
+      if (!isVisibleToUser(message, String(loggedinUserId))) return;
+
       const text = typeof message.text === 'string' ? message.text : '';
       const matches = text.match(URL_REGEX) || [];
       const createdAt =
