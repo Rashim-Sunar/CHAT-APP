@@ -11,6 +11,8 @@ import {
 	getMessage,
 	createUploadSignature,
 	createFileDeliveryUrl,
+	editMessage,
+	deleteMessage,
 } from '../controllers/messageController.js';
 
 const router = express.Router();
@@ -39,5 +41,19 @@ router.post('/file-delivery-url', protectRoute, createFileDeliveryUrl);
 // @access  Private
 // ----------------------------------------
 router.post('/send/:id', protectRoute, sendMessage);
+
+// ----------------------------------------
+// @desc    Edits a message
+// @route   PUT /api/messages/:id
+// @access  Private
+// ----------------------------------------
+router.put('/:id', protectRoute, editMessage);
+
+// ----------------------------------------
+// @desc    Deletes a message for self or everyone
+// @route   DELETE /api/messages/:id
+// @access  Private
+// ----------------------------------------
+router.delete('/:id', protectRoute, deleteMessage);
 
 export default router;
