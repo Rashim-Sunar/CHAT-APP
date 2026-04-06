@@ -38,3 +38,18 @@ export interface CreateFileDeliveryUrlDto {
   messageType?: MessageType;
   attachment?: boolean;
 }
+
+/**
+ * @desc    Payload used to update a text message.
+ */
+export interface EditMessageDto {
+  content: string;
+}
+
+/**
+ * @desc    Payload used to soft-delete a message either for the current user
+ *          or for every participant in the conversation.
+ */
+export interface DeleteMessageDto {
+  type: 'me' | 'everyone';
+}

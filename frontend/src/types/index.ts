@@ -54,6 +54,10 @@ export interface Message {
   fileSize?: number | null;
   mimeType?: string | null;
   publicId?: string | null;
+  edited?: boolean;
+  editedAt?: string;
+  deletedForEveryone?: boolean;
+  deletedFor?: string[];
   createdAt: string;
   updatedAt?: string;
   __isOptimistic?: boolean;
@@ -85,6 +89,8 @@ export interface FileDeliveryResponse {
 export interface ServerToClientEvents {
   getOnlineUsers: (users: string[]) => void;
   newMessage: (message: Message) => void;
+  "message:edit": (message: Message) => void;
+  "message:delete": (message: Message) => void;
 }
 
 export interface ClientToServerEvents {
@@ -117,6 +123,13 @@ export interface ConversationState {
   setConversations: (conversations: Conversation[]) => void;
   setMessagesForConversation: (conversationKey: string, messages: Message[]) => void;
   appendMessageToConversation: (conversationKey: string, newMessage: Message) => void;
+  updateMessageInConversation: (
+    conversationKey: string,
+    messageId: string,
+    patch: Partial<Message>
+  ) => void;
+  removeMessageFromConversation: (conversationKey: string, messageId: string) => void;
+  syncConversationPreview: (conversationKey: string, currentUserId: string) => void;
   incrementUnread: (conversationKey: string) => void;
   upsertConversationFromMessage: (incomingMessage: Message, currentUserId: string) => void;
   getMessagesForConversation: (conversationKey: string) => Message[];

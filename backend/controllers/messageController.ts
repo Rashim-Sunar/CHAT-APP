@@ -5,11 +5,18 @@
 
 import type { Response } from 'express';
 import crypto from 'crypto';
+import { Types } from 'mongoose';
 import Conversation, { ConversationDocument } from '../models/conversationModel.js';
 import Message, { MessageDocument } from '../models/messageModel.js';
 import { getReceiverSocketId, io } from '../socket/socket.js';
 import type { AuthenticatedRequest } from '../types/express/index.js';
-import type { CreateFileDeliveryUrlDto, CreateUploadSignatureDto, SendMessageDto } from '../types/dtos/message.js';
+import type {
+  CreateFileDeliveryUrlDto,
+  CreateUploadSignatureDto,
+  DeleteMessageDto,
+  EditMessageDto,
+  SendMessageDto,
+} from '../types/dtos/message.js';
 import { getCloudinary } from '../Utils/cloudinary.js';
 import {
   sanitizeFileName,
@@ -40,6 +47,10 @@ type RealtimeMessagePayload = {
   fileSize: number | null;
   mimeType: string | null;
   publicId: string | null;
+  edited: boolean;
+  editedAt: Date | null;
+  deletedForEveryone: boolean;
+  deletedFor: string[];
   createdAt: Date;
   updatedAt: Date;
 };
@@ -105,6 +116,18 @@ const buildRealtimePayload = (
   const legacyText = legacyTextFromDoc || legacyTextFromRaw || legacyTextFromGetter;
   const normalizedText = messageDoc.text || legacyText || '';
   const normalizedMessageType = messageDoc.messageType || 'text';
+  const deletedForEveryone = Boolean(
+    (messageDoc as unknown as { deletedForEveryone?: boolean }).deletedForEveryone
+  );
+  const deletedFor = Array.isArray((messageDoc as unknown as { deletedFor?: unknown[] }).deletedFor)
+    ? ((messageDoc as unknown as { deletedFor?: unknown[] }).deletedFor || []).map((userId) =>
+        String(userId)
+      )
+    : [];
+  const edited = Boolean((messageDoc as unknown as { edited?: boolean }).edited);
+  const editedAt =
+    (messageDoc as unknown as { editedAt?: Date | null }).editedAt || null;
+  const visibleText = deletedForEveryone ? MESSAGE_DELETED_TEXT : normalizedText;
 
   return {
     _id: String(messageDoc._id),
@@ -112,9 +135,9 @@ const buildRealtimePayload = (
     receiverId: String(messageDoc.receiverId),
     conversationId,
     messageType: normalizedMessageType,
-    text: normalizedText,
+    text: visibleText,
     // Backward-compatible field for existing clients still reading `message`.
-    message: normalizedText,
+    message: visibleText,
     fileUrl: messageDoc.fileUrl || null,
     fileName: messageDoc.fileName || null,
     fileSize: typeof messageDoc.fileSize === 'number' ? messageDoc.fileSize : null,
@@ -122,6 +145,10 @@ const buildRealtimePayload = (
     publicId: typeof (messageDoc as unknown as { publicId?: unknown }).publicId === 'string'
       ? ((messageDoc as unknown as { publicId?: string }).publicId as string)
       : null,
+    edited,
+    editedAt,
+    deletedForEveryone,
+    deletedFor,
     createdAt: messageDoc.createdAt,
     updatedAt: messageDoc.updatedAt,
   };
@@ -184,6 +211,44 @@ const validateSendPayload = (
       text: rawText,
     },
   };
+};
+
+const MESSAGE_DELETED_TEXT = 'This message was deleted';
+
+const isMessageDeletedForUser = (messageDoc: MessageDocument, userId: string): boolean => {
+  if (!userId) return false;
+
+  const deletedForEveryone = Boolean(
+    (messageDoc as unknown as { deletedForEveryone?: boolean }).deletedForEveryone
+  );
+  if (deletedForEveryone) return false;
+
+  const deletedFor = Array.isArray((messageDoc as unknown as { deletedFor?: unknown[] }).deletedFor)
+    ? ((messageDoc as unknown as { deletedFor?: unknown[] }).deletedFor || []).map((value) =>
+        String(value)
+      )
+    : [];
+
+  return deletedFor.includes(String(userId));
+};
+
+const getMessageConversation = async (messageId: string): Promise<ConversationDocument | null> => {
+  return (await Conversation.findOne({ messages: messageId })) as ConversationDocument | null;
+};
+
+const emitMessageUpdateToParticipants = (
+  eventName: 'message:edit' | 'message:delete',
+  payload: RealtimeMessagePayload
+): void => {
+  const senderSocketId = getReceiverSocketId(payload.senderId);
+  const receiverSocketId = getReceiverSocketId(payload.receiverId);
+  const socketIds = new Set([senderSocketId, receiverSocketId]);
+
+  socketIds.forEach((socketId) => {
+    if (socketId) {
+      io.to(socketId).emit(eventName, payload);
+    }
+  });
 };
 
 /**
@@ -410,20 +475,198 @@ export const getMessage = async (
       return;
     }
 
-    const messages = (conversation.messages as unknown as MessageDocument[]).map((messageDoc) => {
-      const messageWithTimestamps = messageDoc as MessageDocument & {
-        createdAt: Date;
-        updatedAt: Date;
-      };
+    const messages = (conversation.messages as unknown as MessageDocument[])
+      .filter((messageDoc) => !isMessageDeletedForUser(messageDoc, String(senderId)))
+      .map((messageDoc) => {
+        const messageWithTimestamps = messageDoc as MessageDocument & {
+          createdAt: Date;
+          updatedAt: Date;
+        };
 
-      return buildRealtimePayload(messageWithTimestamps, String(conversation._id));
-    });
+        return buildRealtimePayload(messageWithTimestamps, String(conversation._id));
+      });
 
     res.status(200).json(messages);
   } catch (error: unknown) {
     // Log error for debugging
     console.log(
       'Error in getMessages controller: ',
+      error instanceof Error ? error.message : String(error)
+    );
+
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Updates the text content of a message owned by the authenticated user.
+ * The mutation is rejected for empty content and for messages that were
+ * already soft-deleted.
+ */
+export const editMessage = async (
+  req: AuthenticatedRequest<{ id: string }, unknown, EditMessageDto>,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id: messageId } = req.params;
+    const senderId = String(req.user);
+    const content = req.body.content?.trim();
+
+    if (!content) {
+      res.status(400).json({ error: 'Message content cannot be empty' });
+      return;
+    }
+
+    const message = (await Message.findById(messageId)) as MessageDocument | null;
+    if (!message) {
+      res.status(404).json({ error: 'Message not found' });
+      return;
+    }
+
+    if (String(message.senderId) !== senderId) {
+      res.status(403).json({ error: 'You can only edit your own messages' });
+      return;
+    }
+
+    if (message.messageType !== 'text') {
+      res.status(400).json({ error: 'Only text messages can be edited' });
+      return;
+    }
+
+    if (message.deletedForEveryone || isMessageDeletedForUser(message, senderId)) {
+      res.status(400).json({ error: 'Deleted messages cannot be edited' });
+      return;
+    }
+
+    const conversation = await getMessageConversation(messageId);
+    if (!conversation) {
+      res.status(404).json({ error: 'Conversation not found' });
+      return;
+    }
+
+    message.text = content;
+    message.edited = true;
+    message.editedAt = new Date();
+
+    await message.save();
+
+    const messageWithTimestamps = message as MessageDocument & {
+      createdAt: Date;
+      updatedAt: Date;
+    };
+    const realtimeMessagePayload = buildRealtimePayload(messageWithTimestamps, String(conversation._id));
+
+    emitMessageUpdateToParticipants('message:edit', realtimeMessagePayload);
+
+    res.status(200).json({ updatedMessage: realtimeMessagePayload });
+  } catch (error: unknown) {
+    console.log(
+      'Error in editMessage controller:',
+      error instanceof Error ? error.message : String(error)
+    );
+
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Deletes a message based on selected type.
+ * - "me": hides message for the current user only
+ * - "everyone": marks message as deleted globally
+ * Emits socket event to sync all clients.
+ */
+export const deleteMessage = async (
+  req: AuthenticatedRequest<{ id: string }, unknown, DeleteMessageDto>,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id: messageId } = req.params;
+    const senderId = String(req.user);
+    const deleteType = req.body.type;
+
+    if (deleteType !== 'me' && deleteType !== 'everyone') {
+      res.status(400).json({ error: 'Invalid delete type' });
+      return;
+    }
+
+    const message = (await Message.findById(messageId)) as MessageDocument | null;
+    if (!message) {
+      res.status(404).json({ error: 'Message not found' });
+      return;
+    }
+
+    if (String(message.senderId) !== senderId) {
+      res.status(403).json({ error: 'You can only delete your own messages' });
+      return;
+    }
+
+    const conversation = await getMessageConversation(messageId);
+    if (!conversation) {
+      res.status(404).json({ error: 'Conversation not found' });
+      return;
+    }
+
+    const deletedForEveryone = Boolean(
+      (message as unknown as { deletedForEveryone?: boolean }).deletedForEveryone
+    );
+    const deletedFor = Array.isArray((message as unknown as { deletedFor?: unknown[] }).deletedFor)
+      ? ((message as unknown as { deletedFor?: unknown[] }).deletedFor || []).map((value) =>
+          String(value)
+        )
+      : [];
+
+    if (deleteType === 'me') {
+      if (deletedForEveryone || deletedFor.includes(senderId)) {
+        const messageWithTimestamps = message as MessageDocument & {
+          createdAt: Date;
+          updatedAt: Date;
+        };
+        const realtimeMessagePayload = buildRealtimePayload(
+          messageWithTimestamps,
+          String(conversation._id)
+        );
+
+        emitMessageUpdateToParticipants('message:delete', realtimeMessagePayload);
+        res.status(200).json({ updatedMessage: realtimeMessagePayload });
+        return;
+      }
+
+      message.deletedFor = [...new Set([...deletedFor, senderId])].map(
+        (userId) => new Types.ObjectId(userId)
+      );
+      await message.save();
+    } else {
+      if (deletedForEveryone) {
+        const messageWithTimestamps = message as MessageDocument & {
+          createdAt: Date;
+          updatedAt: Date;
+        };
+        const realtimeMessagePayload = buildRealtimePayload(
+          messageWithTimestamps,
+          String(conversation._id)
+        );
+
+        emitMessageUpdateToParticipants('message:delete', realtimeMessagePayload);
+        res.status(200).json({ updatedMessage: realtimeMessagePayload });
+        return;
+      }
+
+      message.deletedForEveryone = true;
+      await message.save();
+    }
+
+    const messageWithTimestamps = message as MessageDocument & {
+      createdAt: Date;
+      updatedAt: Date;
+    };
+    const realtimeMessagePayload = buildRealtimePayload(messageWithTimestamps, String(conversation._id));
+
+    emitMessageUpdateToParticipants('message:delete', realtimeMessagePayload);
+
+    res.status(200).json({ updatedMessage: realtimeMessagePayload });
+  } catch (error: unknown) {
+    console.log(
+      'Error in deleteMessage controller:',
       error instanceof Error ? error.message : String(error)
     );
 

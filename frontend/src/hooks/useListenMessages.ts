@@ -9,8 +9,14 @@ import type { Message } from "../types";
 const useListenMessages = () => {
   const { socket } = useSocketContext();
   const { authUser } = useAuthContext();
-  const { appendMessageToConversation, incrementUnread, upsertConversationFromMessage } =
-    useConversation();
+  const {
+    appendMessageToConversation,
+    incrementUnread,
+    upsertConversationFromMessage,
+    updateMessageInConversation,
+    removeMessageFromConversation,
+    syncConversationPreview,
+  } = useConversation();
 
   useEffect(() => {
     if (!socket) return;
@@ -44,12 +50,53 @@ const useListenMessages = () => {
       }
     };
 
+    const onMessageEdit = (updatedMessage: Message) => {
+      if (!currentUserId) return;
+
+      const conversationKey = getConversationKey(updatedMessage?.senderId, updatedMessage?.receiverId);
+      if (!conversationKey || !updatedMessage?._id) return;
+
+      updateMessageInConversation(conversationKey, updatedMessage._id, updatedMessage);
+      syncConversationPreview(conversationKey, currentUserId);
+    };
+
+    const onMessageDelete = (updatedMessage: Message) => {
+      if (!currentUserId) return;
+
+      const conversationKey = getConversationKey(updatedMessage?.senderId, updatedMessage?.receiverId);
+      if (!conversationKey || !updatedMessage?._id) return;
+
+      if (updatedMessage.deletedForEveryone) {
+        updateMessageInConversation(conversationKey, updatedMessage._id, updatedMessage);
+        syncConversationPreview(conversationKey, currentUserId);
+        return;
+      }
+
+      if (updatedMessage.deletedFor?.includes(currentUserId)) {
+        removeMessageFromConversation(conversationKey, updatedMessage._id);
+        syncConversationPreview(conversationKey, currentUserId);
+      }
+    };
+
     socket.on("newMessage", onNewMessage);
+    socket.on("message:edit", onMessageEdit);
+    socket.on("message:delete", onMessageDelete);
 
     return () => {
       socket.off("newMessage", onNewMessage);
+      socket.off("message:edit", onMessageEdit);
+      socket.off("message:delete", onMessageDelete);
     };
-  }, [socket, authUser, appendMessageToConversation, incrementUnread, upsertConversationFromMessage]);
+  }, [
+    socket,
+    authUser,
+    appendMessageToConversation,
+    incrementUnread,
+    upsertConversationFromMessage,
+    updateMessageInConversation,
+    removeMessageFromConversation,
+    syncConversationPreview,
+  ]);
 };
 
 export default useListenMessages;

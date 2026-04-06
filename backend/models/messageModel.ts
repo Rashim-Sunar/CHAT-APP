@@ -17,6 +17,10 @@ export interface IMessage {
   fileSize?: number;
   mimeType?: string;
   publicId?: string;
+  edited?: boolean;
+  editedAt?: Date;
+  deletedForEveryone?: boolean;
+  deletedFor?: Types.ObjectId[];
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -68,6 +72,23 @@ const messageSchema = new mongoose.Schema<IMessage>(
       type: String,
       trim: true,
     },
+    edited: {
+      type: Boolean,
+      default: false,
+    },
+    editedAt: {
+      type: Date,
+    },
+    deletedForEveryone: {
+      type: Boolean,
+      default: false,
+    },
+    deletedFor: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'user',
+      },
+    ],
   },
   { timestamps: true } // Adds createdAt & updatedAt for message tracking
 );

@@ -1,18 +1,7 @@
 import { create } from "zustand";
 import { getConversationKey } from "../Utils/conversationKey";
+import { getMessagePreviewText, shouldHideMessageForUser } from "../Utils/messageDisplay";
 import type { Conversation, ConversationState, Message } from "../types";
-
-const getPreviewText = (incomingMessage: Message): string => {
-  const messageType = incomingMessage?.messageType || "text";
-
-  if (messageType === "image") return "Photo";
-  if (messageType === "video") return "Video";
-  if (messageType === "file") {
-    return incomingMessage?.fileName || "File";
-  }
-
-  return incomingMessage?.text || incomingMessage?.message || "";
-};
 
 const dedupeMessages = (messages: Message[] = []): Message[] => {
   const seen = new Set<string>();
@@ -26,6 +15,29 @@ const dedupeMessages = (messages: Message[] = []): Message[] => {
     seen.add(messageId);
     return true;
   });
+};
+
+const getConversationPreviewFromMessages = (
+  messages: Message[] = [],
+  currentUserId?: string
+): { lastMessage?: string; lastMessageAt?: string } => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+
+    if (shouldHideMessageForUser(message, currentUserId)) {
+      continue;
+    }
+
+    return {
+      lastMessage: getMessagePreviewText(message),
+      lastMessageAt: message.createdAt,
+    };
+  }
+
+  return {
+    lastMessage: "",
+    lastMessageAt: undefined,
+  };
 };
 
 const upsertConversationWithMessage = (
@@ -42,7 +54,7 @@ const upsertConversationWithMessage = (
     (conversation) => String(conversation._id) === partnerId
   );
 
-  const lastMessage = getPreviewText(incomingMessage);
+  const lastMessage = getMessagePreviewText(incomingMessage);
   const lastMessageAt = incomingMessage.createdAt;
 
   if (existingIndex >= 0) {
@@ -147,6 +159,69 @@ const useConversation = create<ConversationState>()((set, get) => ({
           ...state.messagesByConversation,
           [conversationKey]: [...currentMessages, newMessage],
         },
+      };
+    }),
+
+  updateMessageInConversation: (conversationKey, messageId, patch) =>
+    set((state) => {
+      const currentMessages = state.messagesByConversation[conversationKey] || [];
+      let didUpdate = false;
+
+      const nextMessages = currentMessages.map((message) => {
+        if (!message?._id || message._id !== messageId) return message;
+
+        didUpdate = true;
+        return {
+          ...message,
+          ...patch,
+        };
+      });
+
+      if (!didUpdate) return state;
+
+      return {
+        messagesByConversation: {
+          ...state.messagesByConversation,
+          [conversationKey]: nextMessages,
+        },
+      };
+    }),
+
+  removeMessageFromConversation: (conversationKey, messageId) =>
+    set((state) => {
+      const currentMessages = state.messagesByConversation[conversationKey] || [];
+      const nextMessages = currentMessages.filter((message) => message?._id !== messageId);
+
+      if (nextMessages.length === currentMessages.length) return state;
+
+      return {
+        messagesByConversation: {
+          ...state.messagesByConversation,
+          [conversationKey]: nextMessages,
+        },
+      };
+    }),
+
+  syncConversationPreview: (conversationKey, currentUserId) =>
+    set((state) => {
+      const currentMessages = state.messagesByConversation[conversationKey] || [];
+      const preview = getConversationPreviewFromMessages(currentMessages, currentUserId);
+
+      const [firstParticipantId, secondParticipantId] = conversationKey.split("_");
+      const partnerId = firstParticipantId === currentUserId ? secondParticipantId : firstParticipantId;
+
+      const updatedConversations = state.conversations.map((conversation) => {
+        if (String(conversation._id) !== String(partnerId)) return conversation;
+
+        return {
+          ...conversation,
+          lastMessage: preview.lastMessage,
+          lastMessageAt: preview.lastMessageAt,
+        };
+      });
+
+      return {
+        conversations: updatedConversations,
       };
     }),
 
