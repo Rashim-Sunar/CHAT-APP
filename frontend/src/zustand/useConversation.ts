@@ -90,6 +90,7 @@ const useConversation = create<ConversationState>()((set, get) => ({
   messagesByConversation: {},
   unreadByConversation: {},
   uploadQueue: [],
+  detailsRefreshVersion: 0,
 
   setSelectedConversation: (selectedConversation, currentUserId) =>
     set((state) => {
@@ -224,6 +225,11 @@ const useConversation = create<ConversationState>()((set, get) => ({
         conversations: updatedConversations,
       };
     }),
+
+  bumpDetailsRefreshVersion: () =>
+    set((state) => ({
+      detailsRefreshVersion: state.detailsRefreshVersion + 1,
+    })),
 
   incrementUnread: (conversationKey) =>
     set((state) => ({

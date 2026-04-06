@@ -16,6 +16,7 @@ const useListenMessages = () => {
     updateMessageInConversation,
     removeMessageFromConversation,
     syncConversationPreview,
+    bumpDetailsRefreshVersion,
   } = useConversation();
 
   useEffect(() => {
@@ -33,6 +34,12 @@ const useListenMessages = () => {
 
       appendMessageToConversation(incomingConversationKey, newMessage);
       upsertConversationFromMessage(newMessage, currentUserId);
+
+      const selectedConversation = useConversation.getState().selectedConversation;
+      const selectedConversationKey = getConversationKey(selectedConversation?._id, currentUserId);
+      if (selectedConversationKey === incomingConversationKey) {
+        bumpDetailsRefreshVersion();
+      }
 
       const activeConversation = useConversation.getState().selectedConversation;
       const activeConversationKey = getConversationKey(
@@ -58,6 +65,12 @@ const useListenMessages = () => {
 
       updateMessageInConversation(conversationKey, updatedMessage._id, updatedMessage);
       syncConversationPreview(conversationKey, currentUserId);
+
+      const selectedConversation = useConversation.getState().selectedConversation;
+      const selectedConversationKey = getConversationKey(selectedConversation?._id, currentUserId);
+      if (selectedConversationKey === conversationKey) {
+        bumpDetailsRefreshVersion();
+      }
     };
 
     const onMessageDelete = (updatedMessage: Message) => {
@@ -69,12 +82,22 @@ const useListenMessages = () => {
       if (updatedMessage.deletedForEveryone) {
         updateMessageInConversation(conversationKey, updatedMessage._id, updatedMessage);
         syncConversationPreview(conversationKey, currentUserId);
+        const selectedConversation = useConversation.getState().selectedConversation;
+        const selectedConversationKey = getConversationKey(selectedConversation?._id, currentUserId);
+        if (selectedConversationKey === conversationKey) {
+          bumpDetailsRefreshVersion();
+        }
         return;
       }
 
       if (updatedMessage.deletedFor?.includes(currentUserId)) {
         removeMessageFromConversation(conversationKey, updatedMessage._id);
         syncConversationPreview(conversationKey, currentUserId);
+        const selectedConversation = useConversation.getState().selectedConversation;
+        const selectedConversationKey = getConversationKey(selectedConversation?._id, currentUserId);
+        if (selectedConversationKey === conversationKey) {
+          bumpDetailsRefreshVersion();
+        }
       }
     };
 
@@ -96,6 +119,7 @@ const useListenMessages = () => {
     updateMessageInConversation,
     removeMessageFromConversation,
     syncConversationPreview,
+    bumpDetailsRefreshVersion,
   ]);
 };
 

@@ -10,7 +10,7 @@ import type { ApiErrorResponse, Message } from "../types";
 const useMessageActions = (message: Message) => {
   const [busyAction, setBusyAction] = useState<"edit" | "delete" | null>(null);
   const { authUser } = useAuthContext();
-  const { setMessagesForConversation, updateMessageInConversation, removeMessageFromConversation, syncConversationPreview } =
+  const { setMessagesForConversation, updateMessageInConversation, removeMessageFromConversation, syncConversationPreview, bumpDetailsRefreshVersion } =
     useConversation();
 
   const currentUserId = authUser?.data?.user?._id;
@@ -54,6 +54,7 @@ const useMessageActions = (message: Message) => {
       editedAt: new Date().toISOString(),
     });
     syncConversationPreview(conversationKey, currentUserId);
+    bumpDetailsRefreshVersion();
 
     try {
       const res = await fetch(`/api/messages/${messageId}`, {
@@ -71,6 +72,7 @@ const useMessageActions = (message: Message) => {
 
       if (data.updatedMessage) {
         applyServerMessage(data.updatedMessage);
+        bumpDetailsRefreshVersion();
       }
 
       return true;
@@ -100,6 +102,7 @@ const useMessageActions = (message: Message) => {
     }
 
     syncConversationPreview(conversationKey, currentUserId);
+    bumpDetailsRefreshVersion();
 
     try {
       const res = await fetch(`/api/messages/${messageId}`, {
@@ -124,6 +127,7 @@ const useMessageActions = (message: Message) => {
           updateMessageInConversation(conversationKey, messageId, data.updatedMessage);
         }
         syncConversationPreview(conversationKey, currentUserId);
+        bumpDetailsRefreshVersion();
       }
 
       return true;
