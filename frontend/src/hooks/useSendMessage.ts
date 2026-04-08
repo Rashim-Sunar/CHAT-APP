@@ -8,6 +8,16 @@ import { getErrorMessage } from "../Utils/getErrorMessage";
 import type { ApiErrorResponse, Message, SendMessagePayload } from "../types";
 import { apiFetch } from "../Utils/apiFetch";
 
+/**
+ * Coordinates all outbound messaging behavior for the currently selected conversation.
+ *
+ * Responsibilities:
+ * - send text messages
+ * - upload media files and convert them into message payloads
+ * - persist server-confirmed messages into local chat state
+ * - keep conversation preview and details panel data in sync
+ * - expose loading state to disable send controls while work is in flight
+ */
 const useSendMessage = () => {
   const [loading, setLoading] = useState(false);
   const { authUser } = useAuthContext();
@@ -15,6 +25,7 @@ const useSendMessage = () => {
     selectedConversation,
     appendMessageToConversation,
     upsertConversationFromMessage,
+    bumpDetailsRefreshVersion,
     addUploadJobs,
     updateUploadJob,
     removeUploadJob,
@@ -22,6 +33,13 @@ const useSendMessage = () => {
 
   const currentUserId = authUser?.data?.user?._id;
 
+  /**
+   * Applies a server-confirmed message to local stores.
+   *
+   * Why this is centralized:
+   * - both text and media sends eventually produce the same message shape from the backend
+   * - a single path prevents drift between message list, sidebar preview, and details panel
+   */
   const persistMessage = (outgoingMessage: Message) => {
     const conversationKey = getConversationKey(
       outgoingMessage?.senderId,
@@ -33,16 +51,30 @@ const useSendMessage = () => {
 
       if (currentUserId) {
         upsertConversationFromMessage(outgoingMessage, currentUserId);
+
+        // The details panel (media/links/documents) reads from a refetched summary endpoint.
+        // Receiver-side updates are triggered by socket events, but sender-side local sends do
+        // not pass through that socket path, so we explicitly trigger a refresh here.
+        const activeConversationKey = getConversationKey(selectedConversation?._id, currentUserId);
+        if (activeConversationKey === conversationKey) {
+          bumpDetailsRefreshVersion();
+        }
       }
     }
   };
 
+  /**
+   * Sends a normalized message payload to the backend.
+   *
+   * Note: we persist only after backend success so local state reflects canonical server data
+   * (message id, timestamps, and processed media metadata).
+   */
   const sendPayload = async (payload: SendMessagePayload): Promise<void> => {
     const data = await apiFetch<ApiErrorResponse & { newMessage?: Message }>(
       `/messages/send/${selectedConversation?._id}`,
       {
-      method: "POST",
-      body: JSON.stringify(payload),
+        method: "POST",
+        body: JSON.stringify(payload),
       }
     );
     if (data.error) throw new Error(data.error);
@@ -53,6 +85,10 @@ const useSendMessage = () => {
     }
   };
 
+  /**
+   * Sends a plain text message using the shared payload pipeline.
+   * Any error is surfaced as a toast; callers do not need to catch.
+   */
   const sendMessage = async (message: string): Promise<void> => {
     if (!selectedConversation?._id) return;
 
@@ -66,6 +102,14 @@ const useSendMessage = () => {
     }
   };
 
+  /**
+   * Upload flow for media/documents:
+   * 1) create queue jobs so UI can show progress per file
+   * 2) upload files to Cloudinary and capture metadata
+   * 3) send each successful upload as a chat message payload
+   * 4) mark job success/failure and show aggregate failure feedback
+   * 5) clear completed/failed jobs shortly after the UI reflects final status
+   */
   const sendFiles = async (fileList: FileList | File[] | null | undefined): Promise<void> => {
     if (!selectedConversation?._id || !fileList?.length) return;
 
@@ -85,6 +129,7 @@ const useSendMessage = () => {
       const uploadResults = await uploadFilesToCloudinary({
         files,
         onProgress: (index, progress) => {
+          // Upload progress arrives by file index from the uploader utility.
           const job = jobs[index];
           if (!job) return;
           updateUploadJob(job.id, { progress });
@@ -97,6 +142,7 @@ const useSendMessage = () => {
           if (!job) return;
 
           if (result.status === "rejected") {
+            // Upload failed before message creation; mark job and continue processing others.
             updateUploadJob(job.id, {
               status: "failed",
               error: result.reason?.message || "Upload failed",
@@ -105,6 +151,7 @@ const useSendMessage = () => {
           }
 
           const mediaMessagePayload = result.value;
+          // Message creation can still fail after upload (API/network/auth errors).
           await sendPayload(mediaMessagePayload);
           updateUploadJob(job.id, { status: "completed", progress: 100 });
         })
@@ -121,6 +168,7 @@ const useSendMessage = () => {
     } finally {
       setLoading(false);
       setTimeout(() => {
+        // Keep actively uploading rows visible; remove terminal states to avoid stale queue noise.
         jobs.forEach((job) => {
           const queueJob = useConversation.getState().uploadQueue.find(
             (item) => item.id === job.id
