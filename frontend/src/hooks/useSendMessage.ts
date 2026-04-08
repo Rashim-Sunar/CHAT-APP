@@ -6,6 +6,7 @@ import { getConversationKey } from "../Utils/conversationKey";
 import { uploadFilesToCloudinary } from "../Utils/uploadService";
 import { getErrorMessage } from "../Utils/getErrorMessage";
 import type { ApiErrorResponse, Message, SendMessagePayload } from "../types";
+import { apiFetch } from "../Utils/apiFetch";
 
 const useSendMessage = () => {
   const [loading, setLoading] = useState(false);
@@ -37,13 +38,13 @@ const useSendMessage = () => {
   };
 
   const sendPayload = async (payload: SendMessagePayload): Promise<void> => {
-    const res = await fetch(`/api/messages/send/${selectedConversation?._id}`, {
+    const data = await apiFetch<ApiErrorResponse & { newMessage?: Message }>(
+      `/messages/send/${selectedConversation?._id}`,
+      {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-    });
-
-    const data = (await res.json()) as ApiErrorResponse & { newMessage?: Message };
+      }
+    );
     if (data.error) throw new Error(data.error);
 
     const outgoingMessage = data?.newMessage;

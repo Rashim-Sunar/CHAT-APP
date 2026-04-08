@@ -7,6 +7,11 @@ import { Server } from 'socket.io';
 import http from 'http';
 import express from 'express';
 
+const clientOrigins = (process.env.CLIENT_ORIGINS || process.env.CLIENT_URL || 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 const app = express();
 
 // Create HTTP server instance for Socket.IO integration
@@ -15,8 +20,9 @@ const server = http.createServer(app);
 // Initialize Socket.IO server with CORS configuration
 const io = new Server(server, {
   cors: {
-    origin: ['http://localhost:3000'],
+    origin: clientOrigins,
     methods: ['GET', 'POST'],
+    credentials: true,
   },
 });
 

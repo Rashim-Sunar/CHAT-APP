@@ -4,6 +4,7 @@ import type {
   SendMessagePayload,
   UploadSignatureResponse,
 } from "../types";
+import { apiFetch } from "./apiFetch";
 
 type UploadProgressHandler = (index: number, progress: number) => void;
 type JobStartHandler = (index: number, resourceType: ResourceType) => void;
@@ -58,18 +59,19 @@ const uploadWithProgress = ({ file, signaturePayload, onProgress }: UploadWithPr
   });
 
 const getSignaturePayload = async (file: File): Promise<UploadSignatureResponse> => {
-  const res = await fetch("/api/messages/upload-signature", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      fileName: file.name,
-      mimeType: file.type,
-      fileSize: file.size,
-    }),
-  });
+  const data = await apiFetch<Partial<UploadSignatureResponse> & { error?: string }>(
+    "/messages/upload-signature",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        fileName: file.name,
+        mimeType: file.type,
+        fileSize: file.size,
+      }),
+    }
+  );
 
-  const data = (await res.json()) as Partial<UploadSignatureResponse> & { error?: string };
-  if (!res.ok || data.error) {
+  if (data.error) {
     throw new Error(data.error || "Failed to create upload signature");
   }
 

@@ -5,6 +5,7 @@ import { useAuthContext } from "../context/Auth-Context";
 import { getConversationKey } from "../Utils/conversationKey";
 import type { Message, ApiErrorResponse } from "../types";
 import { getErrorMessage } from "../Utils/getErrorMessage";
+import { apiFetch } from "../Utils/apiFetch";
 
 const useGetMessages = () => {
   const [loading, setLoading] = useState(false);
@@ -25,12 +26,12 @@ const useGetMessages = () => {
     const getMessages = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/messages/${selectedConversation._id}`, {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        });
-
-        const data = (await res.json()) as Message[] | (ApiErrorResponse & { error?: string });
+        const data = await apiFetch<Message[] | (ApiErrorResponse & { error?: string })>(
+          `/messages/${selectedConversation._id}`,
+          {
+            method: "GET",
+          }
+        );
         if (Array.isArray(data)) {
           if (!ignore) {
             setMessagesForConversation(conversationKey, data);

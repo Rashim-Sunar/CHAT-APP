@@ -6,6 +6,7 @@
 // import path from 'path';
 import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
+import cors from 'cors';
 
 import authRouter from './routes/authRouter.js';
 import messageRouter from './routes/messageRouter.js';
@@ -22,6 +23,10 @@ dotenv.config();
 
 // Resolve application port (default: 8000)
 const port = process.env.PORT ? Number(process.env.PORT) : 8000;
+const clientOrigins = (process.env.CLIENT_ORIGINS || process.env.CLIENT_URL || 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 // ----------------------------------------
 // Middleware Configuration
@@ -29,6 +34,14 @@ const port = process.env.PORT ? Number(process.env.PORT) : 8000;
 
 // Parse incoming JSON requests
 app.use(express.json());
+
+app.use(
+  cors({
+    origin: clientOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  })
+);
 
 // Parse cookies from request headers
 app.use(cookieParser());

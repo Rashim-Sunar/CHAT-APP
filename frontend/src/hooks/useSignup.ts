@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { useAuthContext } from "../context/Auth-Context";
 import type { ApiErrorResponse, AuthResponse, SignupCredentials } from "../types";
 import { getErrorMessage } from "../Utils/getErrorMessage";
+import { apiFetch } from "../Utils/apiFetch";
 
 const useSignup = () => {
   const [loading, setLoading] = useState(false);
@@ -20,13 +21,10 @@ const useSignup = () => {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/signup", {
+      const data = await apiFetch<AuthResponse & ApiErrorResponse>("/auth/signup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, userName, password, confirmPassword, gender }),
       });
-
-      const data = (await res.json()) as AuthResponse & ApiErrorResponse;
       if (data.error) {
         throw new Error(data.error);
       }

@@ -8,6 +8,8 @@ declare namespace NodeJS {
     PORT?: string; // Application port (optional, defaults can be handled in code)
 
     NODE_ENV?: "development" | "production" | "test"; // Current runtime environment
+    CLIENT_URL?: string;
+    CLIENT_ORIGINS?: string;
 
     JWT_SECRET: string; // Secret key used for signing and verifying JWT tokens
 

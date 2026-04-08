@@ -6,6 +6,7 @@ import { getErrorMessage } from "../Utils/getErrorMessage";
 import { DELETED_MESSAGE_TEXT } from "../Utils/messageDisplay";
 import useConversation from "../zustand/useConversation";
 import type { ApiErrorResponse, Message } from "../types";
+import { apiFetch } from "../Utils/apiFetch";
 
 const useMessageActions = (message: Message) => {
   const [busyAction, setBusyAction] = useState<"edit" | "delete" | null>(null);
@@ -57,16 +58,15 @@ const useMessageActions = (message: Message) => {
     bumpDetailsRefreshVersion();
 
     try {
-      const res = await fetch(`/api/messages/${messageId}`, {
+      const data = await apiFetch<ApiErrorResponse & { updatedMessage?: Message }>(
+        `/messages/${messageId}`,
+        {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({ content: trimmedContent }),
-      });
+        }
+      );
 
-      const data = (await res.json()) as ApiErrorResponse & { updatedMessage?: Message };
-      if (!res.ok || data.error) {
+      if (data.error) {
         throw new Error(data.error || "Failed to edit message");
       }
 
@@ -105,16 +105,15 @@ const useMessageActions = (message: Message) => {
     bumpDetailsRefreshVersion();
 
     try {
-      const res = await fetch(`/api/messages/${messageId}`, {
+      const data = await apiFetch<ApiErrorResponse & { updatedMessage?: Message }>(
+        `/messages/${messageId}`,
+        {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({ type: deleteType }),
-      });
+        }
+      );
 
-      const data = (await res.json()) as ApiErrorResponse & { updatedMessage?: Message };
-      if (!res.ok || data.error) {
+      if (data.error) {
         throw new Error(data.error || "Failed to delete message");
       }
 

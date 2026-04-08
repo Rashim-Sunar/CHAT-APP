@@ -1,4 +1,5 @@
 import type { MessageType, FileDeliveryResponse } from "../types";
+import { apiFetch } from "./apiFetch";
 
 const stripExtension = (name: string): string => {
   if (!name) return "";
@@ -46,14 +47,15 @@ const requestSignedDeliveryUrl = async ({
   messageType?: MessageType;
   attachment: boolean;
 }): Promise<string> => {
-  const res = await fetch("/api/messages/file-delivery-url", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ publicId, fileName, messageType, attachment }),
-  });
+  const data = await apiFetch<Partial<FileDeliveryResponse> & { error?: string }>(
+    "/messages/file-delivery-url",
+    {
+      method: "POST",
+      body: JSON.stringify({ publicId, fileName, messageType, attachment }),
+    }
+  );
 
-  const data = (await res.json()) as Partial<FileDeliveryResponse> & { error?: string };
-  if (!res.ok || data.error || !data.signedUrl) {
+  if (data.error || !data.signedUrl) {
     throw new Error(data.error || "Failed to generate signed delivery URL");
   }
 
