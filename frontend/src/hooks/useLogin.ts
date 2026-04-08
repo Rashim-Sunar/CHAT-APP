@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { useAuthContext } from "../context/Auth-Context";
 import type { ApiErrorResponse, AuthResponse, LoginCredentials } from "../types";
 import { getErrorMessage } from "../Utils/getErrorMessage";
+import { apiFetch } from "../Utils/apiFetch";
 
 const useLogin = () => {
   const [loading, setLoading] = useState(false);
@@ -14,13 +15,10 @@ const useLogin = () => {
       if (!success) return;
 
       setLoading(true);
-      const res = await fetch("api/auth/login", {
+      const data = await apiFetch<AuthResponse & ApiErrorResponse>("/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-
-      const data = (await res.json()) as AuthResponse & ApiErrorResponse;
 
       if (data.status === "fail") {
         throw new Error(data.message || data.error || "Login failed");

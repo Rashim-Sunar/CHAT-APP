@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuthContext } from "../context/Auth-Context";
 import toast from "react-hot-toast";
 import { getErrorMessage } from "../Utils/getErrorMessage";
+import { apiFetch } from "../Utils/apiFetch";
 
 const useLogout = () => {
   const [loading, setLoading] = useState(false);
@@ -10,12 +11,9 @@ const useLogout = () => {
   const logout = async (): Promise<void> => {
     setLoading(true);
     try {
-      const res = await fetch("api/auth/logout", {
+      const data = await apiFetch<{ error?: string }>("/auth/logout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
       });
-
-      const data = (await res.json()) as { error?: string };
       if (data.error) {
         throw new Error(data.error);
       }

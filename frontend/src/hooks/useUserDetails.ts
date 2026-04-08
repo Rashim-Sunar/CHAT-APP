@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import useConversation from "../zustand/useConversation";
 import type { ApiErrorResponse, UserDetails } from "../types";
+import { apiFetch } from "../Utils/apiFetch";
 
 const useUserDetails = () => {
   const { selectedConversation, detailsRefreshVersion } = useConversation();
@@ -20,18 +21,13 @@ const useUserDetails = () => {
       setError(null);
 
       try {
-        const res = await fetch(`/api/users/${selectedConversation._id}/details`, {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-          signal,
-        });
-
-        const data = (await res.json()) as UserDetails | ApiErrorResponse;
-
-        if (!res.ok) {
-          const responseError = (data as ApiErrorResponse)?.error || (data as ApiErrorResponse)?.message;
-          throw new Error(responseError || "Failed to fetch user details");
-        }
+        const data = await apiFetch<UserDetails | ApiErrorResponse>(
+          `/users/${selectedConversation._id}/details`,
+          {
+            method: "GET",
+            signal,
+          }
+        );
 
         const parsed = data as UserDetails;
         setDetails(parsed);

@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import useConversation from "../zustand/useConversation";
 import type { Conversation } from "../types";
 import { getErrorMessage } from "../Utils/getErrorMessage";
+import { apiFetch } from "../Utils/apiFetch";
 
 interface UsersResponse {
   error?: string;
@@ -23,12 +24,9 @@ const useGetConversations = () => {
     const getConversations = async () => {
       setLoading(true);
       try {
-        const res = await fetch("api/users", {
+        const usersData = await apiFetch<UsersResponse>("/users", {
           method: "GET",
-          headers: { "Content-Type": "application/json" },
         });
-
-        const usersData = (await res.json()) as UsersResponse;
         if (usersData.error) {
           throw new Error(usersData.error);
         }
