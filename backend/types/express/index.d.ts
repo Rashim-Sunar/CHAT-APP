@@ -20,10 +20,12 @@ export interface JwtPayload {
  * @template ReqQuery Query params type
  */
 export interface AuthenticatedRequest<
-  P = Record<string, any>,
+  // P = Record<string, any>,
+  P = any,
   ResBody = any,
   ReqBody = any,
   ReqQuery = Record<string, any>
 > extends Request<P, ResBody, ReqBody, ReqQuery> {
-  user?: string; // Populated after successful authentication
+  // user?: string; // Populated after successful authentication
+  user?: any; // User ID extracted from JWT token
 }
