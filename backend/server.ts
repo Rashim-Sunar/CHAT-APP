@@ -35,6 +35,9 @@ const clientOrigins = (process.env.CLIENT_ORIGINS || process.env.CLIENT_URL || '
 // Parse incoming JSON requests
 app.use(express.json());
 
+// Render terminates TLS at a proxy, so trust the first proxy hop for secure cookies.
+app.set('trust proxy', 1);
+
 app.use(
   cors({
     origin: clientOrigins,
