@@ -11,9 +11,6 @@ import mongoose from 'mongoose';
  */
 const connectToDB = async (): Promise<void> => {
   try {
-    // Attempt to connect using URI from environment variables
-    console.log('Connecting to Mongodb...', process.env.MONGO_DB_URI);
-
     await mongoose.connect(process.env.MONGO_DB_URI);
 
     console.log('Connected to mongodb successfully');
