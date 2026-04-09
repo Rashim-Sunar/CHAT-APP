@@ -16,8 +16,6 @@ import cookieParser from 'cookie-parser';
 import { app, server } from './socket/socket.js';
 import { authLimiter, messageLimiter, apiLimiter } from './middlewares/rateLimiter.js';
 
-// const __dirname = path.resolve();
-
 // Load environment variables from .env file
 dotenv.config();
 
@@ -55,16 +53,6 @@ app.use(cookieParser());
 app.use('/api/auth/', authLimiter, authRouter);
 app.use('/api/messages/', messageLimiter, messageRouter);
 app.use('/api/users/', apiLimiter, userRouter);
-
-// ----------------------------------------
-// Static File Serving (Frontend Build)
-// ----------------------------------------
-// app.use(express.static(path.join(__dirname, '/frontend/dist')));
-
-// Fallback route for SPA (React/Vite/etc.)
-// app.get('*', (req: Request, res: Response) => {
-//   res.sendFile(path.join(__dirname, 'frontend', 'dist', 'index.html'));
-// });
 
 // ----------------------------------------
 // Server Initialization
