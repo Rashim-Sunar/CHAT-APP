@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { io } from "socket.io-client";
 import { useAuthContext } from "./Auth-Context";
+import { assertApiBaseUrl } from "../config/api";
 import type { AppSocket, SocketContextValue } from "../types";
 
 const SocketContext = createContext<SocketContextValue | undefined>(undefined);
@@ -19,6 +20,22 @@ interface SocketContextProviderProps {
   children: ReactNode;
 }
 
+const resolveSocketServerUrl = (): string => {
+  const explicitSocketUrl = import.meta.env.VITE_SOCKET_URL?.trim();
+  if (explicitSocketUrl) {
+    return explicitSocketUrl.replace(/\/+$/, "");
+  }
+
+  const apiBaseUrl = assertApiBaseUrl();
+
+  try {
+    return new URL(apiBaseUrl).origin;
+  } catch {
+    // Supports relative API base paths such as "/api" for same-origin setups.
+    return apiBaseUrl.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+  }
+};
+
 export const SocketContextProvider = ({ children }: SocketContextProviderProps) => {
   const [socket, setSocket] = useState<AppSocket | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
@@ -27,7 +44,8 @@ export const SocketContextProvider = ({ children }: SocketContextProviderProps) 
 
   useEffect(() => {
     if (userId) {
-      const nextSocket = io("http://localhost:8000", {
+      const nextSocket = io(resolveSocketServerUrl(), {
+        withCredentials: true,
         query: {
           userId,
         },

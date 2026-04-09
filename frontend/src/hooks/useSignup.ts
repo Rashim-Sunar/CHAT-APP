@@ -1,3 +1,7 @@
+// Handles account creation, persists the authenticated user, and keeps the auth
+// context aligned with the backend session cookie.
+// Depends on the signup API, localStorage, and toast notifications for validation
+// and request failures.
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { useAuthContext } from "../context/Auth-Context";
@@ -5,6 +9,13 @@ import type { ApiErrorResponse, AuthResponse, SignupCredentials } from "../types
 import { getErrorMessage } from "../Utils/getErrorMessage";
 import { apiFetch } from "../Utils/apiFetch";
 
+/**
+ * Create a new account and populate the authenticated user state on success.
+ * Side effects: validates the form, sends a POST request, stores the returned
+ * auth payload in localStorage, and updates the auth context.
+ *
+ * @returns {{ loading: boolean; signup: (credentials: SignupCredentials) => Promise<void> }} Signup action and loading state.
+ */
 const useSignup = () => {
   const [loading, setLoading] = useState(false);
   const { setAuthUser } = useAuthContext();
@@ -43,6 +54,7 @@ const useSignup = () => {
 
 export default useSignup;
 
+// Keep the form validation synchronous so the network request only runs for valid input.
 function handleInputErrors({
   email,
   userName,

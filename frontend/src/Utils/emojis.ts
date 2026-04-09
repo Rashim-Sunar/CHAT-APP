@@ -1,3 +1,4 @@
+// Curated emoji pool used for random UI decoration and playful defaults.
 export const funEmojis = [
 	"👾",
 	"⭐",
@@ -55,6 +56,7 @@ export const funEmojis = [
 	"🧘",
 ];
 
+// Return a random entry from the pool; the caller owns any higher-level rendering rules.
 export const getRandomEmoji = (): string => {
 	return funEmojis[Math.floor(Math.random() * funEmojis.length)];
 };
