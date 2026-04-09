@@ -24,7 +24,8 @@ const generateWebTokenAndSetCookie = (userId: string, res: Response): void => {
 
     httpOnly: true, // Prevents access via client-side JS (XSS protection)
 
-    sameSite: 'strict', // Mitigates CSRF attacks
+    // sameSite: 'strict', // Mitigates CSRF attacks
+    sameSite: 'none', // Allows cross-site cookies for frontend-backend communication
 
     // Ensures cookie is sent only over HTTPS in production
     secure: process.env.NODE_ENV === 'production',
