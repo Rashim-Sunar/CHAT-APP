@@ -1,3 +1,6 @@
+// Fetches the conversation list for the sidebar and caches it in Zustand.
+// Depends on the authenticated API session, the shared conversation store,
+// and toast notifications for request failures.
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import useConversation from "../zustand/useConversation";
@@ -14,6 +17,13 @@ interface UsersResponse {
   };
 }
 
+/**
+ * Load the sidebar conversation list once and expose a local loading flag.
+ * Side effects: performs a GET request, updates the shared conversation store,
+ * and surfaces failures through toast notifications.
+ *
+ * @returns {{ loading: boolean; conversations: Conversation[] }} Current fetch state and cached conversations.
+ */
 const useGetConversations = () => {
   const [loading, setLoading] = useState(false);
   const { conversations, setConversations } = useConversation();
@@ -21,6 +31,7 @@ const useGetConversations = () => {
   useEffect(() => {
     if (conversations.length > 0) return;
 
+    // Avoid re-fetching once the store already has conversation data.
     const getConversations = async () => {
       setLoading(true);
       try {

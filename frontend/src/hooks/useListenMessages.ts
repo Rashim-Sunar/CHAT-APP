@@ -1,3 +1,6 @@
+// Subscribes to socket message events and reconciles them into local conversation state.
+// Depends on the socket connection, authenticated user context, notification audio,
+// and the shared conversation store for append/update/delete operations.
 import { useEffect } from "react";
 import { useSocketContext } from "../context/SocketContext";
 import useConversation from "../zustand/useConversation";
@@ -6,6 +9,13 @@ import { useAuthContext } from "../context/Auth-Context";
 import { getConversationKey } from "../Utils/conversationKey";
 import type { Message } from "../types";
 
+/**
+ * Listen for real-time message events and keep local chat state synchronized.
+ * Side effects: registers socket listeners, plays notification audio for background
+ * messages, updates unread counts, and refreshes derived conversation details.
+ *
+ * @returns {void}
+ */
 const useListenMessages = () => {
   const { socket } = useSocketContext();
   const { authUser } = useAuthContext();
@@ -24,6 +34,8 @@ const useListenMessages = () => {
 
     const currentUserId = authUser?.data?.user?._id;
 
+    // Incoming messages are routed by conversation key so socket and HTTP state
+    // converge on the same message list.
     const onNewMessage = (newMessage: Message) => {
       const incomingConversationKey = getConversationKey(
         newMessage?.senderId,
@@ -57,6 +69,7 @@ const useListenMessages = () => {
       }
     };
 
+    // Edits update the in-memory message and refresh any derived preview/details state.
     const onMessageEdit = (updatedMessage: Message) => {
       if (!currentUserId) return;
 
@@ -73,6 +86,8 @@ const useListenMessages = () => {
       }
     };
 
+    // Deletes are handled differently depending on whether the message was removed
+    // for everyone or only for the current user.
     const onMessageDelete = (updatedMessage: Message) => {
       if (!currentUserId) return;
 

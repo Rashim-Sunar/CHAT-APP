@@ -1,6 +1,7 @@
 import type { MessageType, FileDeliveryResponse } from "../types";
 import { apiFetch } from "./apiFetch";
 
+// Cloudinary attachment links are rewritten so browser downloads use the intended filename.
 const stripExtension = (name: string): string => {
   if (!name) return "";
 
@@ -14,6 +15,7 @@ export const getCloudinaryAttachmentUrl = (fileUrl?: string | null, fileName?: s
   try {
     const parsedUrl = new URL(fileUrl);
 
+    // Only Cloudinary URLs support the attachment transformation we need here.
     if (!parsedUrl.hostname.endsWith("res.cloudinary.com")) {
       return fileUrl;
     }
@@ -23,6 +25,7 @@ export const getCloudinaryAttachmentUrl = (fileUrl?: string | null, fileName?: s
     const pathSegments = parsedUrl.pathname.split("/").filter(Boolean);
     const uploadIndex = pathSegments.indexOf("upload");
 
+    // Preserve the original asset path and inject the attachment flag after /upload.
     if (uploadIndex === -1) {
       return fileUrl;
     }
@@ -36,6 +39,7 @@ export const getCloudinaryAttachmentUrl = (fileUrl?: string | null, fileName?: s
   }
 };
 
+// Ask the backend for a signed URL when the public asset cannot be fetched directly.
 const requestSignedDeliveryUrl = async ({
   publicId,
   fileName,
@@ -62,6 +66,7 @@ const requestSignedDeliveryUrl = async ({
   return data.signedUrl;
 };
 
+// Prefer a direct download first, then fall back to a signed URL, and finally the raw asset.
 export const downloadFileWithFallback = async (
   fileUrl?: string | null,
   fileName?: string | null,
@@ -71,6 +76,7 @@ export const downloadFileWithFallback = async (
   if (!fileUrl) return;
 
   try {
+    // Fetch the file as a blob so we can force a download in the browser.
     const response = await fetch(fileUrl);
     if (!response.ok) {
       throw new Error("Primary download request failed");
@@ -89,6 +95,7 @@ export const downloadFileWithFallback = async (
 
     window.URL.revokeObjectURL(objectUrl);
   } catch {
+    // If the raw file cannot be fetched, try a backend-signed attachment URL.
     const signedUrl = await requestSignedDeliveryUrl({
       publicId,
       fileName,
@@ -105,6 +112,7 @@ export const downloadFileWithFallback = async (
   }
 };
 
+// Opening follows the same fallback strategy, but uses inline delivery instead of attachment mode.
 export const openFileWithFallback = async (
   fileUrl?: string | null,
   fileName?: string | null,

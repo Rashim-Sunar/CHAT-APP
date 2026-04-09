@@ -20,6 +20,7 @@ interface UploadWithProgressOptions {
   onProgress?: (progress: number) => void;
 }
 
+// Direct-to-Cloudinary upload with XHR so we can expose per-file progress updates.
 const uploadWithProgress = ({ file, signaturePayload, onProgress }: UploadWithProgressOptions) =>
   new Promise<CloudinaryUploadResponse>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -34,6 +35,7 @@ const uploadWithProgress = ({ file, signaturePayload, onProgress }: UploadWithPr
 
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
+        // Cloudinary returns JSON on success; parse it once and forward the stable shape.
         try {
           resolve(JSON.parse(xhr.responseText) as CloudinaryUploadResponse);
         } catch {
@@ -58,6 +60,7 @@ const uploadWithProgress = ({ file, signaturePayload, onProgress }: UploadWithPr
     xhr.send(formData);
   });
 
+// Request a short-lived backend signature before uploading the raw file directly.
 const getSignaturePayload = async (file: File): Promise<UploadSignatureResponse> => {
   const data = await apiFetch<Partial<UploadSignatureResponse> & { error?: string }>(
     "/messages/upload-signature",
@@ -82,6 +85,7 @@ export interface PreparedUploadMessage extends SendMessagePayload {
   file: File;
 }
 
+// Validate first, sign second, upload third, and preserve partial successes with allSettled.
 export const uploadFilesToCloudinary = async ({
   files,
   onJobStart,
@@ -94,12 +98,14 @@ export const uploadFilesToCloudinary = async ({
   maxFileSizeBytes?: number;
 }): Promise<PromiseSettledResult<PreparedUploadMessage>[]> => {
   const uploadTasks = files.map(async (file, index) => {
+    // Reject invalid files before spending a backend signing request.
     const validation = validateFileForUpload(file, maxFileSizeBytes);
     if (!validation.valid) {
       throw new Error(`${file.name}: ${validation.reason}`);
     }
 
     const signaturePayload = await getSignaturePayload(file);
+    // Prefer the MIME-derived resource type, but fall back to the signed server value.
     const resourceType = resolveCloudinaryResourceType(file.type) || signaturePayload.resourceType;
 
     const cloudinaryResult = await uploadWithProgress({
@@ -110,6 +116,7 @@ export const uploadFilesToCloudinary = async ({
       },
     });
 
+    // Emit the chosen resource type so the caller can keep UI state in sync.
     onJobStart?.(index, resourceType);
 
     return {

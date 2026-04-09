@@ -1,3 +1,7 @@
+// Orchestrates outbound chat sends for the selected conversation, including
+// text messages, media uploads, optimistic queue updates, and post-send sync.
+// Depends on the selected conversation, auth context, shared conversation store,
+// Cloudinary upload helpers, and the message API.
 import { useState } from "react";
 import toast from "react-hot-toast";
 import useConversation from "../zustand/useConversation";
@@ -88,6 +92,9 @@ const useSendMessage = () => {
   /**
    * Sends a plain text message using the shared payload pipeline.
    * Any error is surfaced as a toast; callers do not need to catch.
+    *
+    * @param {string} message The text content to send.
+    * @returns {Promise<void>} Resolves after the message has been accepted or an error has been shown.
    */
   const sendMessage = async (message: string): Promise<void> => {
     if (!selectedConversation?._id) return;
@@ -109,6 +116,9 @@ const useSendMessage = () => {
    * 3) send each successful upload as a chat message payload
    * 4) mark job success/failure and show aggregate failure feedback
    * 5) clear completed/failed jobs shortly after the UI reflects final status
+  *
+  * @param {FileList | File[] | null | undefined} fileList Files selected by the user.
+  * @returns {Promise<void>} Resolves after all upload and send attempts have settled.
    */
   const sendFiles = async (fileList: FileList | File[] | null | undefined): Promise<void> => {
     if (!selectedConversation?._id || !fileList?.length) return;

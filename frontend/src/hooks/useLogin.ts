@@ -1,3 +1,7 @@
+// Handles the login form submission, persists the authenticated user, and keeps
+// the shared auth context in sync with the backend session cookie.
+// Depends on the auth API, localStorage, and toast notifications for validation
+// and request errors.
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { useAuthContext } from "../context/Auth-Context";
@@ -5,6 +9,13 @@ import type { ApiErrorResponse, AuthResponse, LoginCredentials } from "../types"
 import { getErrorMessage } from "../Utils/getErrorMessage";
 import { apiFetch } from "../Utils/apiFetch";
 
+/**
+ * Authenticate an existing user against the backend login endpoint.
+ * Side effects: validates required fields, sends a POST request, stores the
+ * returned user payload in localStorage, and updates the auth context.
+ *
+ * @returns {{ loading: boolean; login: ({ email, password }: LoginCredentials) => Promise<void> }} Login action and loading state.
+ */
 const useLogin = () => {
   const [loading, setLoading] = useState(false);
   const { setAuthUser } = useAuthContext();
@@ -40,6 +51,7 @@ const useLogin = () => {
 
 export default useLogin;
 
+// Keep validation separate so the async login flow only runs when required fields exist.
 function handleLoginErrors(email: string, password: string): boolean {
   if (!email || !password) {
     toast.error("Fill up all the fields");

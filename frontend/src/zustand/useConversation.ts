@@ -3,6 +3,8 @@ import { getConversationKey } from "../Utils/conversationKey";
 import { getMessagePreviewText, shouldHideMessageForUser } from "../Utils/messageDisplay";
 import type { Conversation, ConversationState, Message } from "../types";
 
+// Conversation state is split by conversation key so socket events and HTTP fetches
+// can converge on the same record without duplicating message lists.
 const dedupeMessages = (messages: Message[] = []): Message[] => {
   const seen = new Set<string>();
 
@@ -17,6 +19,8 @@ const dedupeMessages = (messages: Message[] = []): Message[] => {
   });
 };
 
+// Derive the latest visible preview from the message list, skipping items hidden
+// for the current user so the sidebar reflects what that user can actually see.
 const getConversationPreviewFromMessages = (
   messages: Message[] = [],
   currentUserId?: string
@@ -40,6 +44,9 @@ const getConversationPreviewFromMessages = (
   };
 };
 
+// Keep the conversation list in sync when a new message arrives.
+// Existing conversations are updated in place; missing ones are inserted as
+// lightweight placeholders until the full profile data is loaded.
 const upsertConversationWithMessage = (
   conversations: Conversation[],
   incomingMessage: Message,
@@ -92,6 +99,8 @@ const useConversation = create<ConversationState>()((set, get) => ({
   uploadQueue: [],
   detailsRefreshVersion: 0,
 
+  // Opening a chat clears its unread badge and keeps both selected and active
+  // conversation references aligned for downstream components.
   setSelectedConversation: (selectedConversation, currentUserId) =>
     set((state) => {
       const conversationKey = getConversationKey(
@@ -100,6 +109,8 @@ const useConversation = create<ConversationState>()((set, get) => ({
       );
 
       if (!conversationKey) {
+  // Merge fresh conversation payloads with cached preview metadata so socket
+  // updates do not get overwritten by later list refreshes.
         return {
           selectedConversation,
           activeChat: selectedConversation,
@@ -138,6 +149,8 @@ const useConversation = create<ConversationState>()((set, get) => ({
       return { conversations: mergedConversations };
     }),
 
+  // Store messages under a stable key and remove duplicates caused by the
+  // common socket-plus-HTTP race.
   setMessagesForConversation: (conversationKey, messages) =>
     set((state) => ({
       messagesByConversation: {
@@ -146,6 +159,8 @@ const useConversation = create<ConversationState>()((set, get) => ({
       },
     })),
 
+  // Append only when the message is genuinely new; socket retries should not
+  // create duplicate rows in the open conversation.
   appendMessageToConversation: (conversationKey, newMessage) =>
     set((state) => {
       const currentMessages = state.messagesByConversation[conversationKey] || [];
@@ -154,6 +169,7 @@ const useConversation = create<ConversationState>()((set, get) => ({
       );
 
       if (alreadyExists) return state;
+  // Apply targeted message updates such as edit, delete, or delivery status changes.
 
       return {
         messagesByConversation: {
@@ -162,6 +178,7 @@ const useConversation = create<ConversationState>()((set, get) => ({
         },
       };
     }),
+    // Remove a message only when the target exists so the state update stays idempotent.
 
   updateMessageInConversation: (conversationKey, messageId, patch) =>
     set((state) => {
@@ -170,6 +187,8 @@ const useConversation = create<ConversationState>()((set, get) => ({
 
       const nextMessages = currentMessages.map((message) => {
         if (!message?._id || message._id !== messageId) return message;
+  // Recompute the sidebar preview from the current message list after local edits,
+  // deletions, or sync events.
 
         didUpdate = true;
         return {
@@ -226,11 +245,14 @@ const useConversation = create<ConversationState>()((set, get) => ({
       };
     }),
 
+  // Force the details panel to re-fetch when profile-affecting actions happen.
   bumpDetailsRefreshVersion: () =>
     set((state) => ({
       detailsRefreshVersion: state.detailsRefreshVersion + 1,
     })),
 
+  // Keep unread counts isolated per conversation so inactive chats can accumulate
+  // badges without affecting the currently open thread.
   incrementUnread: (conversationKey) =>
     set((state) => ({
       unreadByConversation: {
@@ -239,6 +261,8 @@ const useConversation = create<ConversationState>()((set, get) => ({
       },
     })),
 
+  // Insert or refresh conversation metadata from a socket message, deriving the
+  // partner ID from the participants so routing stays deterministic.
   upsertConversationFromMessage: (incomingMessage, currentUserId) =>
     set((state) => ({
       conversations: upsertConversationWithMessage(
@@ -248,13 +272,17 @@ const useConversation = create<ConversationState>()((set, get) => ({
       ),
     })),
 
+  // Expose a read helper so callers do not need to know the internal map shape.
   getMessagesForConversation: (conversationKey) => get().messagesByConversation[conversationKey] || [],
 
+  // Track pending uploads separately from messages so UI can show progress and
+  // clean them up independently of chat history.
   addUploadJobs: (jobs) =>
     set((state) => ({
       uploadQueue: [...state.uploadQueue, ...jobs],
     })),
 
+  // Keep upload updates narrow: only the targeted job gets patched.
   updateUploadJob: (jobId, patch) =>
     set((state) => ({
       uploadQueue: state.uploadQueue.map((job) =>
@@ -262,11 +290,13 @@ const useConversation = create<ConversationState>()((set, get) => ({
       ),
     })),
 
+  // Remove completed or failed jobs once the UI no longer needs them.
   removeUploadJob: (jobId) =>
     set((state) => ({
       uploadQueue: state.uploadQueue.filter((job) => job.id !== jobId),
     })),
 
+  // Keep only active uploads in the queue so old finished jobs do not linger.
   clearCompletedUploads: () =>
     set((state) => ({
       uploadQueue: state.uploadQueue.filter((job) => job.status === "uploading"),

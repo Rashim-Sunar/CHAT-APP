@@ -1,3 +1,7 @@
+// Encapsulates edit and delete behavior for a single message, including optimistic
+// updates, rollback on failure, and derived conversation preview refreshes.
+// Depends on the authenticated user, message-specific conversation routing, the
+// shared conversation store, and the message API endpoints.
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { useAuthContext } from "../context/Auth-Context";
@@ -8,6 +12,14 @@ import useConversation from "../zustand/useConversation";
 import type { ApiErrorResponse, Message } from "../types";
 import { apiFetch } from "../Utils/apiFetch";
 
+/**
+ * Provide edit/delete controls and guarded mutations for a single message.
+ * Side effects: performs PUT/DELETE requests, mutates the per-conversation message
+ * cache, refreshes preview state, and rolls back local changes on failure.
+ *
+ * @param {Message} message The message being controlled by the calling component.
+ * @returns {{ isBusy: boolean; isEditing: boolean; isDeleting: boolean; canEdit: boolean; canDelete: boolean; editMessage: (content: string) => Promise<boolean>; deleteMessage: (deleteType: "me" | "everyone") => Promise<boolean> }} Action state and mutators for the message.
+ */
 const useMessageActions = (message: Message) => {
   const [busyAction, setBusyAction] = useState<"edit" | "delete" | null>(null);
   const { authUser } = useAuthContext();
@@ -18,17 +30,20 @@ const useMessageActions = (message: Message) => {
   const conversationKey = getConversationKey(message.senderId, message.receiverId);
   const messageId = message._id;
 
+  // Snapshot the current thread so failed edits/deletes can be rolled back safely.
   const snapshotMessages = (): Message[] => {
     if (!conversationKey) return [];
     return useConversation.getState().messagesByConversation[conversationKey] || [];
   };
 
+  // Restore the cached message list after a failed server mutation.
   const restoreMessages = (previousMessages: Message[]): void => {
     if (!conversationKey || !currentUserId) return;
     setMessagesForConversation(conversationKey, previousMessages);
     syncConversationPreview(conversationKey, currentUserId);
   };
 
+  // Apply the server version of a message after a successful edit/delete response.
   const applyServerMessage = (serverMessage: Message): void => {
     if (!conversationKey || !messageId || !currentUserId) return;
 
@@ -85,6 +100,14 @@ const useMessageActions = (message: Message) => {
     }
   };
 
+  /**
+   * Delete the message either just for the current user or for everyone.
+   * Side effects: applies an optimistic update, persists the change to the
+   * backend, and restores the previous message snapshot if the request fails.
+   *
+   * @param {"me" | "everyone"} deleteType Scope of deletion requested by the user.
+   * @returns {Promise<boolean>} True when the server mutation succeeds.
+   */
   const deleteMessage = async (deleteType: "me" | "everyone"): Promise<boolean> => {
     if (!messageId || !conversationKey || !currentUserId) return false;
 

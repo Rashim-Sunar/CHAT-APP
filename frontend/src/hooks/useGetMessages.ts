@@ -1,3 +1,6 @@
+// Fetches messages for the selected conversation and stores them by conversation key.
+// Depends on the authenticated user, the active conversation, the shared message map,
+// and the API for canonical message history.
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import useConversation from "../zustand/useConversation";
@@ -7,6 +10,12 @@ import type { Message, ApiErrorResponse } from "../types";
 import { getErrorMessage } from "../Utils/getErrorMessage";
 import { apiFetch } from "../Utils/apiFetch";
 
+/**
+ * Load the selected conversation history into the per-conversation message store.
+ * Side effects: performs a GET request, writes to Zustand, and shows toast errors.
+ *
+ * @returns {{ loading: boolean; messages: Message[] }} Current fetch state and cached messages.
+ */
 const useGetMessages = () => {
   const [loading, setLoading] = useState(false);
   const { authUser } = useAuthContext();
@@ -23,6 +32,7 @@ const useGetMessages = () => {
 
     let ignore = false;
 
+    // Guard against stale updates when the user switches chats before the request settles.
     const getMessages = async () => {
       setLoading(true);
       try {
