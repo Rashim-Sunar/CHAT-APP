@@ -7,6 +7,7 @@ import type { Request, Response } from 'express';
 import User, { IUserDocument } from '../models/userModel.js';
 import generateToken from '../Utils/generateToken.js';
 import type { SignUpDto, LoginDto } from '../types/dtos/auth.js';
+import type { AuthenticatedRequest } from '../types/express/index.js';
 
 /**
  * @desc    Registers a new user
@@ -141,6 +142,54 @@ export const logOutUser = async (req: Request, res: Response): Promise<void> => 
     // Log error for debugging
     console.log(
       'Error occured while logging out',
+      error instanceof Error ? error.message : String(error)
+    );
+
+    res.status(500).json({
+      status: 'fail',
+      message: 'Internal server error',
+    });
+  }
+};
+
+/**
+ * @desc    Returns authenticated user from active cookie session
+ * @route   GET /api/auth/me
+ * @access  Private
+ * @returns JSON response with current authenticated user
+ */
+export const getCurrentUser = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        status: 'fail',
+        message: 'Unauthorized',
+      });
+      return;
+    }
+
+    const user = await User.findById(req.user);
+
+    if (!user) {
+      res.status(401).json({
+        status: 'fail',
+        message: 'Unauthorized',
+      });
+      return;
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        user,
+      },
+    });
+  } catch (error: unknown) {
+    console.log(
+      'Error occured while fetching current user',
       error instanceof Error ? error.message : String(error)
     );
 

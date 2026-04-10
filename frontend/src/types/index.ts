@@ -112,6 +112,7 @@ export interface SocketContextValue {
 export interface AuthContextValue {
   authUser: AuthResponse | null;
   setAuthUser: Dispatch<SetStateAction<AuthResponse | null>>;
+  loading: boolean;
 }
 
 export interface ConversationState {
