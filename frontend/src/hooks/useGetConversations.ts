@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import useConversation from "../zustand/useConversation";
+import { useAuthContext } from "../context/Auth-Context";
 import type { Conversation } from "../types";
 import { getErrorMessage } from "../Utils/getErrorMessage";
 import { apiFetch } from "../Utils/apiFetch";
@@ -26,12 +27,14 @@ interface UsersResponse {
  */
 const useGetConversations = () => {
   const [loading, setLoading] = useState(false);
-  const { conversations, setConversations } = useConversation();
+  const { authUser } = useAuthContext();
+  const { conversations, setConversations, hydrateUnreadFromConversations } = useConversation();
+  const currentUserId = authUser?.data?.user?._id;
 
   useEffect(() => {
-    if (conversations.length > 0) return;
+    if (!currentUserId) return;
 
-    // Avoid re-fetching once the store already has conversation data.
+    // Re-fetch on authenticated user changes so offline messages appear after login.
     const getConversations = async () => {
       setLoading(true);
       try {
@@ -44,15 +47,19 @@ const useGetConversations = () => {
 
         const userDataArray = usersData?.data?.users || [];
         setConversations(userDataArray);
+        hydrateUnreadFromConversations(userDataArray, currentUserId);
       } catch (error: unknown) {
-        toast.error(getErrorMessage(error));
+        const message = getErrorMessage(error);
+        if (!message.includes("API Error: 401")) {
+          toast.error(message);
+        }
       } finally {
         setLoading(false);
       }
     };
 
     getConversations();
-  }, [conversations.length, setConversations]);
+  }, [currentUserId, setConversations, hydrateUnreadFromConversations]);
 
   return { loading, conversations };
 };

@@ -38,6 +38,9 @@ export interface Conversation {
   profilePic?: string;
   lastMessage?: string;
   lastMessageAt?: string;
+  lastMessageSenderId?: string;
+  unreadCount?: number;
+  seenAt?: string;
   __isPlaceholder?: boolean;
 }
 
@@ -89,12 +92,14 @@ export interface FileDeliveryResponse {
 export interface ServerToClientEvents {
   getOnlineUsers: (users: string[]) => void;
   newMessage: (message: Message) => void;
+  "conversation:seen": (payload: { conversationId: string; readerId: string; seenAt: string }) => void;
   "message:edit": (message: Message) => void;
   "message:delete": (message: Message) => void;
 }
 
 export interface ClientToServerEvents {
   connect_error: (error: Error) => void;
+  "conversation:seen": (payload: { conversationId: string; readerId: string }) => void;
 }
 
 export type AppSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
@@ -135,6 +140,9 @@ export interface ConversationState {
   incrementUnread: (conversationKey: string) => void;
   upsertConversationFromMessage: (incomingMessage: Message, currentUserId: string) => void;
   getMessagesForConversation: (conversationKey: string) => Message[];
+  resetConversationState: () => void;
+  hydrateUnreadFromConversations: (conversations: Conversation[], currentUserId?: string) => void;
+  markConversationSeen: (conversationId: string, seenAt: string, currentUserId?: string) => void;
   addUploadJobs: (jobs: UploadJob[]) => void;
   updateUploadJob: (
     jobId: string,

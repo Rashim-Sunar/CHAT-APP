@@ -9,6 +9,7 @@ import { Types } from 'mongoose';
 import Conversation, { ConversationDocument } from '../models/conversationModel.js';
 import Message, { MessageDocument } from '../models/messageModel.js';
 import { getReceiverSocketId, io } from '../socket/socket.js';
+import { recordConversationSeen } from '../Utils/readReceipt.js';
 import type { AuthenticatedRequest } from '../types/express/index.js';
 import type {
   CreateFileDeliveryUrlDto,
@@ -489,6 +490,14 @@ export const getMessage = async (
     if (!conversation) {
       res.status(200).json([]);
       return;
+    }
+
+    const receipt = await recordConversationSeen(String(conversation._id), String(senderId));
+    if (receipt) {
+      const recipientSocketId = getReceiverSocketId(receipt.recipientId);
+      if (recipientSocketId) {
+        io.to(recipientSocketId).emit('conversation:seen', receipt);
+      }
     }
 
     const messages = (conversation.messages as unknown as MessageDocument[])

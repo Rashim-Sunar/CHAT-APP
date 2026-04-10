@@ -50,6 +50,18 @@ const protectRoute = async (
 
     next();
   } catch (error: unknown) {
+    if (
+      error instanceof jwt.TokenExpiredError ||
+      error instanceof jwt.JsonWebTokenError ||
+      error instanceof jwt.NotBeforeError
+    ) {
+      res.status(401).json({
+        status: 'fail',
+        message: 'Unauthorized - Invalid or expired token',
+      });
+      return;
+    }
+
     // Log error for debugging (e.g., token expired or invalid)
     console.log(
       'Error occured in protectRoute',

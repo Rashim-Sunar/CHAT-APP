@@ -51,7 +51,10 @@ const useGetMessages = () => {
 
         if (data.error) throw new Error(data.error);
       } catch (error: unknown) {
-        toast.error(getErrorMessage(error));
+        const message = getErrorMessage(error);
+        if (!message.includes("API Error: 401")) {
+          toast.error(message);
+        }
       } finally {
         if (!ignore) {
           setLoading(false);

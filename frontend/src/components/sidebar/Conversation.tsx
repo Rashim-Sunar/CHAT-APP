@@ -45,9 +45,18 @@ const ConversationItem = ({ conversation }: ConversationProps) => {
 
       <div className="flex-1 min-w-0">
         <p className="font-medium text-slate-800 truncate">{conversation.userName}</p>
-        <p className="text-xs text-slate-500 truncate">
-          {conversation.lastMessage || "Start a conversation"}
-        </p>
+        <div className="flex items-center gap-2 min-w-0">
+          <p className="text-xs text-slate-500 truncate">
+            {conversation.lastMessage || "Start a conversation"}
+          </p>
+          {unreadCount > 0 && !isSelected && (
+            <span
+              className="w-2 h-2 rounded-full bg-indigo-500 shrink-0"
+              aria-label="Unread messages"
+              title="Unread messages"
+            />
+          )}
+        </div>
       </div>
 
       {unreadCount > 0 && !isSelected && (

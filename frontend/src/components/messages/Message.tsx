@@ -3,6 +3,7 @@ import { HiOutlineDotsVertical } from "react-icons/hi";
 import { FiEdit2, FiTrash2 } from "react-icons/fi";
 import { useAuthContext } from "../../context/Auth-Context";
 import useConversation from "../../zustand/useConversation";
+import { getConversationKey } from "../../Utils/conversationKey";
 import { extractTime } from "../../Utils/extractTime";
 import { getAvatarByGender } from "../../Utils/getAvatarByGender";
 import {
@@ -26,7 +27,7 @@ interface MessageProps {
 
 const Message = ({ message }: MessageProps) => {
   const { authUser } = useAuthContext();
-  const { selectedConversation } = useConversation();
+  const { selectedConversation, messagesByConversation } = useConversation();
   const { editMessage, deleteMessage, isBusy, canEdit, canDelete } = useMessageActions(message);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const editInputRef = useRef<HTMLInputElement | null>(null);
@@ -34,6 +35,8 @@ const Message = ({ message }: MessageProps) => {
   const currentUserId = sender?._id;
   const fromMe = Boolean(sender && message.senderId === sender._id);
   const hiddenForCurrentUser = shouldHideMessageForUser(message, currentUserId);
+  const conversationKey = getConversationKey(selectedConversation?._id, currentUserId);
+  const currentConversationMessages = conversationKey ? messagesByConversation[conversationKey] || [] : [];
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -47,6 +50,31 @@ const Message = ({ message }: MessageProps) => {
   const formattedTime = extractTime(message.createdAt);
   const canOpenActions = fromMe && canDelete && !message.deletedForEveryone;
   const canEditText = canOpenActions && canEdit && message.messageType === "text";
+  const selectedConversationSeenAt = selectedConversation?.seenAt ? new Date(selectedConversation.seenAt) : null;
+
+  const latestOutgoingMessageId = (() => {
+    for (let index = currentConversationMessages.length - 1; index >= 0; index -= 1) {
+      const currentMessage = currentConversationMessages[index];
+      if (!currentMessage || shouldHideMessageForUser(currentMessage, currentUserId)) {
+        continue;
+      }
+
+      if (String(currentMessage.senderId) === String(currentUserId)) {
+        return currentMessage._id;
+      }
+    }
+
+    return undefined;
+  })();
+
+  const showSeenIndicator = Boolean(
+    fromMe &&
+      message._id &&
+      latestOutgoingMessageId &&
+      String(latestOutgoingMessageId) === String(message._id) &&
+      selectedConversationSeenAt &&
+      new Date(message.createdAt).getTime() <= selectedConversationSeenAt.getTime()
+  );
 
   useEffect(() => {
     if (!isEditing) {
@@ -293,6 +321,12 @@ const Message = ({ message }: MessageProps) => {
           <span>{formattedTime}</span>
           {isMessageEdited(message) && <span className="italic text-slate-400">(edited)</span>}
         </div>
+
+        {showSeenIndicator && (
+          <div className="mt-0.5 text-right text-[11px] font-medium text-emerald-600">
+            Seen
+          </div>
+        )}
       </div>
 
       <MessageDeleteModal
