@@ -62,7 +62,7 @@ const MessageContainer = () => {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 bg-slate-50">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 md:px-6 py-4 bg-slate-50 min-w-0">
         <Messages />
       </div>
 
