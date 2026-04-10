@@ -13,6 +13,8 @@ import type { Response } from 'express';
  * @returns void
  */
 const generateWebTokenAndSetCookie = (userId: string, res: Response): void => {
+  const isProduction = process.env.NODE_ENV === 'production';
+
   // Sign JWT token with userId payload and expiration
   const token = jwt.sign({ userId }, process.env.JWT_SECRET as string, {
     expiresIn: '15d',
@@ -24,11 +26,12 @@ const generateWebTokenAndSetCookie = (userId: string, res: Response): void => {
 
     httpOnly: true, // Prevents access via client-side JS (XSS protection)
 
-    // sameSite: 'strict', // Mitigates CSRF attacks
-    sameSite: 'none', // Allows cross-site cookies for frontend-backend communication
+    // In production, cross-site deployments need SameSite=None + Secure.
+    // In local HTTP development, SameSite=None without Secure is rejected by browsers.
+    sameSite: isProduction ? 'none' : 'lax',
 
     // Ensures cookie is sent only over HTTPS in production
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProduction,
   });
 };
 

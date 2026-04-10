@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { AuthContextValue, AuthResponse } from "../types";
+import useConversation from "../zustand/useConversation";
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -28,6 +29,23 @@ interface AuthContextProviderProps {
 
 export const AuthContextProvider = ({ children }: AuthContextProviderProps) => {
   const [authUser, setAuthUser] = useState<AuthResponse | null>(readStoredAuthUser);
+  const userId = authUser?.data?.user?._id;
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      localStorage.removeItem("chat-user");
+      setAuthUser(null);
+    };
+
+    window.addEventListener("auth:unauthorized", handleUnauthorized);
+    return () => {
+      window.removeEventListener("auth:unauthorized", handleUnauthorized);
+    };
+  }, []);
+
+  useEffect(() => {
+    useConversation.getState().resetConversationState();
+  }, [userId]);
 
   return (
     <AuthContext.Provider value={{ authUser, setAuthUser }}>

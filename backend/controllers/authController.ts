@@ -123,8 +123,15 @@ export const loginUser = async (
  */
 export const logOutUser = async (req: Request, res: Response): Promise<void> => {
   try {
+    const isProduction = process.env.NODE_ENV === 'production';
+
     // Clear JWT cookie
-    res.cookie('jwt', '', { maxAge: 0 });
+    res.cookie('jwt', '', {
+      maxAge: 0,
+      httpOnly: true,
+      sameSite: isProduction ? 'none' : 'lax',
+      secure: isProduction,
+    });
 
     res.status(200).json({
       status: 'success',

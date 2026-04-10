@@ -2,6 +2,7 @@
 // Depends on the socket connection, authenticated user context, notification audio,
 // and the shared conversation store for append/update/delete operations.
 import { useEffect } from "react";
+import toast from "react-hot-toast";
 import { useSocketContext } from "../context/SocketContext";
 import useConversation from "../zustand/useConversation";
 import notificationSound from "../assets/sound/notification.mp3";
@@ -27,6 +28,7 @@ const useListenMessages = () => {
     removeMessageFromConversation,
     syncConversationPreview,
     bumpDetailsRefreshVersion,
+    markConversationSeen,
   } = useConversation();
 
   useEffect(() => {
@@ -51,6 +53,12 @@ const useListenMessages = () => {
       const selectedConversationKey = getConversationKey(selectedConversation?._id, currentUserId);
       if (selectedConversationKey === incomingConversationKey) {
         bumpDetailsRefreshVersion();
+        if (currentUserId && newMessage.senderId !== currentUserId && socket.connected) {
+          socket.emit("conversation:seen", {
+            conversationId: String(newMessage.conversationId || incomingConversationKey),
+            readerId: String(currentUserId),
+          });
+        }
       }
 
       const activeConversation = useConversation.getState().selectedConversation;
@@ -61,6 +69,32 @@ const useListenMessages = () => {
 
       if (activeConversationKey !== incomingConversationKey) {
         incrementUnread(incomingConversationKey);
+
+        const partnerId =
+          String(newMessage?.senderId) === String(currentUserId)
+            ? String(newMessage?.receiverId)
+            : String(newMessage?.senderId);
+        const partner = useConversation
+          .getState()
+          .conversations.find((conversation) => String(conversation._id) === partnerId);
+        const preview =
+          (newMessage.text || newMessage.message || "").trim() ||
+          (newMessage.messageType === "image"
+            ? "Sent an image"
+            : newMessage.messageType === "video"
+              ? "Sent a video"
+              : newMessage.messageType === "file"
+                ? "Sent a file"
+                : "New message");
+
+        toast(
+          `${partner?.userName || "New message"}: ${preview}`,
+          {
+            id: `incoming-${newMessage._id || `${incomingConversationKey}-${newMessage.createdAt}`}`,
+            icon: "MSG",
+            duration: 2500,
+          }
+        );
 
         const sound = new Audio(notificationSound);
         sound.play().catch(() => {
@@ -116,12 +150,19 @@ const useListenMessages = () => {
       }
     };
 
+    const onConversationSeen = (payload: { conversationId: string; readerId: string; seenAt: string }) => {
+      if (!currentUserId) return;
+      markConversationSeen(payload.conversationId, payload.seenAt, currentUserId);
+    };
+
     socket.on("newMessage", onNewMessage);
+    socket.on("conversation:seen", onConversationSeen);
     socket.on("message:edit", onMessageEdit);
     socket.on("message:delete", onMessageDelete);
 
     return () => {
       socket.off("newMessage", onNewMessage);
+      socket.off("conversation:seen", onConversationSeen);
       socket.off("message:edit", onMessageEdit);
       socket.off("message:delete", onMessageDelete);
     };
@@ -135,6 +176,7 @@ const useListenMessages = () => {
     removeMessageFromConversation,
     syncConversationPreview,
     bumpDetailsRefreshVersion,
+    markConversationSeen,
   ]);
 };
 

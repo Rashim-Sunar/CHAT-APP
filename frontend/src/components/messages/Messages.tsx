@@ -2,14 +2,12 @@ import { useEffect, useRef } from "react";
 import Message from "./Message";
 import useGetMessages from "../../hooks/useGetMessages";
 import MessageSkeleton from "../skeleton/MessageSkeleton";
-import useListenMessages from "../../hooks/useListenMessages";
 import type { Message as ChatMessage } from "../../types";
 import { useAuthContext } from "../../context/Auth-Context";
 import { shouldHideMessageForUser } from "../../Utils/messageDisplay";
 
 const Messages = () => {
   const { loading, messages } = useGetMessages();
-  useListenMessages();
   const lastMessageRef = useRef<HTMLDivElement | null>(null);
   const { authUser } = useAuthContext();
   const currentUserId = authUser?.data?.user?._id;

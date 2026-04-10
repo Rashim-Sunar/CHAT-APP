@@ -8,6 +8,10 @@ import mongoose, { Document, Types } from 'mongoose';
 export interface IConversation {
   participants: Types.ObjectId[];
   messages: Types.ObjectId[];
+  readBy: {
+    userId: Types.ObjectId;
+    seenAt: Date;
+  }[];
 }
 
 // Extends IConversation with mongoose document properties
@@ -29,6 +33,18 @@ const conversationSchema = new mongoose.Schema<IConversation>(
         type: mongoose.Schema.Types.ObjectId,
         ref: 'message', // References messages belonging to this conversation
         default: [],
+      },
+    ],
+    readBy: [
+      {
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'user',
+        },
+        seenAt: {
+          type: Date,
+          default: Date.now,
+        },
       },
     ],
   },

@@ -6,6 +6,7 @@
 import { Server } from 'socket.io';
 import http from 'http';
 import express from 'express';
+import { recordConversationSeen } from '../Utils/readReceipt.js';
 
 const clientOrigins = (process.env.CLIENT_ORIGINS || process.env.CLIENT_URL || 'http://localhost:3000')
   .split(',')
@@ -57,6 +58,23 @@ io.on('connection', (socket) => {
   io.emit('getOnlineUsers', Object.keys(userSocketMap));
 
   // Handle user disconnect
+  socket.on('conversation:seen', async (payload: { conversationId: string; readerId: string }) => {
+    try {
+      const receipt = await recordConversationSeen(payload.conversationId, payload.readerId);
+      if (!receipt) return;
+
+      const recipientSocketId = getReceiverSocketId(receipt.recipientId);
+      if (recipientSocketId) {
+        io.to(recipientSocketId).emit('conversation:seen', receipt);
+      }
+    } catch (error) {
+      console.log(
+        'Error in conversation:seen handler',
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log('User disconnected: ' + socket.id);
 

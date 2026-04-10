@@ -3,9 +3,11 @@ import MessageContainer from "../../components/messages/MessageContainer";
 import UserDetailsPanel from "../../components/details/UserDetailsPanel";
 import MobileConversationBar from "../../components/mobile/MobileConversationBar";
 import useConversation from "../../zustand/useConversation";
+import useListenMessages from "../../hooks/useListenMessages";
 
 const Home = () => {
   const { selectedConversation } = useConversation();
+  useListenMessages();
 
   return (
     <div className="h-screen w-full bg-slate-100 flex flex-col md:flex-row overflow-hidden">

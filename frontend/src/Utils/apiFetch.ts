@@ -35,6 +35,18 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
   if (!response.ok) {
     // Surface the backend response body to make debugging API failures easier.
     const errorText = await response.text();
+
+    if (response.status === 401 && typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("auth:unauthorized", {
+          detail: {
+            status: response.status,
+            message: errorText,
+          },
+        })
+      );
+    }
+
     throw new Error(`API Error: ${response.status} - ${errorText || response.statusText}`);
   }
 

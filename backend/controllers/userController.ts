@@ -5,9 +5,40 @@
 
 import type { Response } from 'express';
 import mongoose from 'mongoose';
+import Conversation from '../models/conversationModel.js';
 import User from '../models/userModel.js';
 import Message from '../models/messageModel.js';
 import type { AuthenticatedRequest } from '../types/express/index.js';
+
+type SidebarMessageAggregate = {
+  _id: mongoose.Types.ObjectId;
+  lastMessageType?: 'text' | 'image' | 'video' | 'file';
+  lastText?: string;
+  lastFileName?: string;
+  lastCreatedAt?: Date;
+  lastSenderId?: mongoose.Types.ObjectId;
+  lastDeletedForEveryone?: boolean;
+  lastDeletedFor?: mongoose.Types.ObjectId[];
+  unreadCount?: number;
+};
+
+type SidebarConversationRecord = {
+  participants: Array<mongoose.Types.ObjectId | string>;
+  messages: Array<{
+    senderId: mongoose.Types.ObjectId | string;
+    receiverId: mongoose.Types.ObjectId | string;
+    messageType: 'text' | 'image' | 'video' | 'file';
+    text?: string;
+    fileName?: string;
+    deletedForEveryone?: boolean;
+    deletedFor?: Array<mongoose.Types.ObjectId | string>;
+    createdAt: Date | string;
+  }>;
+  readBy?: Array<{
+    userId: mongoose.Types.ObjectId | string;
+    seenAt: Date | string;
+  }>;
+};
 
 type UserDetailsResponse = {
   user: {
@@ -68,6 +99,61 @@ const buildLinkTitle = (rawUrl: string): string => {
   }
 };
 
+const getSidebarMessagePreview = (
+  summary: SidebarMessageAggregate | undefined,
+  loggedinUserId: string
+): string => {
+  if (!summary) return '';
+
+  const deletedForEveryone = Boolean(summary.lastDeletedForEveryone);
+  const deletedFor = Array.isArray(summary.lastDeletedFor)
+    ? summary.lastDeletedFor.map((value) => String(value))
+    : [];
+
+  if (deletedForEveryone || deletedFor.includes(String(loggedinUserId))) {
+    return '';
+  }
+
+  if (summary.lastMessageType === 'text') {
+    return (summary.lastText || '').trim();
+  }
+
+  if (summary.lastMessageType === 'image') return 'Sent an image';
+  if (summary.lastMessageType === 'video') return 'Sent a video';
+  if (summary.lastMessageType === 'file') return summary.lastFileName || 'Sent a file';
+
+  return '';
+};
+
+const isMessageVisibleForSidebar = (
+  message: SidebarConversationRecord['messages'][number],
+  userId: string
+): boolean => {
+  if (message.deletedForEveryone) return false;
+
+  const deletedFor = Array.isArray(message.deletedFor)
+    ? message.deletedFor.map((value) => String(value))
+    : [];
+
+  return !deletedFor.includes(String(userId));
+};
+
+const getSidebarPreviewText = (
+  message: SidebarConversationRecord['messages'][number] | undefined
+): string => {
+  if (!message) return '';
+
+  if (message.messageType === 'text') {
+    return (message.text || '').trim();
+  }
+
+  if (message.messageType === 'image') return 'Sent an image';
+  if (message.messageType === 'video') return 'Sent a video';
+  if (message.messageType === 'file') return message.fileName || 'Sent a file';
+
+  return '';
+};
+
 /**
  * @desc    Retrieves all users except the logged-in user (for sidebar display)
  * @route   GET /api/users
@@ -82,14 +168,136 @@ export const getUsersForSidebar = async (
     // Extract authenticated user ID (attached via auth middleware)
     const loggedinUserId = req.user;
 
+    if (!loggedinUserId || !mongoose.Types.ObjectId.isValid(loggedinUserId)) {
+      res.status(401).json({
+        status: 'fail',
+        message: 'Unauthorized',
+      });
+      return;
+    }
+
+    const loggedinObjectId = new mongoose.Types.ObjectId(loggedinUserId);
+
     // Fetch all users excluding the current logged-in user
-    const filteredUsers = await User.find({ _id: { $ne: loggedinUserId } });
+    const [filteredUsers, messageSummaries, conversations] = await Promise.all([
+      User.find({ _id: { $ne: loggedinUserId } }),
+      Message.aggregate<SidebarMessageAggregate>([
+        {
+          $match: {
+            $or: [{ senderId: loggedinObjectId }, { receiverId: loggedinObjectId }],
+          },
+        },
+        {
+          $addFields: {
+            partnerId: {
+              $cond: [{ $eq: ['$senderId', loggedinObjectId] }, '$receiverId', '$senderId'],
+            },
+          },
+        },
+        { $sort: { createdAt: -1 } },
+        {
+          $group: {
+            _id: '$partnerId',
+            lastMessageType: { $first: '$messageType' },
+            lastText: { $first: '$text' },
+            lastFileName: { $first: '$fileName' },
+            lastCreatedAt: { $first: '$createdAt' },
+            lastSenderId: { $first: '$senderId' },
+            lastDeletedForEveryone: { $first: '$deletedForEveryone' },
+            lastDeletedFor: { $first: { $ifNull: ['$deletedFor', []] } },
+            unreadCount: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $eq: ['$receiverId', loggedinObjectId] },
+                      { $ne: ['$deletedForEveryone', true] },
+                      { $not: [{ $in: [loggedinObjectId, { $ifNull: ['$deletedFor', []] }] }] },
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]),
+      Conversation.find({ participants: loggedinObjectId })
+        .populate('messages')
+        .lean<SidebarConversationRecord[]>(),
+    ]);
+
+    const summaryByPartnerId = new Map(
+      messageSummaries.map((summary) => [String(summary._id), summary])
+    );
+
+    const conversationByPartnerId = new Map<string, SidebarConversationRecord>();
+    conversations.forEach((conversation) => {
+      const partnerId = conversation.participants
+        .map((participant) => String(participant))
+        .find((participantId) => participantId !== String(loggedinUserId));
+
+      if (partnerId) {
+        conversationByPartnerId.set(partnerId, conversation);
+      }
+    });
+
+    const usersWithPreview = filteredUsers.map((userDoc) => {
+      const user = userDoc.toObject();
+      const summary = summaryByPartnerId.get(String(userDoc._id));
+      const conversation = conversationByPartnerId.get(String(userDoc._id));
+      const readState = conversation?.readBy?.find(
+        (entry) => String(entry.userId) === String(loggedinUserId)
+      );
+      const seenAt = readState?.seenAt ? new Date(readState.seenAt) : new Date(0);
+
+      const sortedMessages = Array.isArray(conversation?.messages)
+        ? [...conversation.messages].sort(
+            (firstMessage, secondMessage) =>
+              new Date(firstMessage.createdAt).getTime() - new Date(secondMessage.createdAt).getTime()
+          )
+        : [];
+
+      let lastVisibleMessage: SidebarConversationRecord['messages'][number] | undefined;
+      for (let index = sortedMessages.length - 1; index >= 0; index -= 1) {
+        const message = sortedMessages[index];
+        if (isMessageVisibleForSidebar(message, String(loggedinUserId))) {
+          lastVisibleMessage = message;
+          break;
+        }
+      }
+
+      const lastMessage = getSidebarPreviewText(lastVisibleMessage) || getSidebarMessagePreview(summary, loggedinUserId);
+      const lastMessageAt = lastVisibleMessage?.createdAt || summary?.lastCreatedAt || undefined;
+      const lastMessageSenderId = lastVisibleMessage?.senderId
+        ? String(lastVisibleMessage.senderId)
+        : summary?.lastSenderId
+          ? String(summary.lastSenderId)
+          : undefined;
+
+      const unreadCount = sortedMessages.reduce((count, message) => {
+        if (String(message.receiverId) !== String(loggedinUserId)) return count;
+        if (!isMessageVisibleForSidebar(message, String(loggedinUserId))) return count;
+        if (new Date(message.createdAt).getTime() <= seenAt.getTime()) return count;
+        return count + 1;
+      }, 0);
+
+      return {
+        ...user,
+        lastMessage,
+        lastMessageAt,
+        lastMessageSenderId,
+        seenAt: readState?.seenAt ? new Date(readState.seenAt).toISOString() : undefined,
+        unreadCount,
+      };
+    });
 
     res.status(200).json({
       status: 'success',
-      users: filteredUsers.length,
+      users: usersWithPreview.length,
       data: {
-        users: filteredUsers,
+        users: usersWithPreview,
       },
     });
   } catch (error: unknown) {

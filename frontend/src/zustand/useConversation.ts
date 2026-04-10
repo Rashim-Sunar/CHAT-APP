@@ -69,6 +69,7 @@ const upsertConversationWithMessage = (
       ...conversations[existingIndex],
       lastMessage,
       lastMessageAt,
+      seenAt: conversations[existingIndex].seenAt,
     } satisfies Conversation;
 
     return [
@@ -84,6 +85,7 @@ const upsertConversationWithMessage = (
       gender: "male",
       lastMessage,
       lastMessageAt,
+      seenAt: undefined,
       __isPlaceholder: true,
     },
     ...conversations,
@@ -140,8 +142,12 @@ const useConversation = create<ConversationState>()((set, get) => ({
 
         return {
           ...conversation,
-          lastMessage: existing.lastMessage,
-          lastMessageAt: existing.lastMessageAt,
+          lastMessage: conversation.lastMessage ?? existing.lastMessage,
+          lastMessageAt: conversation.lastMessageAt ?? existing.lastMessageAt,
+          lastMessageSenderId:
+            conversation.lastMessageSenderId ?? existing.lastMessageSenderId,
+          unreadCount: conversation.unreadCount ?? existing.unreadCount,
+          seenAt: conversation.seenAt ?? existing.seenAt,
           __isPlaceholder: false,
         };
       });
@@ -237,6 +243,7 @@ const useConversation = create<ConversationState>()((set, get) => ({
           ...conversation,
           lastMessage: preview.lastMessage,
           lastMessageAt: preview.lastMessageAt,
+          seenAt: conversation.seenAt,
         };
       });
 
@@ -274,6 +281,77 @@ const useConversation = create<ConversationState>()((set, get) => ({
 
   // Expose a read helper so callers do not need to know the internal map shape.
   getMessagesForConversation: (conversationKey) => get().messagesByConversation[conversationKey] || [],
+
+  // Reset conversation-scoped state on auth user changes to avoid cross-session stale data.
+  resetConversationState: () =>
+    set({
+      selectedConversation: null,
+      activeChat: null,
+      conversations: [],
+      messagesByConversation: {},
+      unreadByConversation: {},
+      uploadQueue: [],
+      detailsRefreshVersion: 0,
+    }),
+
+  // Seed unread badges from API-provided unread counts after login/reload.
+  hydrateUnreadFromConversations: (conversations, currentUserId) =>
+    set((state) => {
+      if (!currentUserId) return state;
+
+      const nextUnreadByConversation: Record<string, number> = {};
+      const selectedId = state.selectedConversation?._id;
+
+      conversations.forEach((conversation) => {
+        const conversationKey = getConversationKey(conversation._id, currentUserId);
+        if (!conversationKey) return;
+
+        const serverUnread = Number(conversation.unreadCount || 0);
+        const localUnread = state.unreadByConversation[conversationKey] || 0;
+        const isSelected = selectedId ? String(selectedId) === String(conversation._id) : false;
+
+        nextUnreadByConversation[conversationKey] = isSelected
+          ? 0
+          : Math.max(localUnread, serverUnread);
+      });
+
+      return {
+        unreadByConversation: nextUnreadByConversation,
+      };
+    }),
+
+  // Sync the seen timestamp after a read receipt so sender-side UI updates instantly.
+  markConversationSeen: (conversationId, seenAt, currentUserId) =>
+    set((state) => {
+      if (!currentUserId) return state;
+
+      const conversationKey = getConversationKey(conversationId, currentUserId);
+      if (!conversationKey) return state;
+
+      const patchConversation = (conversation: Conversation | null): Conversation | null => {
+        if (!conversation || String(conversation._id) !== String(conversationId)) return conversation;
+
+        return {
+          ...conversation,
+          seenAt,
+          unreadCount: 0,
+        };
+      };
+
+      return {
+        conversations: state.conversations.map((conversation) =>
+          String(conversation._id) === String(conversationId)
+            ? { ...conversation, seenAt, unreadCount: 0 }
+            : conversation
+        ),
+        selectedConversation: patchConversation(state.selectedConversation),
+        activeChat: patchConversation(state.activeChat),
+        unreadByConversation: {
+          ...state.unreadByConversation,
+          [conversationKey]: 0,
+        },
+      };
+    }),
 
   // Track pending uploads separately from messages so UI can show progress and
   // clean them up independently of chat history.
