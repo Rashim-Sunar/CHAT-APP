@@ -4,7 +4,13 @@
 // ----------------------------------------
 
 import express from 'express';
-import { signUpUser, loginUser, logOutUser } from "../controllers/authController.js";
+import {
+	signUpUser,
+	loginUser,
+	logOutUser,
+	getCurrentUser,
+} from '../controllers/authController.js';
+import protectRoute from '../middlewares/protectRoute.js';
 
 const router = express.Router();
 
@@ -28,5 +34,12 @@ router.post('/signup', signUpUser);
 // @access  Private
 // ----------------------------------------
 router.post('/logout', logOutUser);
+
+// ----------------------------------------
+// @desc    Returns currently authenticated user
+// @route   GET /api/auth/me
+// @access  Private
+// ----------------------------------------
+router.get('/me', protectRoute, getCurrentUser);
 
 export default router;

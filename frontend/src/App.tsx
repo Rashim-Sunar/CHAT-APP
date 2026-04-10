@@ -8,7 +8,16 @@ import SignUp from "./pages/signup/Signup";
 import { useAuthContext } from "./context/Auth-Context";
 
 function App() {
-  const { authUser } = useAuthContext();
+  const { authUser, loading } = useAuthContext();
+
+  if (loading) {
+    return (
+      <div className="p-4 h-screen flex items-center justify-center">
+        <Toaster />
+        <div className="text-sm opacity-70">Checking your session...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 h-screen flex items-center justify-center">
