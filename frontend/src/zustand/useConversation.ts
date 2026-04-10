@@ -321,15 +321,18 @@ const useConversation = create<ConversationState>()((set, get) => ({
     }),
 
   // Sync the seen timestamp after a read receipt so sender-side UI updates instantly.
-  markConversationSeen: (conversationId, seenAt, currentUserId) =>
+  // Important: UI conversations are keyed by partner user id, while the socket payload
+  // includes both backend conversationId and readerId. We map by readerId here.
+  markConversationSeen: (conversationId, readerId, seenAt, currentUserId) =>
     set((state) => {
       if (!currentUserId) return state;
+      if (!conversationId || !readerId || !seenAt) return state;
 
-      const conversationKey = getConversationKey(conversationId, currentUserId);
+      const conversationKey = getConversationKey(readerId, currentUserId);
       if (!conversationKey) return state;
 
       const patchConversation = (conversation: Conversation | null): Conversation | null => {
-        if (!conversation || String(conversation._id) !== String(conversationId)) return conversation;
+        if (!conversation || String(conversation._id) !== String(readerId)) return conversation;
 
         return {
           ...conversation,
@@ -340,7 +343,7 @@ const useConversation = create<ConversationState>()((set, get) => ({
 
       return {
         conversations: state.conversations.map((conversation) =>
-          String(conversation._id) === String(conversationId)
+          String(conversation._id) === String(readerId)
             ? { ...conversation, seenAt, unreadCount: 0 }
             : conversation
         ),

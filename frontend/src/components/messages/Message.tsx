@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { HiOutlineDotsVertical } from "react-icons/hi";
-import { FiEdit2, FiTrash2 } from "react-icons/fi";
+import { FiCheck, FiEdit2, FiTrash2 } from "react-icons/fi";
 import { useAuthContext } from "../../context/Auth-Context";
 import useConversation from "../../zustand/useConversation";
 import { getConversationKey } from "../../Utils/conversationKey";
@@ -323,8 +323,13 @@ const Message = ({ message }: MessageProps) => {
         </div>
 
         {showSeenIndicator && (
-          <div className="mt-0.5 text-right text-[11px] font-medium text-emerald-600">
-            Seen
+          <div
+            className="mt-0.5 flex items-center justify-end gap-1 text-[11px] font-medium text-sky-500"
+            aria-label="Message seen"
+            title="Message seen"
+          >
+            <FiCheck size={13} />
+            <FiCheck size={13} className="-ml-2" />
           </div>
         )}
       </div>
