@@ -142,7 +142,12 @@ export interface ConversationState {
   getMessagesForConversation: (conversationKey: string) => Message[];
   resetConversationState: () => void;
   hydrateUnreadFromConversations: (conversations: Conversation[], currentUserId?: string) => void;
-  markConversationSeen: (conversationId: string, seenAt: string, currentUserId?: string) => void;
+  markConversationSeen: (
+    conversationId: string,
+    readerId: string,
+    seenAt: string,
+    currentUserId?: string
+  ) => void;
   addUploadJobs: (jobs: UploadJob[]) => void;
   updateUploadJob: (
     jobId: string,

@@ -152,7 +152,7 @@ const useListenMessages = () => {
 
     const onConversationSeen = (payload: { conversationId: string; readerId: string; seenAt: string }) => {
       if (!currentUserId) return;
-      markConversationSeen(payload.conversationId, payload.seenAt, currentUserId);
+      markConversationSeen(payload.conversationId, payload.readerId, payload.seenAt, currentUserId);
     };
 
     socket.on("newMessage", onNewMessage);
