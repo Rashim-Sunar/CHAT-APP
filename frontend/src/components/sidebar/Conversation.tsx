@@ -3,6 +3,7 @@ import useConversation from "../../zustand/useConversation";
 import { getAvatarByGender } from "../../Utils/getAvatarByGender";
 import { useAuthContext } from "../../context/Auth-Context";
 import { getConversationKey } from "../../Utils/conversationKey";
+import { DELETED_MESSAGE_TEXT } from "../../Utils/messageDisplay";
 import type { Conversation } from "../../types";
 
 interface ConversationProps {
@@ -21,6 +22,27 @@ const ConversationItem = ({ conversation }: ConversationProps) => {
   const isOnline = onlineUsers.includes(conversation._id);
   const conversationKey = getConversationKey(conversation._id, currentUserId);
   const unreadCount = conversationKey ? unreadByConversation[conversationKey] || 0 : 0;
+  const isCurrentUserLastSender = Boolean(
+    currentUserId &&
+      conversation.lastMessageSenderId &&
+      String(conversation.lastMessageSenderId) === String(currentUserId)
+  );
+
+  const sidebarPreviewText = (() => {
+    const preview = (conversation.lastMessage || "").trim();
+
+    if (!preview) return "Start a conversation";
+    if (preview === DELETED_MESSAGE_TEXT) {
+      return isCurrentUserLastSender
+        ? "You deleted a message"
+        : `${conversation.userName} deleted a message`;
+    }
+
+    if (!isCurrentUserLastSender) return preview;
+    if (preview.startsWith("You:")) return preview;
+
+    return `You: ${preview}`;
+  })();
 
   return (
     <div
@@ -47,7 +69,7 @@ const ConversationItem = ({ conversation }: ConversationProps) => {
         <p className="font-medium text-slate-800 truncate">{conversation.userName}</p>
         <div className="flex items-center gap-2 min-w-0">
           <p className="text-xs text-slate-500 truncate">
-            {conversation.lastMessage || "Start a conversation"}
+            {sidebarPreviewText}
           </p>
           {unreadCount > 0 && !isSelected && (
             <span

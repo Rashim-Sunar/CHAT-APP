@@ -24,7 +24,7 @@ const dedupeMessages = (messages: Message[] = []): Message[] => {
 const getConversationPreviewFromMessages = (
   messages: Message[] = [],
   currentUserId?: string
-): { lastMessage?: string; lastMessageAt?: string } => {
+): { lastMessage?: string; lastMessageAt?: string; lastMessageSenderId?: string } => {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
 
@@ -35,12 +35,14 @@ const getConversationPreviewFromMessages = (
     return {
       lastMessage: getMessagePreviewText(message),
       lastMessageAt: message.createdAt,
+      lastMessageSenderId: String(message.senderId),
     };
   }
 
   return {
     lastMessage: "",
     lastMessageAt: undefined,
+    lastMessageSenderId: undefined,
   };
 };
 
@@ -63,12 +65,14 @@ const upsertConversationWithMessage = (
 
   const lastMessage = getMessagePreviewText(incomingMessage);
   const lastMessageAt = incomingMessage.createdAt;
+  const lastMessageSenderId = String(incomingMessage.senderId);
 
   if (existingIndex >= 0) {
     const updatedConversation = {
       ...conversations[existingIndex],
       lastMessage,
       lastMessageAt,
+      lastMessageSenderId,
       seenAt: conversations[existingIndex].seenAt,
     } satisfies Conversation;
 
@@ -85,6 +89,7 @@ const upsertConversationWithMessage = (
       gender: "male",
       lastMessage,
       lastMessageAt,
+      lastMessageSenderId,
       seenAt: undefined,
       __isPlaceholder: true,
     },
@@ -243,6 +248,7 @@ const useConversation = create<ConversationState>()((set, get) => ({
           ...conversation,
           lastMessage: preview.lastMessage,
           lastMessageAt: preview.lastMessageAt,
+          lastMessageSenderId: preview.lastMessageSenderId,
           seenAt: conversation.seenAt,
         };
       });
