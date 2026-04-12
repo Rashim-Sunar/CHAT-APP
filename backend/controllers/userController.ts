@@ -5,10 +5,13 @@
 
 import type { Response } from 'express';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import Conversation from '../models/conversationModel.js';
 import User from '../models/userModel.js';
 import Message from '../models/messageModel.js';
 import type { AuthenticatedRequest } from '../types/express/index.js';
+import type { UpdateUserNameDto } from '../types/dtos/profile.js';
+import { getCloudinary } from '../Utils/cloudinary.js';
 
 type SidebarMessageAggregate = {
   _id: mongoose.Types.ObjectId;
@@ -480,6 +483,308 @@ export const getUserDetails = async (
   } catch (error: unknown) {
     console.log(
       'Error in getUserDetails',
+      error instanceof Error ? error.message : String(error)
+    );
+
+    res.status(500).json({
+      status: 'fail',
+      message: 'Internal server error',
+    });
+  }
+};
+
+/**
+ * @desc    Updates the authenticated user's display name
+ * @route   PATCH /api/users/update-name
+ * @access  Private
+ * @param   req.body - { userName: string }
+ * @returns JSON response with updated user data
+ */
+export const updateUserName = async (
+  req: AuthenticatedRequest<unknown, unknown, UpdateUserNameDto>,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = req.user;
+    const { userName } = req.body;
+
+    // Validate user ID
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+      res.status(401).json({
+        status: 'fail',
+        message: 'Unauthorized',
+      });
+      return;
+    }
+
+    // Validate name input
+    if (!userName || userName.trim().length < 5) {
+      res.status(400).json({
+        status: 'fail',
+        message: 'User name must be at least 5 characters',
+      });
+      return;
+    }
+
+    // Update user name in database
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { userName: userName.trim() },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedUser) {
+      res.status(404).json({
+        status: 'fail',
+        message: 'User not found',
+      });
+      return;
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        user: updatedUser,
+      },
+    });
+  } catch (error: unknown) {
+    console.log(
+      'Error in updateUserName',
+      error instanceof Error ? error.message : String(error)
+    );
+
+    res.status(500).json({
+      status: 'fail',
+      message: 'Internal server error',
+    });
+  }
+};
+
+/**
+ * @desc    Generates a signed upload token for profile picture upload to Cloudinary
+ * @route   POST /api/users/upload-profile-pic-signature
+ * @access  Private
+ * @param   req.body - {} (empty, uses auth from middleware)
+ * @returns JSON response with Cloudinary upload credentials
+ */
+export const getProfilePictureUploadSignature = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = req.user;
+
+    // Validate user ID
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+      res.status(401).json({
+        status: 'fail',
+        message: 'Unauthorized',
+      });
+      return;
+    }
+
+    const cloudinaryApiSecret = process.env.CLOUDINARY_API_SECRET;
+    const cloudinaryCloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const cloudinaryApiKey = process.env.CLOUDINARY_API_KEY;
+
+    if (!cloudinaryApiSecret || !cloudinaryCloudName || !cloudinaryApiKey) {
+      res.status(500).json({
+        status: 'fail',
+        message: 'Cloudinary environment variables are not configured',
+      });
+      return;
+    }
+
+    // Initialize Cloudinary config (used by other profile picture operations)
+    getCloudinary();
+
+    // Generate timestamp
+    const timestamp = Math.floor(Date.now() / 1000);
+
+    // Create unique public ID using user ID
+    const publicId = `chat-app/profile-pics/${userId}`;
+
+    // Define parameters for signature generation
+    const params = {
+      timestamp,
+      public_id: publicId,
+      folder: 'chat-app/profile-pics',
+    };
+
+    // Generate SHA-1 signature
+    const paramString = Object.entries(params)
+      .sort()
+      .map(([key, value]) => `${key}=${value}`)
+      .join('&');
+
+    const signature = crypto
+      .createHash('sha1')
+      .update(paramString + cloudinaryApiSecret)
+      .digest('hex');
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        cloudName: cloudinaryCloudName,
+        apiKey: cloudinaryApiKey,
+        timestamp,
+        signature,
+        publicId,
+        resourceType: 'image',
+        maxFileSizeBytes: 5 * 1024 * 1024, // 5MB limit
+      },
+    });
+  } catch (error: unknown) {
+    console.log(
+      'Error in getProfilePictureUploadSignature',
+      error instanceof Error ? error.message : String(error)
+    );
+
+    res.status(500).json({
+      status: 'fail',
+      message: 'Internal server error',
+    });
+  }
+};
+
+/**
+ * @desc    Saves uploaded profile picture URL to user document
+ * @route   POST /api/users/upload-profile-pic
+ * @access  Private
+ * @param   req.body - { profilePicUrl: string }
+ * @returns JSON response with updated user data
+ */
+export const saveProfilePictureUrl = async (
+  req: AuthenticatedRequest<unknown, unknown, { profilePicUrl: string }>,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = req.user;
+    const { profilePicUrl } = req.body;
+
+    // Validate user ID
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+      res.status(401).json({
+        status: 'fail',
+        message: 'Unauthorized',
+      });
+      return;
+    }
+
+    // Validate profile picture URL
+    if (!profilePicUrl || typeof profilePicUrl !== 'string') {
+      res.status(400).json({
+        status: 'fail',
+        message: 'Profile picture URL is required',
+      });
+      return;
+    }
+
+    // Validate that URL is from Cloudinary
+    const url = new URL(profilePicUrl);
+    if (!url.hostname.endsWith('res.cloudinary.com')) {
+      res.status(400).json({
+        status: 'fail',
+        message: 'Profile picture must be uploaded to Cloudinary',
+      });
+      return;
+    }
+
+    // Update user with new profile picture
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { profilePic: profilePicUrl },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      res.status(404).json({
+        status: 'fail',
+        message: 'User not found',
+      });
+      return;
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        user: updatedUser,
+      },
+    });
+  } catch (error: unknown) {
+    console.log(
+      'Error in saveProfilePictureUrl',
+      error instanceof Error ? error.message : String(error)
+    );
+
+    res.status(500).json({
+      status: 'fail',
+      message: 'Internal server error',
+    });
+  }
+};
+
+/**
+ * @desc    Deletes the user's profile picture (reverts to default)
+ * @route   DELETE /api/users/delete-profile-pic
+ * @access  Private
+ * @returns JSON response with updated user data
+ */
+export const deleteProfilePicture = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = req.user;
+
+    // Validate user ID
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+      res.status(401).json({
+        status: 'fail',
+        message: 'Unauthorized',
+      });
+      return;
+    }
+
+    // Fetch current user to get profile picture
+    const user = await User.findById(userId);
+
+    if (!user) {
+      res.status(404).json({
+        status: 'fail',
+        message: 'User not found',
+      });
+      return;
+    }
+
+    // If picture exists in Cloudinary, delete it
+    if (user.profilePic && user.profilePic.includes('res.cloudinary.com')) {
+      try {
+        const cloudinary = getCloudinary();
+        const publicId = `chat-app/profile-pics/${userId}`;
+        await cloudinary.uploader.destroy(publicId);
+      } catch (error) {
+        // Log error but continue with database update
+        console.log(
+          'Error deleting Cloudinary asset:',
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }
+
+    // Remove profile picture from database
+    user.profilePic = undefined;
+    const updatedUser = await user.save();
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        user: updatedUser,
+      },
+    });
+  } catch (error: unknown) {
+    console.log(
+      'Error in deleteProfilePicture',
       error instanceof Error ? error.message : String(error)
     );
 
