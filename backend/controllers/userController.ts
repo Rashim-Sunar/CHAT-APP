@@ -110,8 +110,12 @@ const getSidebarMessagePreview = (
     ? summary.lastDeletedFor.map((value) => String(value))
     : [];
 
-  if (deletedForEveryone || deletedFor.includes(String(loggedinUserId))) {
+  if (deletedFor.includes(String(loggedinUserId))) {
     return '';
+  }
+
+  if (deletedForEveryone) {
+    return 'This message was deleted';
   }
 
   if (summary.lastMessageType === 'text') {
@@ -129,8 +133,6 @@ const isMessageVisibleForSidebar = (
   message: SidebarConversationRecord['messages'][number],
   userId: string
 ): boolean => {
-  if (message.deletedForEveryone) return false;
-
   const deletedFor = Array.isArray(message.deletedFor)
     ? message.deletedFor.map((value) => String(value))
     : [];
@@ -142,6 +144,10 @@ const getSidebarPreviewText = (
   message: SidebarConversationRecord['messages'][number] | undefined
 ): string => {
   if (!message) return '';
+
+  if (message.deletedForEveryone) {
+    return 'This message was deleted';
+  }
 
   if (message.messageType === 'text') {
     return (message.text || '').trim();
