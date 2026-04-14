@@ -22,6 +22,7 @@ const ConversationItem = ({ conversation }: ConversationProps) => {
   const isOnline = onlineUsers.includes(conversation._id);
   const conversationKey = getConversationKey(conversation._id, currentUserId);
   const unreadCount = conversationKey ? unreadByConversation[conversationKey] || 0 : 0;
+  const avatarSrc = conversation.profilePic || getAvatarByGender(conversation.gender);
   const isCurrentUserLastSender = Boolean(
     currentUserId &&
       conversation.lastMessageSenderId &&
@@ -53,7 +54,7 @@ const ConversationItem = ({ conversation }: ConversationProps) => {
     >
       <div className="relative">
         <img
-          src={getAvatarByGender(conversation.gender)}
+          src={avatarSrc}
           alt="avatar"
           className="w-11 h-11 rounded-full object-cover"
         />

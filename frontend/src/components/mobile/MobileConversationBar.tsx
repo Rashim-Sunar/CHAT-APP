@@ -102,6 +102,7 @@ const MobileConversationBar = () => {
       <div className="flex overflow-x-auto px-4 pb-4 gap-4 no-scrollbar">
         {filteredConversations.map((conversation) => {
           const isSelected = activeConversationId === conversation._id;
+          const avatarSrc = conversation.profilePic || getAvatarByGender(conversation.gender);
 
           return (
             <div
@@ -114,7 +115,7 @@ const MobileConversationBar = () => {
                   ${isSelected ? "border-indigo-600" : "border-transparent"}`}
               >
                 <img
-                  src={getAvatarByGender(conversation.gender)}
+                  src={avatarSrc}
                   alt="avatar"
                   className="w-full h-full object-cover"
                 />

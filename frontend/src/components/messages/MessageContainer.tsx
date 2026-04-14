@@ -14,6 +14,7 @@ const MessageContainer = () => {
   const currentUserId = authUser?.data?.user?._id;
 
   const [showDetails, setShowDetails] = useState(false);
+  const avatarSrc = selectedConversation?.profilePic || getAvatarByGender(selectedConversation?.gender);
 
   useEffect(() => {
     return () => setSelectedConversation(null, currentUserId);
@@ -43,7 +44,7 @@ const MessageContainer = () => {
           </button>
 
           <img
-            src={getAvatarByGender(selectedConversation.gender)}
+            src={avatarSrc}
             alt="avatar"
             className="w-9 h-9 md:w-10 md:h-10 rounded-full object-cover"
           />
