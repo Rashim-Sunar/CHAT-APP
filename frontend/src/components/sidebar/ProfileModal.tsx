@@ -65,16 +65,94 @@ const ProfileModal = ({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [zoomPercent, setZoomPercent] = useState(100);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
+  const minZoomPercent = 100;
+  const maxZoomPercent = 400;
+  const zoomStep = 10;
 
   useEffect(() => {
     setCurrentMode(initialMode);
     setEditingName(user?.userName || "");
     setError(null);
+    setZoomPercent(100);
+    setPanOffset({ x: 0, y: 0 });
+    setIsPanning(false);
   }, [initialMode, user]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [isOpen, onClose]);
 
   if (!isOpen || !user) return null;
 
   const avatarSrc = user.profilePic ? user.profilePic : getAvatarByGender(user.gender);
+
+  // Keep zoom changes bounded so the viewer stays usable and never renders
+  // an image so small or so large that it becomes difficult to inspect.
+  const changeZoom = (nextZoom: number) => {
+    const clampedZoom = Math.min(maxZoomPercent, Math.max(minZoomPercent, nextZoom));
+    setZoomPercent(clampedZoom);
+
+    if (clampedZoom === minZoomPercent) {
+      setPanOffset({ x: 0, y: 0 });
+      setIsPanning(false);
+    }
+  };
+
+  // Allow mouse wheel zooming inside the viewer. Positive wheel movement
+  // zooms out, negative movement zooms in, matching common image viewers.
+  const handleZoomWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+
+    const delta = event.deltaY < 0 ? zoomStep : -zoomStep;
+    changeZoom(zoomPercent + delta);
+  };
+
+  const handlePanStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (zoomPercent === minZoomPercent) return;
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    panStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      offsetX: panOffset.x,
+      offsetY: panOffset.y,
+    };
+    setIsPanning(true);
+  };
+
+  const handlePanMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isPanning) return;
+
+    const deltaX = event.clientX - panStartRef.current.x;
+    const deltaY = event.clientY - panStartRef.current.y;
+
+    setPanOffset({
+      x: panStartRef.current.offsetX + deltaX,
+      y: panStartRef.current.offsetY + deltaY,
+    });
+  };
+
+  const handlePanEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    setIsPanning(false);
+  };
 
   /**
    * Handle name save
@@ -189,48 +267,100 @@ const ProfileModal = ({
     </div>
   );
 
-  /**
-   * View Mode - Show current profile info
-   */
+  // The view mode is intentionally a full-screen photo viewer, not a profile
+  // summary card. This keeps the interaction focused on inspecting the image.
   const ViewModeContent = () => (
-    <div className="p-6 space-y-4">
-      {/* Profile Picture Display */}
-      <div className="flex justify-center">
-        <div className="relative w-24 h-24 rounded-full overflow-hidden shadow-md">
-          <img src={avatarSrc} alt={`${user.userName}'s profile`} className="w-full h-full object-cover" />
+    <div
+      className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${user.userName}'s profile picture`}
+      onWheel={handleZoomWheel}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close profile picture viewer"
+        className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/20"
+      >
+        <BiX className="h-5 w-5" />
+      </button>
+
+      <div className="flex w-full max-w-5xl flex-col items-center gap-4">
+        <div
+          className="flex max-h-[78vh] w-full max-w-[92vw] items-center justify-center overflow-hidden rounded-2xl bg-black/20 p-4 shadow-2xl"
+          onDoubleClick={() => changeZoom(100)}
+          onPointerDown={handlePanStart}
+          onPointerMove={handlePanMove}
+          onPointerUp={handlePanEnd}
+          onPointerCancel={handlePanEnd}
+          onPointerLeave={handlePanEnd}
+          style={{ touchAction: "none" }}
+        >
+          <img
+            src={avatarSrc}
+            alt={`${user.userName}'s profile picture`}
+            draggable={false}
+            className={`select-none rounded-xl object-contain shadow-lg transition-transform duration-150 ${zoomPercent > minZoomPercent ? (isPanning ? "cursor-grabbing" : "cursor-grab") : "cursor-zoom-in"}`}
+            style={{
+              transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomPercent / 100})`,
+              transformOrigin: "center center",
+              maxWidth: "none",
+              maxHeight: "72vh",
+            }}
+          />
         </div>
-      </div>
 
-      {/* User Info */}
-      <div className="space-y-2 text-center">
-        <p className="text-sm text-slate-600">Name</p>
-        <p className="text-lg font-semibold text-slate-800">{user.userName}</p>
-      </div>
+        {/* Zoom controls are kept outside the image container so the user can
+            adjust scale without losing access to the close action or overlay. */}
+        <div className="w-full max-w-xl rounded-full bg-white/10 px-4 py-3 text-white backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => changeZoom(zoomPercent - zoomStep)}
+              className="h-9 rounded-full border border-white/20 px-4 text-sm font-medium transition-colors hover:bg-white/10"
+              aria-label="Zoom out"
+            >
+              -
+            </button>
 
-      <div className="space-y-2 text-center">
-        <p className="text-sm text-slate-600">Email</p>
-        <p className="text-lg font-semibold text-slate-800">{user.email}</p>
-      </div>
+            <input
+              type="range"
+              min={minZoomPercent}
+              max={maxZoomPercent}
+              step={zoomStep}
+              value={zoomPercent}
+              onChange={(event) => changeZoom(Number(event.target.value))}
+              aria-label="Zoom profile picture"
+              className="h-2 w-full cursor-pointer accent-white"
+            />
 
-      {/* Action Buttons */}
-      <div className="pt-4 space-y-2">
-        <button
-          onClick={() => {
-            setEditingName(user.userName);
-            setCurrentMode("edit-name");
-          }}
-          className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 
-                     transition-colors duration-200 font-medium"
-        >
-          Edit Name
-        </button>
-        <button
-          onClick={() => setCurrentMode("upload")}
-          className="w-full px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 
-                     transition-colors duration-200 font-medium"
-        >
-          Update Picture
-        </button>
+            <button
+              type="button"
+              onClick={() => changeZoom(zoomPercent + zoomStep)}
+              className="h-9 rounded-full border border-white/20 px-4 text-sm font-medium transition-colors hover:bg-white/10"
+              aria-label="Zoom in"
+            >
+              +
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                changeZoom(100);
+                setPanOffset({ x: 0, y: 0 });
+              }}
+              className="h-9 rounded-full border border-white/20 px-4 text-sm font-medium transition-colors hover:bg-white/10"
+              aria-label="Reset zoom"
+            >
+              Reset
+            </button>
+          </div>
+
+          <p className="mt-2 text-center text-xs text-white/70">
+            Double-click the image or use the slider to reset and zoom.
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -341,6 +471,12 @@ const ProfileModal = ({
     </div>
   );
 
+  // Keep the view mode separate from the edit/upload modal shell. The photo
+  // viewer takes over the screen, while the other modes still use the dialog.
+  if (currentMode === "view") {
+    return <ViewModeContent />;
+  }
+
   return (
     <div
       role="dialog"
@@ -352,7 +488,6 @@ const ProfileModal = ({
         <ModalHeader />
 
         <div className="divide-y divide-slate-200">
-          {currentMode === "view" && <ViewModeContent />}
           {currentMode === "edit-name" && <EditNameContent />}
           {currentMode === "upload" && <UploadContent />}
         </div>
