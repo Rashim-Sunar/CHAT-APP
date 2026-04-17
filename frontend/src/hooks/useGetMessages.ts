@@ -9,6 +9,7 @@ import { getConversationKey } from "../Utils/conversationKey";
 import type { Message, ApiErrorResponse } from "../types";
 import { getErrorMessage } from "../Utils/getErrorMessage";
 import { apiFetch } from "../Utils/apiFetch";
+import { decryptMessagesIfNeeded } from "../Utils/crypto";
 
 /**
  * Load the selected conversation history into the per-conversation message store.
@@ -44,7 +45,10 @@ const useGetMessages = () => {
         );
         if (Array.isArray(data)) {
           if (!ignore) {
-            setMessagesForConversation(conversationKey, data);
+            const normalizedMessages = currentUserId
+              ? await decryptMessagesIfNeeded(data, currentUserId)
+              : data;
+            setMessagesForConversation(conversationKey, normalizedMessages);
           }
           return;
         }
@@ -67,7 +71,7 @@ const useGetMessages = () => {
     return () => {
       ignore = true;
     };
-  }, [selectedConversation?._id, conversationKey, setMessagesForConversation]);
+  }, [selectedConversation?._id, conversationKey, setMessagesForConversation, currentUserId]);
 
   return { loading, messages };
 };

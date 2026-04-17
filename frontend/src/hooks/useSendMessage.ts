@@ -11,6 +11,14 @@ import { uploadFilesToCloudinary } from "../Utils/uploadService";
 import { getErrorMessage } from "../Utils/getErrorMessage";
 import type { ApiErrorResponse, Message, SendMessagePayload } from "../types";
 import { apiFetch } from "../Utils/apiFetch";
+import {
+  decryptMessageIfNeeded,
+  encryptTextMessage,
+  ensureUserKeyPair,
+  getPublicKeyByUserId,
+} from "../Utils/crypto";
+import { saveConversationPreview } from "../Utils/conversationPreviewCache";
+import { getMessagePreviewText } from "../Utils/messageDisplay";
 
 /**
  * Coordinates all outbound messaging behavior for the currently selected conversation.
@@ -55,6 +63,13 @@ const useSendMessage = () => {
 
       if (currentUserId) {
         upsertConversationFromMessage(outgoingMessage, currentUserId);
+        // Persist a local preview so sender-side sidebar survives reloads with
+        // readable text even though the server stores encrypted message bodies.
+        saveConversationPreview(currentUserId, String(outgoingMessage.receiverId), {
+          lastMessage: getMessagePreviewText(outgoingMessage),
+          lastMessageAt: outgoingMessage.createdAt,
+          lastMessageSenderId: String(outgoingMessage.senderId),
+        });
 
         // The details panel (media/links/documents) reads from a refetched summary endpoint.
         // Receiver-side updates are triggered by socket events, but sender-side local sends do
@@ -85,7 +100,10 @@ const useSendMessage = () => {
 
     const outgoingMessage = data?.newMessage;
     if (outgoingMessage) {
-      persistMessage(outgoingMessage);
+      const normalizedMessage = currentUserId
+        ? await decryptMessageIfNeeded(outgoingMessage, currentUserId)
+        : outgoingMessage;
+      persistMessage(normalizedMessage);
     }
   };
 
@@ -97,11 +115,23 @@ const useSendMessage = () => {
     * @returns {Promise<void>} Resolves after the message has been accepted or an error has been shown.
    */
   const sendMessage = async (message: string): Promise<void> => {
-    if (!selectedConversation?._id) return;
+    if (!selectedConversation?._id || !currentUserId) return;
 
     setLoading(true);
     try {
-      await sendPayload({ messageType: "text", text: message });
+      const { publicKey: senderPublicKey } = await ensureUserKeyPair(currentUserId);
+      const receiverPublicKey = await getPublicKeyByUserId(String(selectedConversation._id));
+
+      const encryptedPayload = await encryptTextMessage(
+        message,
+        receiverPublicKey,
+        senderPublicKey
+      );
+
+      await sendPayload({
+        messageType: "text",
+        ...encryptedPayload,
+      });
     } catch (error: unknown) {
       toast.error(getErrorMessage(error));
     } finally {

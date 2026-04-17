@@ -15,6 +15,7 @@ export interface IUser {
   password: string;
   gender: Gender;
   profilePic?: string;
+  publicKey?: Record<string, unknown>;
 }
 
 // Extends IUser with mongoose document and custom methods
@@ -53,6 +54,12 @@ const userSchema = new mongoose.Schema<IUser>(
     },
     profilePic: {
       type: String,
+    },
+    // Only the public key is persisted server-side. The private key never leaves
+    // the client, which keeps the server unable to decrypt E2EE messages.
+    publicKey: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
     },
   },
   { timestamps: true } // Automatically adds createdAt & updatedAt
