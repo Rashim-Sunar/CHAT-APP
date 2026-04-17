@@ -9,6 +9,9 @@ import notificationSound from "../assets/sound/notification.mp3";
 import { useAuthContext } from "../context/Auth-Context";
 import { getConversationKey } from "../Utils/conversationKey";
 import type { Message } from "../types";
+import { decryptMessageIfNeeded } from "../Utils/crypto";
+import { saveConversationPreview } from "../Utils/conversationPreviewCache";
+import { getMessagePreviewText } from "../Utils/messageDisplay";
 
 /**
  * Listen for real-time message events and keep local chat state synchronized.
@@ -39,23 +42,39 @@ const useListenMessages = () => {
     // Incoming messages are routed by conversation key so socket and HTTP state
     // converge on the same message list.
     const onNewMessage = (newMessage: Message) => {
+      void (async () => {
+        const hydratedMessage = currentUserId
+          ? await decryptMessageIfNeeded(newMessage, currentUserId)
+          : newMessage;
+
       const incomingConversationKey = getConversationKey(
-        newMessage?.senderId,
-        newMessage?.receiverId
+        hydratedMessage?.senderId,
+        hydratedMessage?.receiverId
       );
 
       if (!incomingConversationKey || !currentUserId) return;
 
-      appendMessageToConversation(incomingConversationKey, newMessage);
-      upsertConversationFromMessage(newMessage, currentUserId);
+      appendMessageToConversation(incomingConversationKey, hydratedMessage);
+      upsertConversationFromMessage(hydratedMessage, currentUserId);
+      // Keep sidebar preview aligned with the decrypted message on this device.
+      // This avoids reverting to encrypted placeholders after a later refresh.
+      saveConversationPreview(currentUserId, String(
+        String(hydratedMessage.senderId) === String(currentUserId)
+          ? hydratedMessage.receiverId
+          : hydratedMessage.senderId
+      ), {
+        lastMessage: getMessagePreviewText(hydratedMessage),
+        lastMessageAt: hydratedMessage.createdAt,
+        lastMessageSenderId: String(hydratedMessage.senderId),
+      });
 
       const selectedConversation = useConversation.getState().selectedConversation;
       const selectedConversationKey = getConversationKey(selectedConversation?._id, currentUserId);
       if (selectedConversationKey === incomingConversationKey) {
         bumpDetailsRefreshVersion();
-        if (currentUserId && newMessage.senderId !== currentUserId && socket.connected) {
+        if (currentUserId && hydratedMessage.senderId !== currentUserId && socket.connected) {
           socket.emit("conversation:seen", {
-            conversationId: String(newMessage.conversationId || incomingConversationKey),
+            conversationId: String(hydratedMessage.conversationId || incomingConversationKey),
             readerId: String(currentUserId),
           });
         }
@@ -71,26 +90,26 @@ const useListenMessages = () => {
         incrementUnread(incomingConversationKey);
 
         const partnerId =
-          String(newMessage?.senderId) === String(currentUserId)
-            ? String(newMessage?.receiverId)
-            : String(newMessage?.senderId);
+          String(hydratedMessage?.senderId) === String(currentUserId)
+            ? String(hydratedMessage?.receiverId)
+            : String(hydratedMessage?.senderId);
         const partner = useConversation
           .getState()
           .conversations.find((conversation) => String(conversation._id) === partnerId);
         const preview =
-          (newMessage.text || newMessage.message || "").trim() ||
-          (newMessage.messageType === "image"
+          (hydratedMessage.text || hydratedMessage.message || "").trim() ||
+          (hydratedMessage.messageType === "image"
             ? "Sent an image"
-            : newMessage.messageType === "video"
+            : hydratedMessage.messageType === "video"
               ? "Sent a video"
-              : newMessage.messageType === "file"
+              : hydratedMessage.messageType === "file"
                 ? "Sent a file"
                 : "New message");
 
         toast(
           `${partner?.userName || "New message"}: ${preview}`,
           {
-            id: `incoming-${newMessage._id || `${incomingConversationKey}-${newMessage.createdAt}`}`,
+            id: `incoming-${hydratedMessage._id || `${incomingConversationKey}-${hydratedMessage.createdAt}`}`,
             icon: "MSG",
             duration: 2500,
           }
@@ -101,23 +120,42 @@ const useListenMessages = () => {
           // Ignore autoplay blocks - message state is already updated.
         });
       }
+      })();
     };
 
     // Edits update the in-memory message and refresh any derived preview/details state.
     const onMessageEdit = (updatedMessage: Message) => {
       if (!currentUserId) return;
 
-      const conversationKey = getConversationKey(updatedMessage?.senderId, updatedMessage?.receiverId);
-      if (!conversationKey || !updatedMessage?._id) return;
+      void (async () => {
+        const hydratedMessage = await decryptMessageIfNeeded(updatedMessage, currentUserId);
 
-      updateMessageInConversation(conversationKey, updatedMessage._id, updatedMessage);
-      syncConversationPreview(conversationKey, currentUserId);
+        const conversationKey = getConversationKey(
+          hydratedMessage?.senderId,
+          hydratedMessage?.receiverId
+        );
+        if (!conversationKey || !hydratedMessage?._id) return;
 
-      const selectedConversation = useConversation.getState().selectedConversation;
-      const selectedConversationKey = getConversationKey(selectedConversation?._id, currentUserId);
-      if (selectedConversationKey === conversationKey) {
-        bumpDetailsRefreshVersion();
-      }
+        updateMessageInConversation(conversationKey, hydratedMessage._id, hydratedMessage);
+        syncConversationPreview(conversationKey, currentUserId);
+        // Edits must refresh local preview cache too, otherwise the sidebar can
+        // show stale text from an older message version on reload.
+        saveConversationPreview(currentUserId, String(
+          String(hydratedMessage.senderId) === String(currentUserId)
+            ? hydratedMessage.receiverId
+            : hydratedMessage.senderId
+        ), {
+          lastMessage: getMessagePreviewText(hydratedMessage),
+          lastMessageAt: hydratedMessage.createdAt,
+          lastMessageSenderId: String(hydratedMessage.senderId),
+        });
+
+        const selectedConversation = useConversation.getState().selectedConversation;
+        const selectedConversationKey = getConversationKey(selectedConversation?._id, currentUserId);
+        if (selectedConversationKey === conversationKey) {
+          bumpDetailsRefreshVersion();
+        }
+      })();
     };
 
     // Deletes are handled differently depending on whether the message was removed

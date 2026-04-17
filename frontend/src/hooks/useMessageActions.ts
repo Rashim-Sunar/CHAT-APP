@@ -11,6 +11,7 @@ import { DELETED_MESSAGE_TEXT } from "../Utils/messageDisplay";
 import useConversation from "../zustand/useConversation";
 import type { ApiErrorResponse, Message } from "../types";
 import { apiFetch } from "../Utils/apiFetch";
+import { encryptTextMessage, ensureUserKeyPair, getPublicKeyByUserId } from "../Utils/crypto";
 
 /**
  * Provide edit/delete controls and guarded mutations for a single message.
@@ -73,11 +74,36 @@ const useMessageActions = (message: Message) => {
     bumpDetailsRefreshVersion();
 
     try {
+      let updatePayload: {
+        content?: string;
+        encryptedMessage?: string;
+        encryptedAESKey?: string;
+        iv?: string;
+      };
+
+      if (message.messageType === "text") {
+        const { publicKey: senderPublicKey } = await ensureUserKeyPair(currentUserId);
+        const receiverPublicKey = await getPublicKeyByUserId(String(message.receiverId));
+        const encryptedPayload = await encryptTextMessage(
+          trimmedContent,
+          receiverPublicKey,
+          senderPublicKey
+        );
+
+        updatePayload = {
+          encryptedMessage: encryptedPayload.encryptedMessage,
+          encryptedAESKey: encryptedPayload.encryptedAESKey,
+          iv: encryptedPayload.iv,
+        };
+      } else {
+        updatePayload = { content: trimmedContent };
+      }
+
       const data = await apiFetch<ApiErrorResponse & { updatedMessage?: Message }>(
         `/messages/${messageId}`,
         {
         method: "PUT",
-        body: JSON.stringify({ content: trimmedContent }),
+        body: JSON.stringify(updatePayload),
         }
       );
 

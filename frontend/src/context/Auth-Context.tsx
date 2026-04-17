@@ -9,6 +9,7 @@ import {
 import type { AuthContextValue, AuthResponse } from "../types";
 import useConversation from "../zustand/useConversation";
 import { assertApiBaseUrl } from "../config/api";
+import { ensureUserKeyPair } from "../Utils/crypto";
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -135,6 +136,31 @@ export const AuthContextProvider = ({ children }: AuthContextProviderProps) => {
 
   useEffect(() => {
     useConversation.getState().resetConversationState();
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    let cancelled = false;
+
+    const setupEncryptionKeys = async () => {
+      try {
+        await ensureUserKeyPair(userId);
+      } catch (error) {
+        if (!cancelled) {
+          console.warn(
+            "Failed to initialize E2EE key pair",
+            error instanceof Error ? error.message : String(error)
+          );
+        }
+      }
+    };
+
+    void setupEncryptionKeys();
+
+    return () => {
+      cancelled = true;
+    };
   }, [userId]);
 
   return (
