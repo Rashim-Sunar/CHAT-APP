@@ -8,6 +8,7 @@ import { useAuthContext } from "../context/Auth-Context";
 import type { Conversation } from "../types";
 import { getErrorMessage } from "../Utils/getErrorMessage";
 import { apiFetch } from "../Utils/apiFetch";
+import { mergeConversationPreviewsFromCache } from "../Utils/conversationPreviewCache";
 
 interface UsersResponse {
   error?: string;
@@ -46,8 +47,14 @@ const useGetConversations = () => {
         }
 
         const userDataArray = usersData?.data?.users || [];
-        setConversations(userDataArray);
-        hydrateUnreadFromConversations(userDataArray, currentUserId);
+        // E2EE keeps the backend blind, so encrypted text often arrives as a
+        // generic sidebar preview. Merge local cache to restore sender-side text.
+        const hydratedConversations = mergeConversationPreviewsFromCache(
+          userDataArray,
+          currentUserId
+        );
+        setConversations(hydratedConversations);
+        hydrateUnreadFromConversations(hydratedConversations, currentUserId);
       } catch (error: unknown) {
         const message = getErrorMessage(error);
         if (!message.includes("API Error: 401")) {

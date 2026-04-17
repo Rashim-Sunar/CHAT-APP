@@ -11,6 +11,8 @@ import {
   getProfilePictureUploadSignature,
   saveProfilePictureUrl,
   deleteProfilePicture,
+  savePublicKey,
+  getUserPublicKey,
 } from '../controllers/userController.js';
 import protectRoute from '../middlewares/protectRoute.js';
 
@@ -22,6 +24,12 @@ const router = express.Router();
 // @access  Private
 // ----------------------------------------
 router.get('/', protectRoute, getUsersForSidebar);
+
+// Public key endpoint stores only the key that peers use to encrypt messages.
+// The server never receives private keys and therefore cannot decrypt payloads.
+router.post('/public-key', protectRoute, savePublicKey);
+
+router.get('/:id/public-key', protectRoute, getUserPublicKey);
 
 // ----------------------------------------
 // @desc    Retrieves selected user details with shared media/links/documents

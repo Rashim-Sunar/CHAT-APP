@@ -27,6 +27,8 @@ import {
   getMaxUploadSizeBytes,
 } from '../Utils/fileValidation.js';
 
+// Derive a file format token used by Cloudinary signed delivery helpers.
+// Raw assets often rely on extension-based format hints during download URL generation.
 const getFileFormat = (fileName: string): string => {
   const extension = fileName.split('.').pop()?.toLowerCase() || '';
 
@@ -43,6 +45,9 @@ type RealtimeMessagePayload = {
   messageType: 'text' | 'image' | 'video' | 'file';
   text: string;
   message: string;
+  encryptedMessage: string | null;
+  encryptedAESKey: string | null;
+  iv: string | null;
   fileUrl: string | null;
   fileName: string | null;
   fileSize: number | null;
@@ -117,6 +122,18 @@ const buildRealtimePayload = (
   const legacyText = legacyTextFromDoc || legacyTextFromRaw || legacyTextFromGetter;
   const normalizedText = messageDoc.text || legacyText || '';
   const normalizedMessageType = messageDoc.messageType || 'text';
+  const encryptedMessage =
+    typeof (messageDoc as unknown as { encryptedMessage?: unknown }).encryptedMessage === 'string'
+      ? ((messageDoc as unknown as { encryptedMessage?: string }).encryptedMessage as string)
+      : null;
+  const encryptedAESKey =
+    typeof (messageDoc as unknown as { encryptedAESKey?: unknown }).encryptedAESKey === 'string'
+      ? ((messageDoc as unknown as { encryptedAESKey?: string }).encryptedAESKey as string)
+      : null;
+  const iv =
+    typeof (messageDoc as unknown as { iv?: unknown }).iv === 'string'
+      ? ((messageDoc as unknown as { iv?: string }).iv as string)
+      : null;
   const deletedForEveryone = Boolean(
     (messageDoc as unknown as { deletedForEveryone?: boolean }).deletedForEveryone
   );
@@ -139,6 +156,9 @@ const buildRealtimePayload = (
     text: visibleText,
     // Backward-compatible field for existing clients still reading `message`.
     message: visibleText,
+    encryptedMessage,
+    encryptedAESKey,
+    iv,
     fileUrl: messageDoc.fileUrl || null,
     fileName: messageDoc.fileName || null,
     fileSize: typeof messageDoc.fileSize === 'number' ? messageDoc.fileSize : null,
@@ -166,8 +186,27 @@ const validateSendPayload = (
 ): { valid: true; payload: Required<Pick<SendMessageDto, 'messageType'>> & SendMessageDto } | { valid: false; reason: string } => {
   const messageType = body.messageType || 'text';
   const rawText = (body.text ?? body.message ?? '').trim();
+  const hasEncryptedPayload = Boolean(body.encryptedMessage || body.encryptedAESKey || body.iv);
 
   if (messageType === 'text') {
+    if (hasEncryptedPayload) {
+      if (!body.encryptedMessage || !body.encryptedAESKey || !body.iv) {
+        return { valid: false, reason: 'Encrypted payload is incomplete' };
+      }
+
+      return {
+        valid: true,
+        payload: {
+          ...body,
+          messageType,
+          text: '',
+          encryptedMessage: body.encryptedMessage,
+          encryptedAESKey: body.encryptedAESKey,
+          iv: body.iv,
+        },
+      };
+    }
+
     if (!rawText) {
       return { valid: false, reason: 'Text message cannot be empty' };
     }
@@ -214,8 +253,12 @@ const validateSendPayload = (
   };
 };
 
+// Canonical deleted placeholder used in normalized payloads for all clients.
 const MESSAGE_DELETED_TEXT = 'This message was deleted';
 
+// Per-user visibility guard for soft-deleted messages.
+// "Deleted for everyone" remains visible as a placeholder, while
+// "deleted for me" removes the message from that specific user's timeline.
 const isMessageDeletedForUser = (messageDoc: MessageDocument, userId: string): boolean => {
   if (!userId) return false;
 
@@ -233,10 +276,14 @@ const isMessageDeletedForUser = (messageDoc: MessageDocument, userId: string): b
   return deletedFor.includes(String(userId));
 };
 
+// Resolve parent conversation once for edit/delete flows so socket events can
+// include a stable conversationId in the realtime payload.
 const getMessageConversation = async (messageId: string): Promise<ConversationDocument | null> => {
   return (await Conversation.findOne({ messages: messageId })) as ConversationDocument | null;
 };
 
+// Fan out message mutation events to both participants and dedupe when sender
+// and receiver resolve to the same socket id (multi-tab and reconnect edge cases).
 const emitMessageUpdateToParticipants = (
   eventName: 'message:edit' | 'message:delete',
   payload: RealtimeMessagePayload
@@ -252,6 +299,8 @@ const emitMessageUpdateToParticipants = (
   });
 };
 
+// Best-effort attachment cleanup after delete-for-everyone to avoid orphaned
+// Cloudinary resources. This intentionally no-ops when no publicId exists.
 const deleteCloudinaryAsset = async (message: MessageDocument): Promise<void> => {
   const publicId = typeof message.publicId === 'string' ? message.publicId.trim() : '';
   if (!publicId) return;
@@ -416,11 +465,16 @@ export const sendMessage = async (
     }
 
     // Persist exactly one message document shape for all message types.
+    // For E2EE text, encryptedMessage/encryptedAESKey/iv are stored as-is.
+    // The server is intentionally blind and never decrypts or rewrites ciphertext.
     const newMessage = new Message({
       senderId,
       receiverId,
       messageType: payload.messageType,
       text: payload.text,
+      encryptedMessage: payload.encryptedMessage,
+      encryptedAESKey: payload.encryptedAESKey,
+      iv: payload.iv,
       fileUrl: payload.fileUrl,
       fileName: payload.fileName,
       fileSize: payload.fileSize,
@@ -536,8 +590,16 @@ export const editMessage = async (
     const { id: messageId } = req.params;
     const senderId = String(req.user);
     const content = req.body.content?.trim();
+    const hasEncryptedPayload = Boolean(
+      req.body.encryptedMessage || req.body.encryptedAESKey || req.body.iv
+    );
 
-    if (!content) {
+    if (hasEncryptedPayload) {
+      if (!req.body.encryptedMessage || !req.body.encryptedAESKey || !req.body.iv) {
+        res.status(400).json({ error: 'Encrypted edit payload is incomplete' });
+        return;
+      }
+    } else if (!content) {
       res.status(400).json({ error: 'Message content cannot be empty' });
       return;
     }
@@ -569,7 +631,18 @@ export const editMessage = async (
       return;
     }
 
-    message.text = content;
+    if (hasEncryptedPayload) {
+      // Zero-knowledge behavior: store opaque ciphertext fields only.
+      message.text = '';
+      message.encryptedMessage = req.body.encryptedMessage;
+      message.encryptedAESKey = req.body.encryptedAESKey;
+      message.iv = req.body.iv;
+    } else {
+      message.text = content;
+      message.encryptedMessage = undefined;
+      message.encryptedAESKey = undefined;
+      message.iv = undefined;
+    }
     message.edited = true;
     message.editedAt = new Date();
 
