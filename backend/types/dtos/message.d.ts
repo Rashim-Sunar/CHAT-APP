@@ -12,6 +12,9 @@ export interface SendMessageDto {
   messageType?: MessageType;
   message?: string;
   text?: string;
+  encryptedMessage?: string;
+  encryptedAESKey?: string;
+  iv?: string;
   fileUrl?: string;
   fileName?: string;
   fileSize?: number;
@@ -43,7 +46,10 @@ export interface CreateFileDeliveryUrlDto {
  * @desc    Payload used to update a text message.
  */
 export interface EditMessageDto {
-  content: string;
+  content?: string;
+  encryptedMessage?: string;
+  encryptedAESKey?: string;
+  iv?: string;
 }
 
 /**

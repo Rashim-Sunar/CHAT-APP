@@ -31,6 +31,17 @@ export interface ApiErrorResponse {
   status?: "fail" | "error";
 }
 
+export interface EncryptedMessagePayload {
+  encryptedMessage: string;
+  encryptedAESKey: string;
+  iv: string;
+}
+
+export interface UserKeyPairJwk {
+  publicKey: JsonWebKey;
+  privateKey: JsonWebKey;
+}
+
 export interface Conversation {
   _id: string;
   userName: string;
@@ -52,6 +63,10 @@ export interface Message {
   messageType: MessageType;
   text?: string;
   message?: string;
+  encryptedMessage?: string;
+  encryptedAESKey?: string;
+  iv?: string;
+  decryptionFailed?: boolean;
   fileUrl?: string | null;
   fileName?: string | null;
   fileSize?: number | null;
@@ -178,6 +193,9 @@ export interface UploadRequestPayload {
 export interface SendMessagePayload {
   messageType: MessageType;
   text?: string;
+  encryptedMessage?: string;
+  encryptedAESKey?: string;
+  iv?: string;
   fileUrl?: string;
   fileName?: string;
   fileSize?: number;

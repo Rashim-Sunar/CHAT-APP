@@ -53,6 +53,7 @@ app.use(cookieParser());
 app.use('/api/auth/', authLimiter, authRouter);
 app.use('/api/messages/', messageLimiter, messageRouter);
 app.use('/api/users/', apiLimiter, userRouter);
+app.use('/api/user/', apiLimiter, userRouter);
 
 // ----------------------------------------
 // Server Initialization

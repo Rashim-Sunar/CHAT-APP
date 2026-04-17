@@ -17,6 +17,7 @@ type SidebarMessageAggregate = {
   _id: mongoose.Types.ObjectId;
   lastMessageType?: 'text' | 'image' | 'video' | 'file';
   lastText?: string;
+  lastEncryptedMessage?: string;
   lastFileName?: string;
   lastCreatedAt?: Date;
   lastSenderId?: mongoose.Types.ObjectId;
@@ -32,6 +33,7 @@ type SidebarConversationRecord = {
     receiverId: mongoose.Types.ObjectId | string;
     messageType: 'text' | 'image' | 'video' | 'file';
     text?: string;
+    encryptedMessage?: string;
     fileName?: string;
     deletedForEveryone?: boolean;
     deletedFor?: Array<mongoose.Types.ObjectId | string>;
@@ -72,6 +74,9 @@ const MAX_ITEMS_PER_SECTION = 120;
 const MAX_LINK_SOURCE_MESSAGES = 300;
 const URL_REGEX = /(https?:\/\/[^\s]+)/gi;
 
+// Visibility guard shared across details/sidebar builders.
+// Messages deleted for everyone are hidden from these derived collections,
+// and per-user deletions are filtered against the current viewer id.
 const isVisibleToUser = (message: { deletedForEveryone?: boolean; deletedFor?: unknown[] }, userId: string): boolean => {
   if (message.deletedForEveryone) return false;
 
@@ -79,11 +84,14 @@ const isVisibleToUser = (message: { deletedForEveryone?: boolean; deletedFor?: u
   return !deletedFor.includes(String(userId));
 };
 
+// Strip trailing punctuation often included by natural typing so links remain valid.
 const normalizeUrl = (rawUrl: string): string => {
   const trimmed = rawUrl.trim().replace(/[),.;!?]+$/g, '');
   return trimmed;
 };
 
+// Build a compact, human-readable link title from the URL.
+// Falls back to raw input when parsing fails so we never drop data.
 const buildLinkTitle = (rawUrl: string): string => {
   try {
     const parsed = new URL(rawUrl);
@@ -102,6 +110,8 @@ const buildLinkTitle = (rawUrl: string): string => {
   }
 };
 
+// Message-summary fallback used when conversation documents are not hydrated yet.
+// For encrypted text, the backend intentionally returns a generic label.
 const getSidebarMessagePreview = (
   summary: SidebarMessageAggregate | undefined,
   loggedinUserId: string
@@ -122,6 +132,10 @@ const getSidebarMessagePreview = (
   }
 
   if (summary.lastMessageType === 'text') {
+    if (summary.lastEncryptedMessage) {
+      return 'Encrypted message';
+    }
+
     return (summary.lastText || '').trim();
   }
 
@@ -132,6 +146,7 @@ const getSidebarMessagePreview = (
   return '';
 };
 
+// Sidebar-specific visibility check used during unread and preview derivation.
 const isMessageVisibleForSidebar = (
   message: SidebarConversationRecord['messages'][number],
   userId: string
@@ -143,6 +158,8 @@ const isMessageVisibleForSidebar = (
   return !deletedFor.includes(String(userId));
 };
 
+// Convert a message record into a sidebar-safe preview string.
+// This keeps media labels and encrypted placeholders consistent across clients.
 const getSidebarPreviewText = (
   message: SidebarConversationRecord['messages'][number] | undefined
 ): string => {
@@ -153,6 +170,10 @@ const getSidebarPreviewText = (
   }
 
   if (message.messageType === 'text') {
+    if (message.encryptedMessage) {
+      return 'Encrypted message';
+    }
+
     return (message.text || '').trim();
   }
 
@@ -187,7 +208,8 @@ export const getUsersForSidebar = async (
 
     const loggedinObjectId = new mongoose.Types.ObjectId(loggedinUserId);
 
-    // Fetch all users excluding the current logged-in user
+    // Step 1: collect users + latest message summaries + conversation snapshots in parallel.
+    // Running these concurrently keeps sidebar load latency predictable.
     const [filteredUsers, messageSummaries, conversations] = await Promise.all([
       User.find({ _id: { $ne: loggedinUserId } }),
       Message.aggregate<SidebarMessageAggregate>([
@@ -209,6 +231,7 @@ export const getUsersForSidebar = async (
             _id: '$partnerId',
             lastMessageType: { $first: '$messageType' },
             lastText: { $first: '$text' },
+            lastEncryptedMessage: { $first: '$encryptedMessage' },
             lastFileName: { $first: '$fileName' },
             lastCreatedAt: { $first: '$createdAt' },
             lastSenderId: { $first: '$senderId' },
@@ -237,6 +260,7 @@ export const getUsersForSidebar = async (
         .lean<SidebarConversationRecord[]>(),
     ]);
 
+    // Step 2: index pre-fetched data by partner id for O(1) joins during mapping.
     const summaryByPartnerId = new Map(
       messageSummaries.map((summary) => [String(summary._id), summary])
     );
@@ -252,6 +276,7 @@ export const getUsersForSidebar = async (
       }
     });
 
+    // Step 3: build final sidebar payload with preview, sender marker, and unread counters.
     const usersWithPreview = filteredUsers.map((userDoc) => {
       const user = userDoc.toObject();
       const summary = summaryByPartnerId.get(String(userDoc._id));
@@ -324,6 +349,104 @@ export const getUsersForSidebar = async (
 };
 
 /**
+ * @desc    Stores authenticated user's public key used by peers for E2EE
+ * @route   POST /api/users/public-key
+ * @access  Private
+ */
+export const savePublicKey = async (
+  req: AuthenticatedRequest<unknown, unknown, { publicKey?: Record<string, unknown> }>,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = req.user;
+    const { publicKey } = req.body;
+
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+      res.status(401).json({
+        status: 'fail',
+        message: 'Unauthorized',
+      });
+      return;
+    }
+
+    // Basic shape guard only: JWK validation is delegated to clients on import,
+    // while the server remains storage-only for public keys.
+    if (!publicKey || typeof publicKey !== 'object') {
+      res.status(400).json({
+        status: 'fail',
+        message: 'publicKey is required',
+      });
+      return;
+    }
+
+    // E2EE constraint: only public keys are persisted. The server never stores
+    // private keys, so it cannot decrypt user messages.
+    await User.findByIdAndUpdate(userId, { publicKey }, { new: true, runValidators: false });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Public key saved',
+    });
+  } catch (error: unknown) {
+    console.log(
+      'Error in savePublicKey',
+      error instanceof Error ? error.message : String(error)
+    );
+
+    res.status(500).json({
+      status: 'fail',
+      message: 'Internal server error',
+    });
+  }
+};
+
+/**
+ * @desc    Returns a user's public key for message encryption by peers
+ * @route   GET /api/users/:id/public-key
+ * @access  Private
+ */
+export const getUserPublicKey = async (
+  req: AuthenticatedRequest<{ id: string }>,
+  res: Response
+): Promise<void> => {
+  try {
+    const targetUserId = req.params.id;
+
+    if (!targetUserId || !mongoose.Types.ObjectId.isValid(targetUserId)) {
+      res.status(400).json({
+        status: 'fail',
+        error: 'Invalid user id',
+      });
+      return;
+    }
+
+    const user = await User.findById(targetUserId).select('publicKey');
+    if (!user || !user.publicKey) {
+      res.status(404).json({
+        status: 'fail',
+        error: 'Public key not found for user',
+      });
+      return;
+    }
+
+    res.status(200).json({
+      status: 'success',
+      publicKey: user.publicKey,
+    });
+  } catch (error: unknown) {
+    console.log(
+      'Error in getUserPublicKey',
+      error instanceof Error ? error.message : String(error)
+    );
+
+    res.status(500).json({
+      status: 'fail',
+      error: 'Internal server error',
+    });
+  }
+};
+
+/**
  * @desc    Retrieves details for selected conversation user, shared media, links and documents
  * @route   GET /api/users/:id/details
  * @access  Private
@@ -377,6 +500,8 @@ export const getUserDetails = async (
       ],
     };
 
+    // Step 1: fetch each section source independently with limits tuned for UI usage.
+    // This keeps response size bounded and avoids expensive full-history scans.
     const [mediaMessages, documentMessages, textMessages] = await Promise.all([
       Message.find({
         ...pairFilter,
@@ -406,6 +531,7 @@ export const getUserDetails = async (
         .lean(),
     ]);
 
+      // Step 2: project visible media entries in descending recency order.
     const media: UserDetailsResponse['media'] = [];
     mediaMessages.forEach((message) => {
       if (!isVisibleToUser(message, String(loggedinUserId))) return;
@@ -425,6 +551,7 @@ export const getUserDetails = async (
       });
     });
 
+    // Step 3: project visible document entries with optional size metadata.
     const documents: UserDetailsResponse['documents'] = [];
     documentMessages.forEach((message) => {
       if (!isVisibleToUser(message, String(loggedinUserId))) return;
@@ -443,6 +570,7 @@ export const getUserDetails = async (
       });
     });
 
+    // Step 4: extract and dedupe links from visible text messages.
     const seenLinks = new Set<string>();
     const links: UserDetailsResponse['links'] = [];
 
@@ -469,6 +597,7 @@ export const getUserDetails = async (
       });
     });
 
+    // Step 5: return normalized details payload consumed by the right-side panel.
     res.status(200).json({
       user: {
         _id: String(user._id),

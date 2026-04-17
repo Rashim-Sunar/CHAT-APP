@@ -12,6 +12,9 @@ export interface IMessage {
   receiverId: Types.ObjectId;
   messageType: MessageType;
   text?: string;
+  encryptedMessage?: string;
+  encryptedAESKey?: string;
+  iv?: string;
   fileUrl?: string;
   fileName?: string;
   fileSize?: number;
@@ -49,6 +52,18 @@ const messageSchema = new mongoose.Schema<IMessage>(
       required: true,
     },
     text: {
+      type: String,
+      trim: true,
+    },
+    encryptedMessage: {
+      type: String,
+      trim: true,
+    },
+    encryptedAESKey: {
+      type: String,
+      trim: true,
+    },
+    iv: {
       type: String,
       trim: true,
     },
