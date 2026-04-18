@@ -1,7 +1,10 @@
-// Encapsulates edit and delete behavior for a single message, including optimistic
-// updates, rollback on failure, and derived conversation preview refreshes.
-// Depends on the authenticated user, message-specific conversation routing, the
-// shared conversation store, and the message API endpoints.
+// ----------------------------------------
+// @file   useMessageActions.ts
+// @desc   Message edit/delete mutations with optimistic UI and rollback safety
+// ----------------------------------------
+// This hook centralizes mutation behavior for a single message so components can
+// remain presentational. It preserves UI responsiveness via optimistic updates
+// while keeping cache state consistent with server authority.
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { useAuthContext } from "../context/Auth-Context";
@@ -11,15 +14,19 @@ import { DELETED_MESSAGE_TEXT } from "../Utils/messageDisplay";
 import useConversation from "../zustand/useConversation";
 import type { ApiErrorResponse, Message } from "../types";
 import { apiFetch } from "../Utils/apiFetch";
-import { encryptTextMessage, ensureUserKeyPair, getPublicKeyByUserId } from "../Utils/crypto";
+import { encryptTextMessage, getPublicKeyByUserId, requireUserKeyPair } from "../Utils/crypto";
 
 /**
- * Provide edit/delete controls and guarded mutations for a single message.
- * Side effects: performs PUT/DELETE requests, mutates the per-conversation message
- * cache, refreshes preview state, and rolls back local changes on failure.
+ * Exposes guarded edit/delete actions for one message instance.
  *
- * @param {Message} message The message being controlled by the calling component.
- * @returns {{ isBusy: boolean; isEditing: boolean; isDeleting: boolean; canEdit: boolean; canDelete: boolean; editMessage: (content: string) => Promise<boolean>; deleteMessage: (deleteType: "me" | "everyone") => Promise<boolean> }} Action state and mutators for the message.
+ * Responsibilities:
+ * - perform optimistic local mutations for immediate feedback
+ * - persist changes via API
+ * - reconcile cache with server response
+ * - rollback snapshot on failure
+ *
+ * @param message Message targeted by mutation controls.
+ * @returns Busy flags, permission guards, and mutation functions.
  */
 const useMessageActions = (message: Message) => {
   const [busyAction, setBusyAction] = useState<"edit" | "delete" | null>(null);
@@ -31,20 +38,20 @@ const useMessageActions = (message: Message) => {
   const conversationKey = getConversationKey(message.senderId, message.receiverId);
   const messageId = message._id;
 
-  // Snapshot the current thread so failed edits/deletes can be rolled back safely.
+  // Captures pre-mutation state for deterministic rollback on request failure.
   const snapshotMessages = (): Message[] => {
     if (!conversationKey) return [];
     return useConversation.getState().messagesByConversation[conversationKey] || [];
   };
 
-  // Restore the cached message list after a failed server mutation.
+  // Restores full conversation cache and derived preview after rollback.
   const restoreMessages = (previousMessages: Message[]): void => {
     if (!conversationKey || !currentUserId) return;
     setMessagesForConversation(conversationKey, previousMessages);
     syncConversationPreview(conversationKey, currentUserId);
   };
 
-  // Apply the server version of a message after a successful edit/delete response.
+  // Applies canonical server payload to avoid local/server divergence.
   const applyServerMessage = (serverMessage: Message): void => {
     if (!conversationKey || !messageId || !currentUserId) return;
 
@@ -52,6 +59,10 @@ const useMessageActions = (message: Message) => {
     syncConversationPreview(conversationKey, currentUserId);
   };
 
+  /**
+   * Edits message content with optimistic update and server reconciliation.
+   * For text messages, payload is re-encrypted client-side to preserve E2EE.
+   */
   const editMessage = async (content: string): Promise<boolean> => {
     if (!messageId || !conversationKey || !currentUserId) return false;
 
@@ -64,6 +75,7 @@ const useMessageActions = (message: Message) => {
     const previousMessages = snapshotMessages();
     setBusyAction("edit");
 
+    // Optimistic patch keeps perceived latency low while request is in flight.
     updateMessageInConversation(conversationKey, messageId, {
       text: trimmedContent,
       message: trimmedContent,
@@ -82,7 +94,8 @@ const useMessageActions = (message: Message) => {
       };
 
       if (message.messageType === "text") {
-        const { publicKey: senderPublicKey } = await ensureUserKeyPair(currentUserId);
+        // E2EE path: edits are encrypted on the client before transport.
+        const { publicKey: senderPublicKey } = await requireUserKeyPair(currentUserId);
         const receiverPublicKey = await getPublicKeyByUserId(String(message.receiverId));
         const encryptedPayload = await encryptTextMessage(
           trimmedContent,
@@ -96,6 +109,7 @@ const useMessageActions = (message: Message) => {
           iv: encryptedPayload.iv,
         };
       } else {
+        // Non-text content uses plain metadata update flow.
         updatePayload = { content: trimmedContent };
       }
 
@@ -127,12 +141,8 @@ const useMessageActions = (message: Message) => {
   };
 
   /**
-   * Delete the message either just for the current user or for everyone.
-   * Side effects: applies an optimistic update, persists the change to the
-   * backend, and restores the previous message snapshot if the request fails.
-   *
-   * @param {"me" | "everyone"} deleteType Scope of deletion requested by the user.
-   * @returns {Promise<boolean>} True when the server mutation succeeds.
+   * Deletes a message for current user or all participants, with optimistic UI.
+   * Falls back to snapshot rollback if server mutation fails.
    */
   const deleteMessage = async (deleteType: "me" | "everyone"): Promise<boolean> => {
     if (!messageId || !conversationKey || !currentUserId) return false;
@@ -140,6 +150,7 @@ const useMessageActions = (message: Message) => {
     const previousMessages = snapshotMessages();
     setBusyAction("delete");
 
+    // Optimistic behavior mirrors expected server outcome per deletion mode.
     if (deleteType === "me") {
       removeMessageFromConversation(conversationKey, messageId);
     } else {
@@ -167,6 +178,7 @@ const useMessageActions = (message: Message) => {
       }
 
       if (data.updatedMessage) {
+        // Reconcile with server truth to handle edge cases from backend policy.
         if (data.updatedMessage.deletedForEveryone) {
           updateMessageInConversation(conversationKey, messageId, data.updatedMessage);
         } else if (data.updatedMessage.deletedFor?.includes(currentUserId)) {

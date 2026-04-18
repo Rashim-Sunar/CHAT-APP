@@ -1,7 +1,7 @@
 # End-to-End Encryption (E2EE) in Chat App
 
 ## 1. Introduction
-End-to-End Encryption (E2EE) means message content is encrypted on the sender device and can only be decrypted on participant devices.
+End-to-End Encryption (E2EE) means message content is encrypted on sender devices and can only be decrypted on participant devices.
 
 This implementation uses hybrid encryption:
 - RSA-OAEP for secure key exchange
@@ -14,16 +14,18 @@ Why this is used:
 
 ## 2. Architecture Overview
 Client responsibilities:
-- Generate RSA key pair on first authenticated session
+- Generate RSA key pair on first trusted device session
 - Store private key in IndexedDB only
 - Upload public key to backend
 - Encrypt text before send
 - Decrypt encrypted text after receive/fetch
+- Start device-linking flow when a newly authenticated device has no local private key
 
 Server responsibilities:
 - Store user public keys
 - Persist encrypted message payload fields
 - Relay encrypted payloads over sockets
+- Coordinate short-lived device-link sessions
 - Never decrypt ciphertext
 
 ## 3. Encryption Flow (Step-by-Step)
@@ -43,7 +45,30 @@ Receiver:
 2. Decrypt AES key from encrypted payload
 3. Decrypt ciphertext message using AES key + IV
 
-## 4. Data Flow Diagram (text-based)
+## 4. Device Linking and Login Gating (Implemented)
+Device linking now preserves E2EE continuity when users sign in on additional devices.
+
+New device flow:
+1. User authenticates with account credentials.
+2. Client checks IndexedDB for local private key.
+3. If missing and account already has server-side public key, client creates temporary RSA key pair.
+4. Client creates a link session and moves to pending state.
+5. Chat access remains gated until encrypted key transfer completes.
+
+Trusted device flow:
+1. Receives real-time link request.
+2. User approves or rejects request.
+3. On approval, trusted device fetches temporary public key for that session.
+4. Trusted device encrypts transfer secret client-side.
+5. Encrypted payload is sent for relay to requesting device.
+
+Requesting device completion:
+1. Receives encrypted transfer payload.
+2. Decrypts payload with temporary private key locally.
+3. Stores recovered key material in IndexedDB.
+4. Moves from pending to ready and unlocks chat UI.
+
+## 5. Data Flow Diagram (text-based)
 User A -> Encrypt (AES + RSA wrap) -> Server stores/forwards ciphertext -> User B decrypts
 
 Detailed path:
@@ -56,7 +81,16 @@ User A plaintext
 -> User B private key decrypts AES key
 -> AES decrypts text
 
-## 5. Security Concepts
+Device-link transfer path:
+New device temp public key
+-> POST /api/link-session/create
+-> Trusted device approves
+-> Trusted device encrypts transfer secret
+-> POST /api/link-session/complete
+-> Socket emits encrypted payload
+-> New device decrypts locally
+
+## 6. Security Concepts
 AES (Advanced Encryption Standard):
 - Symmetric encryption used for message body
 - Fast and suitable for high-volume chat payloads
@@ -70,38 +104,59 @@ IV (Initialization Vector):
 - Prevents repeated ciphertext for repeated plaintext
 
 Hybrid encryption:
-- RSA secures the small key material
-- AES secures the message payload efficiently
+- RSA secures small key material
+- AES secures message payload efficiently
 
 Public vs private key:
 - Public key can be shared and stored on server
 - Private key is device-local only and never uploaded
 
-## 6. Limitations
-- No multi-device key sync yet
-- No encrypted key backup/recovery mechanism
+Zero-knowledge constraint:
+- Server handles opaque encrypted payloads only
+- Private keys and decrypted transfer secrets remain client-side
+
+## 7. Current Limitations
+- No encrypted private-key backup/recovery mechanism yet
+- Additional device approval requires an already trusted active device
 - Existing legacy plaintext messages remain as-is unless migrated
 
-## 7. Future Improvements
-- Device-specific key identities and device management
+## 8. Future Improvements
 - Encrypted private-key backup with user passphrase
+- Trusted-device management UI (list/revoke/rename)
+- Transfer conversation/session keys instead of private key bundle
 - Forward secrecy with ephemeral session keys and ratcheting
 - Message key rotation and key versioning
 - Optional signed message authenticity metadata
 
 ## Implementation Notes
 Frontend utilities:
-- src/utils/crypto.ts
-- src/utils/secureStorage.ts
+- frontend/src/Utils/crypto.ts
+- frontend/src/Utils/secureStorage.ts
 
-Backend endpoints:
+Frontend linking state and gating:
+- frontend/src/context/DeviceLinkContext.tsx
+- frontend/src/context/Auth-Context.tsx
+- frontend/src/App.tsx
+
+Backend public key endpoints:
 - POST /api/users/public-key
 - GET /api/users/:id/public-key
-- Alias path also works through /api/user/*
+
+Backend link-session endpoints:
+- POST /api/link-session/create
+- POST /api/link-session/respond
+- POST /api/link-session/complete
+- GET /api/link-session/status/:sessionId
+- GET /api/link-session/:sessionId
 
 Encrypted message payload fields:
 - encryptedMessage
 - encryptedAESKey
 - iv
 
-The backend remains zero-knowledge for encrypted text content.
+Encrypted link-transfer payload fields:
+- encryptedPayload
+- encryptedAesKey
+- iv
+
+The backend remains zero-knowledge for encrypted message and key-transfer content.

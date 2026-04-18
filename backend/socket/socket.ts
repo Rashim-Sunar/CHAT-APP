@@ -27,9 +27,14 @@ const io = new Server(server, {
   },
 });
 
-// Maps userId to active socketId for real-time communication
-type UserSocketMap = Record<string, string>;
-const userSocketMap: UserSocketMap = {}; // { userId: socketId }
+// Maps userId to all active socketIds for multi-device real-time communication.
+type UserSocketMap = Record<string, Set<string>>;
+const userSocketMap: UserSocketMap = {}; // { userId: Set<socketId> }
+
+const getSocketIdsForUser = (userId: string): string[] => {
+  const socketSet = userSocketMap[userId];
+  return socketSet ? Array.from(socketSet) : [];
+};
 
 /**
  * @desc    Returns socketId of a connected user
@@ -37,7 +42,18 @@ const userSocketMap: UserSocketMap = {}; // { userId: socketId }
  * @returns socketId if user is online, otherwise undefined
  */
 export const getReceiverSocketId = (receiverId: string): string | undefined => {
-  return userSocketMap[receiverId];
+  return getSocketIdsForUser(receiverId)[0];
+};
+
+export const emitToUserDevices = <TPayload>(
+  userId: string,
+  eventName: string,
+  payload: TPayload
+): void => {
+  const socketIds = getSocketIdsForUser(userId);
+  socketIds.forEach((socketId) => {
+    io.to(socketId).emit(eventName, payload);
+  });
 };
 
 // ----------------------------------------
@@ -51,7 +67,11 @@ io.on('connection', (socket) => {
 
   // Store mapping only if valid userId is provided
   if (userId && userId !== 'undefined') {
-    userSocketMap[userId] = socket.id;
+    if (!userSocketMap[userId]) {
+      userSocketMap[userId] = new Set();
+    }
+
+    userSocketMap[userId].add(socket.id);
   }
 
   // Broadcast updated list of online users to all clients
@@ -79,7 +99,12 @@ io.on('connection', (socket) => {
     console.log('User disconnected: ' + socket.id);
 
     // Remove user from active socket map
-    if (userId) delete userSocketMap[userId];
+    if (userId && userSocketMap[userId]) {
+      userSocketMap[userId].delete(socket.id);
+      if (userSocketMap[userId].size === 0) {
+        delete userSocketMap[userId];
+      }
+    }
 
     // Broadcast updated online users list
     io.emit('getOnlineUsers', Object.keys(userSocketMap));
