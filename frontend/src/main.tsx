@@ -5,13 +5,16 @@ import App from "./App";
 import "./index.css";
 import { AuthContextProvider } from "./context/Auth-Context";
 import { SocketContextProvider } from "./context/SocketContext";
+import { DeviceLinkProvider } from "./context/DeviceLinkContext";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <BrowserRouter>
       <AuthContextProvider>
         <SocketContextProvider>
-          <App />
+          <DeviceLinkProvider>
+            <App />
+          </DeviceLinkProvider>
         </SocketContextProvider>
       </AuthContextProvider>
     </BrowserRouter>
