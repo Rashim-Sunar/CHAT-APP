@@ -11,6 +11,7 @@ import cors from 'cors';
 import authRouter from './routes/authRouter.js';
 import messageRouter from './routes/messageRouter.js';
 import userRouter from './routes/userRouter.js';
+import linkSessionRouter from './routes/linkSessionRouter.js';
 import connectToDB from './db/connectdb.js';
 import cookieParser from 'cookie-parser';
 import { app, server } from './socket/socket.js';
@@ -54,6 +55,7 @@ app.use('/api/auth/', authLimiter, authRouter);
 app.use('/api/messages/', messageLimiter, messageRouter);
 app.use('/api/users/', apiLimiter, userRouter);
 app.use('/api/user/', apiLimiter, userRouter);
+app.use('/api/link-session/', apiLimiter, linkSessionRouter);
 
 // ----------------------------------------
 // Server Initialization

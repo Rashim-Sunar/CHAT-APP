@@ -96,3 +96,14 @@ export const apiLimiter: RateLimitRequestHandler = createLimiter({
   message:
     'Too many requests from this IP. Please try again in a moment.',
 });
+
+// ----------------------------------------
+// Tier 4 — Device Link Session Creation
+// Restricts how often a client can open key-transfer sessions.
+// ----------------------------------------
+export const linkSessionCreateLimiter: RateLimitRequestHandler = createLimiter({
+  windowMs: 60 * 1000,
+  limit: 5,
+  message:
+    'Too many device linking attempts. Please wait a minute before trying again.',
+});
