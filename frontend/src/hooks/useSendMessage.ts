@@ -14,8 +14,8 @@ import { apiFetch } from "../Utils/apiFetch";
 import {
   decryptMessageIfNeeded,
   encryptTextMessage,
-  ensureUserKeyPair,
   getPublicKeyByUserId,
+  requireUserKeyPair,
 } from "../Utils/crypto";
 import { saveConversationPreview } from "../Utils/conversationPreviewCache";
 import { getMessagePreviewText } from "../Utils/messageDisplay";
@@ -119,7 +119,7 @@ const useSendMessage = () => {
 
     setLoading(true);
     try {
-      const { publicKey: senderPublicKey } = await ensureUserKeyPair(currentUserId);
+      const { publicKey: senderPublicKey } = await requireUserKeyPair(currentUserId);
       const receiverPublicKey = await getPublicKeyByUserId(String(selectedConversation._id));
 
       const encryptedPayload = await encryptTextMessage(

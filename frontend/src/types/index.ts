@@ -11,6 +11,7 @@ export interface User {
   userName: string;
   gender: Gender;
   profilePic?: string;
+  publicKey?: JsonWebKey | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -35,6 +36,65 @@ export interface EncryptedMessagePayload {
   encryptedMessage: string;
   encryptedAESKey: string;
   iv: string;
+}
+
+export interface EncryptedLinkedSecret {
+  encryptedPayload: string;
+  encryptedAesKey: string;
+  iv: string;
+}
+
+export interface LinkRequestDeviceInfo {
+  userAgent?: string;
+  platform?: string;
+  browser?: string;
+  label?: string;
+}
+
+export interface LinkRequestEventPayload {
+  sessionId: string;
+  requestedAt: string;
+  expiresAt: string;
+  deviceInfo?: LinkRequestDeviceInfo;
+}
+
+export interface LinkSessionUpdatedEventPayload {
+  sessionId: string;
+  status: "pending" | "approved" | "rejected" | "expired";
+  updatedAt: string;
+}
+
+export interface LinkSecretReadyEventPayload {
+  sessionId: string;
+  encryptedSecret: EncryptedLinkedSecret;
+}
+
+export type DeviceLinkStatus =
+  | "checking"
+  | "ready"
+  | "pending"
+  | "rejected"
+  | "expired"
+  | "error";
+
+export interface LinkSessionStatusResponse {
+  status: "success" | "fail";
+  message?: string;
+  data?: {
+    sessionId: string;
+    status: "pending" | "approved" | "rejected" | "expired";
+    expiresAt: string;
+  };
+}
+
+export interface DeviceLinkContextValue {
+  status: DeviceLinkStatus;
+  sessionId: string | null;
+  error: string | null;
+  incomingRequests: LinkRequestEventPayload[];
+  approveRequest: (sessionId: string) => Promise<void>;
+  rejectRequest: (sessionId: string) => Promise<void>;
+  clearRequest: (sessionId: string) => void;
 }
 
 export interface UserKeyPairJwk {
@@ -110,6 +170,9 @@ export interface ServerToClientEvents {
   "conversation:seen": (payload: { conversationId: string; readerId: string; seenAt: string }) => void;
   "message:edit": (message: Message) => void;
   "message:delete": (message: Message) => void;
+  link_request: (payload: LinkRequestEventPayload) => void;
+  link_session_updated: (payload: LinkSessionUpdatedEventPayload) => void;
+  link_secret_ready: (payload: LinkSecretReadyEventPayload) => void;
 }
 
 export interface ClientToServerEvents {

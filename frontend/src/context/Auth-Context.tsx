@@ -9,10 +9,20 @@ import {
 import type { AuthContextValue, AuthResponse } from "../types";
 import useConversation from "../zustand/useConversation";
 import { assertApiBaseUrl } from "../config/api";
-import { ensureUserKeyPair } from "../Utils/crypto";
 
+// ----------------------------------------
+// @file   Auth-Context.tsx
+// @desc   Centralized authentication/session state with cookie revalidation
+// ----------------------------------------
+
+// Shared auth context consumed by hooks/components that require session identity.
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+/**
+ * Reads cached auth state from localStorage.
+ * Corrupted cache is treated as an unauthenticated state to avoid trusting
+ * malformed client data.
+ */
 const readStoredAuthUser = (): AuthResponse | null => {
   try {
     const storedUser = localStorage.getItem("chat-user");
@@ -27,7 +37,12 @@ const sleep = (ms: number): Promise<void> =>
     window.setTimeout(resolve, ms);
   });
 
+/**
+ * Validates the current cookie session against the backend source of truth.
+ * Returns null for any non-valid response shape to keep caller logic uniform.
+ */
 const fetchCurrentSession = async (): Promise<AuthResponse | null> => {
+  // auth/me is authoritative for server-side session validity.
   const response = await fetch(`${assertApiBaseUrl()}/auth/me`, {
     credentials: "include",
   });
@@ -47,6 +62,9 @@ const fetchCurrentSession = async (): Promise<AuthResponse | null> => {
   return data;
 };
 
+/**
+ * Consumer hook with provider guard to prevent silent undefined usage.
+ */
 export const useAuthContext = (): AuthContextValue => {
   const context = useContext(AuthContext);
 
@@ -62,16 +80,22 @@ interface AuthContextProviderProps {
 }
 
 export const AuthContextProvider = ({ children }: AuthContextProviderProps) => {
+  // Optimistic hydration from cache, followed by authoritative server validation.
   const [authUser, setAuthUser] = useState<AuthResponse | null>(readStoredAuthUser);
   const [loading, setLoading] = useState(true);
   const userId = authUser?.data?.user?._id;
   const authUserRef = useRef<AuthResponse | null>(authUser);
+  // Guards against overlapping revalidation requests during rapid event bursts.
   const sessionCheckInFlightRef = useRef(false);
 
   useEffect(() => {
+    // Keeps event handlers aligned with latest auth state without re-subscribing.
     authUserRef.current = authUser;
   }, [authUser]);
 
+  /**
+   * Applies auth state and persistence atomically through a single write path.
+   */
   const applyAuthState = (nextAuthUser: AuthResponse | null): void => {
     if (nextAuthUser?.data?.user?._id) {
       localStorage.setItem("chat-user", JSON.stringify(nextAuthUser));
@@ -83,6 +107,10 @@ export const AuthContextProvider = ({ children }: AuthContextProviderProps) => {
     setAuthUser(null);
   };
 
+  /**
+   * Revalidates server session and updates local state.
+   * Optional short retries smooth out startup/cookie propagation races.
+   */
   const validateSession = async (retryDelaysMs: number[] = []): Promise<void> => {
     if (sessionCheckInFlightRef.current) return;
 
@@ -92,6 +120,7 @@ export const AuthContextProvider = ({ children }: AuthContextProviderProps) => {
     try {
       let sessionAuthUser = await fetchCurrentSession().catch(() => null);
 
+      // Covers brief races where session cookies are not yet consistently readable.
       for (const delay of retryDelaysMs) {
         if (sessionAuthUser) break;
         await sleep(delay);
@@ -106,6 +135,7 @@ export const AuthContextProvider = ({ children }: AuthContextProviderProps) => {
   };
 
   useEffect(() => {
+    // Startup strategy: if cache exists, validate it; otherwise clear state immediately.
     const storedAuth = readStoredAuthUser();
 
     if (!storedAuth?.data?.user?._id) {
@@ -118,6 +148,8 @@ export const AuthContextProvider = ({ children }: AuthContextProviderProps) => {
   }, []);
 
   useEffect(() => {
+    // apiFetch dispatches this event on 401 responses from any API consumer.
+    // Central handling prevents scattered per-hook auth reset logic.
     const handleUnauthorized = () => {
       if (!authUserRef.current?.data?.user?._id) {
         applyAuthState(null);
@@ -135,32 +167,8 @@ export const AuthContextProvider = ({ children }: AuthContextProviderProps) => {
   }, []);
 
   useEffect(() => {
+    // Clears conversation-scoped client state when user identity changes.
     useConversation.getState().resetConversationState();
-  }, [userId]);
-
-  useEffect(() => {
-    if (!userId) return;
-
-    let cancelled = false;
-
-    const setupEncryptionKeys = async () => {
-      try {
-        await ensureUserKeyPair(userId);
-      } catch (error) {
-        if (!cancelled) {
-          console.warn(
-            "Failed to initialize E2EE key pair",
-            error instanceof Error ? error.message : String(error)
-          );
-        }
-      }
-    };
-
-    void setupEncryptionKeys();
-
-    return () => {
-      cancelled = true;
-    };
   }, [userId]);
 
   return (

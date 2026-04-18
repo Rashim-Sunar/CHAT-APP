@@ -34,7 +34,7 @@
 // - Scales well (AES fast even for large messages or groups)
 
 import { apiFetch } from "../Utils/apiFetch";
-import type { Message } from "../types";
+import type { EncryptedLinkedSecret, Message } from "../types";
 import { getUserKeyMaterial, saveUserKeyMaterial } from "./secureStorage";
 
 // ============================================================================
@@ -150,6 +150,9 @@ const importPrivateKey = (jwk: JsonWebKey): Promise<CryptoKey> =>
 // importAesKey: Deserializes an AES key from raw bytes.
 // Used for: Decrypting the message ciphertext after unwrapping the AES key via RSA.
 const importAesKey = (rawKey: ArrayBuffer): Promise<CryptoKey> =>
+  crypto.subtle.importKey("raw", rawKey, { name: AES_ALGORITHM }, true, ["decrypt"]);
+
+const importAesDecryptKey = (rawKey: ArrayBuffer): Promise<CryptoKey> =>
   crypto.subtle.importKey("raw", rawKey, { name: AES_ALGORITHM }, true, ["decrypt"]);
 
 // ============================================================================
@@ -484,6 +487,77 @@ const generateKeyPair = async (): Promise<UserKeyJwkPair> => {
     publicKey: await crypto.subtle.exportKey("jwk", keyPair.publicKey),
     privateKey: await crypto.subtle.exportKey("jwk", keyPair.privateKey),
   };
+};
+
+export const requireUserKeyPair = async (userId: string): Promise<UserKeyJwkPair> => {
+  const existing = await getUserKeyMaterial(userId);
+
+  if (!existing?.privateKeyJwk || !existing?.publicKeyJwk) {
+    throw new Error("This device has no local E2EE key. Complete device approval first.");
+  }
+
+  return {
+    publicKey: existing.publicKeyJwk,
+    privateKey: existing.privateKeyJwk,
+  };
+};
+
+export const createTemporaryLinkKeyPair = async (): Promise<UserKeyJwkPair> => {
+  return generateKeyPair();
+};
+
+export const encryptLinkedSecretForDevice = async (
+  plaintextSecret: string,
+  targetTempPublicKeyJwk: JsonWebKey
+): Promise<EncryptedLinkedSecret> => {
+  const tempPublicKey = await importPublicKey(targetTempPublicKeyJwk);
+  const aesKey = await crypto.subtle.generateKey(
+    { name: AES_ALGORITHM, length: AES_KEY_LENGTH },
+    true,
+    ["encrypt", "decrypt"]
+  );
+  const rawAesKey = await crypto.subtle.exportKey("raw", aesKey);
+  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH_BYTES));
+
+  const encryptedPayload = await crypto.subtle.encrypt(
+    { name: AES_ALGORITHM, iv },
+    aesKey,
+    TEXT_ENCODING.encode(plaintextSecret)
+  );
+
+  const encryptedAesKey = await crypto.subtle.encrypt(
+    RSA_ENCRYPTION_ALGORITHM,
+    tempPublicKey,
+    rawAesKey
+  );
+
+  return {
+    encryptedPayload: toBase64(encryptedPayload),
+    encryptedAesKey: toBase64(encryptedAesKey),
+    iv: toBase64(iv),
+  };
+};
+
+export const decryptLinkedSecretFromDevice = async (
+  encryptedSecret: EncryptedLinkedSecret,
+  tempPrivateKeyJwk: JsonWebKey
+): Promise<string> => {
+  const tempPrivateKey = await importPrivateKey(tempPrivateKeyJwk);
+
+  const rawAesKey = await crypto.subtle.decrypt(
+    RSA_ENCRYPTION_ALGORITHM,
+    tempPrivateKey,
+    fromBase64(encryptedSecret.encryptedAesKey)
+  );
+
+  const aesKey = await importAesDecryptKey(rawAesKey);
+  const decryptedPayload = await crypto.subtle.decrypt(
+    { name: AES_ALGORITHM, iv: new Uint8Array(fromBase64(encryptedSecret.iv)) },
+    aesKey,
+    fromBase64(encryptedSecret.encryptedPayload)
+  );
+
+  return TEXT_DECODING.decode(decryptedPayload);
 };
 
 // savePublicKey: Uploads user's public key to the backend.
