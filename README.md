@@ -1,66 +1,94 @@
 # ChatApp
-A real-time full-stack chat application built with the MERN stack, TypeScript, and Socket.io. It provides one-to-one messaging, file sharing, real-time updates, and session-based authentication with a modern React UI.
 
-## Project Overview
-ChatApp is designed for fast, reliable, real-time communication between authenticated users.
+A production-minded real-time chat application built with the MERN stack, TypeScript, and Socket.io.
 
-- One-to-one chat with live Socket.io updates
-- Secure authentication backed by HTTP-only JWT cookies
-- Message lifecycle support for send, edit, and delete
-- Media support for images, videos, and files
-- Read receipts, unread badges, and conversation previews
-- User profile details with shared media, links, and documents
+## What This Project Demonstrates
 
-The app is suitable for messaging platforms, support tools, and collaborative communication workflows.
+This codebase demonstrates engineering depth across security, realtime architecture, and production readiness.
 
-## Architecture Overview
-This project uses a client-server architecture with a dedicated real-time socket layer.
+- Strong end-to-end encryption design with key isolation and zero-knowledge server patterns
+- Secure multi-device key continuity through device linking and encrypted key backup
+- Practical system design with REST + WebSocket coordination, state reconciliation, and rate limiting
+- Production concerns including strict TypeScript, CORS/cookie hardening, error handling, and deploy-ready env setup
+- Real user workflows covering messaging lifecycle, media delivery, read receipts, profile, and conversation UX
+
+## Documentation Index
+
+- [E2EE Overview](E2EE.README.md)
+- [E2EE Device Linking and Login Gating](E2EE-DEVICE-LINKING.README.md)
+- [E2EE Encrypted Key Backup and Recovery](E2EE-BACKUP.README.md)
+
+## Security Highlights (Key Strength)
+
+### 1. End-to-End Encryption (E2EE)
+- Hybrid encryption model:
+  - RSA-OAEP for key wrapping
+  - AES-GCM for message payload confidentiality + integrity
+- Server stores encrypted fields as opaque payloads and never decrypts message content.
+- Private keys are kept client-side only (IndexedDB), not persisted on backend.
+
+### 2. Encryption-Ready Login Gating
+- Authentication is not enough to access chat data.
+- App enforces two states:
+  - Authenticated session
+  - Local private-key availability
+- If private key is missing, chat remains gated until key recovery succeeds.
+
+### 3. Secure Device Linking
+- New device creates ephemeral temporary RSA key pair.
+- Existing trusted device explicitly approves request.
+- Trusted device encrypts transfer secret client-side and relays encrypted payload only.
+- Server coordinates sessions and sockets but never sees plaintext key material.
+
+### 4. Encrypted Private-Key Backup (Optional)
+- One-time user opt-in backup with local password.
+- Password-derived key via PBKDF2 (SHA-256, high iteration count).
+- Private key encrypted with AES-GCM before upload.
+- Server stores only encrypted blob + salt + IV.
+- Recovery/decryption runs fully on client; password never sent to backend.
+
+### 5. Defensive API Hardening
+- HTTP-only JWT cookies for session auth.
+- Route-level rate limiting (auth/message/api + backup restore fetch).
+- Structured error responses and explicit unauthorized handling.
+
+## Core Feature Set
+
+### Authentication and Session
+- Signup/login/logout/current-user endpoints
+- Cookie-based auth with client revalidation
+- Auto-reset local auth state on unauthorized responses
+
+### Real-Time Messaging
+- One-to-one chat with Socket.io
+- Instant delivery and online presence
+- Socket + HTTP reconciliation to avoid duplicate/stale state
+
+### Message Lifecycle
+- Send text and media messages
+- Edit text messages
+- Delete for self and delete for everyone
+- Read receipts and unread counters
+
+### Media and Files
+- Direct-to-Cloudinary upload with backend-signed parameters
+- MIME/type/size validation on client and server
+- Signed delivery URL support for protected delivery paths
+
+### Conversation UX
+- Sidebar previews with unread counts
+- Seen indicators and last-message metadata
+- Shared media/links/documents in details panel
+- Mobile-friendly conversation behavior
+
+## Architecture
 
 | Layer | Responsibility |
 | --- | --- |
-| Frontend (React + TypeScript) | UI, routing, chat state, auth state, and socket listeners |
-| Backend (Node.js + Express + TypeScript) | REST API, authentication, validation, and message persistence |
-| Database (MongoDB) | Users, conversations, messages, and read-receipt metadata |
-| Realtime (Socket.io) | Instant message delivery, edits, deletes, presence, and seen events |
-
-## Features
-
-### Authentication
-- Signup, login, logout, and current-session verification
-- JWT stored in an HTTP-only cookie for safer session handling
-- Frontend session hydration from `localStorage` with `/api/auth/me` validation on load
-- Automatic clearing of local auth state on `401 Unauthorized`
-- Protected routes on both the frontend and backend
-
-### Real-Time Chat
-- Instant message delivery through Socket.io
-- Online user presence updates
-- Socket-driven sync for new messages, message edits, deletions, and seen receipts
-- Conversation state keyed per chat to avoid duplicate renders during socket + HTTP races
-
-### Message Management
-- Text, image, video, and file messages
-- Edit text messages after sending
-- Delete messages for me or for everyone
-- Soft-delete tracking so each participant sees the correct message state
-- Deleted messages are removed from the conversation preview and user view as appropriate
-
-### Media Upload and Delivery
-- Direct-to-Cloudinary upload flow using a backend-signed upload signature
-- Backend-side validation for MIME type, file name, and file size
-- Signed delivery URLs for restricted assets when a public CDN URL is not enough
-- Upload support for common chat media and document formats
-
-### Conversation and Sidebar UX
-- Conversation list with last-message preview and unread counts
-- Read receipts and seen timestamps
-- User details panel with shared media, links, and documents
-- Mobile-friendly conversation navigation
-
-### Reliability and Error Handling
-- `401` responses clear stale local auth state and trigger session revalidation
-- `400`, `403`, `404`, and `500` responses are handled with clear backend errors
-- Route-level rate limiting for auth, message, and user endpoints
+| Frontend (React + TypeScript) | UI, routing, local auth/session state, E2EE crypto, socket event handling |
+| Backend (Node + Express + TypeScript) | API, auth/session validation, persistence, rate limiting, link-session orchestration |
+| MongoDB | Users, conversations, messages, link session metadata |
+| Socket.io | Presence, message events, link-session events, realtime sync |
 
 ## Tech Stack
 
@@ -68,8 +96,7 @@ This project uses a client-server architecture with a dedicated real-time socket
 - React 18
 - TypeScript
 - Vite
-- Tailwind CSS
-- DaisyUI
+- Tailwind CSS + DaisyUI
 - Zustand
 - Socket.io Client
 - Framer Motion
@@ -79,16 +106,49 @@ This project uses a client-server architecture with a dedicated real-time socket
 - Node.js
 - Express.js
 - TypeScript
-- MongoDB with Mongoose
+- MongoDB + Mongoose
 - Socket.io
 - JWT
 - bcryptjs
 - Cloudinary
 - express-rate-limit
 
-## Installation & Setup
+## API Surface (High-Level)
 
-### 1) Clone the repository
+### Auth
+- POST /api/auth/signup
+- POST /api/auth/login
+- POST /api/auth/logout
+- GET /api/auth/me
+
+### Users
+- GET /api/users
+- GET /api/users/:id/details
+- POST /api/users/public-key
+- GET /api/users/:id/public-key
+
+### Messages
+- GET /api/messages/:id
+- POST /api/messages/send/:id
+- PUT /api/messages/:id
+- DELETE /api/messages/:id
+- POST /api/messages/upload-signature
+- POST /api/messages/file-delivery-url
+
+### Device Linking
+- POST /api/link-session/create
+- POST /api/link-session/respond
+- POST /api/link-session/complete
+- GET /api/link-session/status/:sessionId
+- GET /api/link-session/:sessionId
+
+### E2EE Backup
+- POST /api/backup/enable
+- GET /api/backup
+
+## Local Setup
+
+### 1) Clone
 ```bash
 git clone https://github.com/Rashim-Sunar/CHAT-APP.git
 cd CHAT-APP
@@ -104,42 +164,8 @@ npm install
 ```
 
 ### 3) Configure environment variables
-Create the required `.env` files before running either app.
 
-### 4) Run in development
-Backend:
-```bash
-cd backend
-npm run dev
-```
-
-Frontend:
-```bash
-cd frontend
-npm run dev
-```
-
-The frontend dev server uses a local Vite proxy for `/api` requests. In production, use the real backend URL instead of the proxy.
-
-### Production setup
-Backend:
-```bash
-cd backend
-npm run build
-npm start
-```
-
-Frontend:
-```bash
-cd frontend
-npm run build
-```
-
-For production, set `VITE_API_BASE_URL` to the deployed backend URL and do not rely on the Vite proxy.
-
-## Environment Variables
-
-### Backend `.env`
+Backend .env
 ```env
 PORT=8000
 NODE_ENV=development
@@ -153,115 +179,80 @@ CLOUDINARY_API_SECRET=your-cloudinary-api-secret
 MAX_UPLOAD_SIZE_BYTES=15728640
 ```
 
-Notes:
-- `CLIENT_ORIGINS` can contain a comma-separated list of allowed frontend origins.
-- `CLIENT_URL` is still supported for compatibility with local development.
-- `MAX_UPLOAD_SIZE_BYTES` is optional. If omitted, the app uses the built-in default upload limit.
-
-### Frontend `.env.local`
+Frontend .env.local
 ```env
 VITE_API_BASE_URL=http://localhost:8000/api
 VITE_SOCKET_URL=http://localhost:8000
 ```
 
-### Frontend production example
-```env
-VITE_API_BASE_URL=https://your-backend-url.onrender.com/api
-VITE_SOCKET_URL=https://your-backend-url.onrender.com
+### 4) Run in development
+
+Backend
+```bash
+cd backend
+npm run dev
 ```
 
-Notes:
-- `VITE_API_BASE_URL` is required by the frontend API wrapper.
-- `VITE_SOCKET_URL` is optional. If omitted, the socket connection is derived from `VITE_API_BASE_URL`.
-- The Vite proxy in `frontend/vite.config.ts` is development-only.
-
-## Deployment
-
-This project is deployed on Render.
-
-Recommended Render setup:
-
-1. Create a Render Web Service for the backend.
-2. Set the backend environment variables listed above.
-3. Build the backend with `npm run build` and start it with `npm start`.
-4. Deploy the frontend as a separate static site or host it on your preferred frontend platform.
-5. Set the frontend `VITE_API_BASE_URL` to the Render backend URL.
-6. Add the deployed frontend origin to `CLIENT_ORIGINS` so cookies and CORS work correctly.
-
-Important production notes:
-- The backend trusts the first proxy hop so secure cookies work correctly behind Render.
-- JWT cookies are configured with production-safe cookie settings.
-- If the frontend and backend are on different domains, `credentials: include` must remain enabled in API calls.
-
-## API Endpoints
-
-### Authentication
-- `POST /api/auth/signup` - register a new user
-- `POST /api/auth/login` - log in a user
-- `POST /api/auth/logout` - clear the session cookie
-- `GET /api/auth/me` - return the current authenticated user
-
-### Users
-- `GET /api/users` - fetch sidebar users and conversation summaries
-- `GET /api/users/:id/details` - fetch a user profile with shared media, links, and documents
-
-### Messages
-- `GET /api/messages/:id` - fetch messages between the current user and another user
-- `POST /api/messages/send/:id` - send a new message
-- `PUT /api/messages/:id` - edit a text message
-- `DELETE /api/messages/:id` - delete a message for me or for everyone
-- `POST /api/messages/upload-signature` - request a Cloudinary upload signature
-- `POST /api/messages/file-delivery-url` - request a signed delivery URL for restricted files
-
-Example delete payload:
-```json
-{
-	"type": "everyone"
-}
+Frontend
+```bash
+cd frontend
+npm run dev
 ```
 
-## Folder Structure
+### 5) Production build
+
+Backend
+```bash
+cd backend
+npm run build
+npm start
+```
+
+Frontend
+```bash
+cd frontend
+npm run build
+```
+
+## Deployment Notes
+
+- Designed for split frontend/backend deployment.
+- Render-friendly backend setup with proxy-aware cookie behavior.
+- For cross-domain frontend/backend:
+  - keep credentials enabled on client fetch
+  - ensure frontend origin is included in CLIENT_ORIGINS
+
+## Repository Structure
+
 ```text
 CHAT_APP/
-├── backend/
-│   ├── controllers/
-│   ├── db/
-│   ├── middlewares/
-│   ├── models/
-│   ├── routes/
-│   ├── socket/
-│   ├── types/
-│   └── Utils/
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   ├── config/
-│   │   ├── context/
-│   │   ├── hooks/
-│   │   ├── pages/
-│   │   ├── Utils/
-│   │   ├── types/
-│   │   └── zustand/
-│   ├── public/
-│   └── vite.config.ts
-└── README.md
+|- backend/
+|  |- controllers/
+|  |- db/
+|  |- middlewares/
+|  |- models/
+|  |- routes/
+|  |- socket/
+|  |- types/
+|  |- Utils/
+|- frontend/
+|  |- src/
+|  |  |- components/
+|  |  |- config/
+|  |  |- context/
+|  |  |- hooks/
+|  |  |- pages/
+|  |  |- Utils/
+|  |  |- types/
+|  |  |- zustand/
+|  |- public/
+|- E2EE.README.md
+|- E2EE-DEVICE-LINKING.README.md
+|- E2EE-BACKUP.README.md
+|- README.md
 ```
 
-## Known Issues / Troubleshooting
-
-- If production API calls fail, confirm that `VITE_API_BASE_URL` points to the deployed backend and includes `/api`.
-- If login appears to work but the app immediately signs out, check that the frontend origin is listed in `CLIENT_ORIGINS` and that cookies are allowed by the browser.
-- If socket updates do not arrive in production, verify that `VITE_SOCKET_URL` is correct or that the backend origin can be derived from `VITE_API_BASE_URL`.
-- If media uploads fail, confirm the Cloudinary variables are set and the file is within the configured size limit.
-- If the app keeps returning `401 Unauthorized`, clear the `chat-user` item from `localStorage` and sign in again.
-- The Vite proxy only applies during local development. It is not used after building the frontend for production.
-
-## Contributing
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Open a pull request
-
 ## Author
-Rashim Sunar<br/>
+
+Rashim Sunar  
 MERN Stack Developer
