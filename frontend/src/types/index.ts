@@ -12,6 +12,7 @@ export interface User {
   gender: Gender;
   profilePic?: string;
   publicKey?: JsonWebKey | null;
+  backupEnabled?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -72,6 +73,8 @@ export interface LinkSecretReadyEventPayload {
 export type DeviceLinkStatus =
   | "checking"
   | "ready"
+  | "needs_restore"
+  | "restoring"
   | "pending"
   | "rejected"
   | "expired"
@@ -91,7 +94,12 @@ export interface DeviceLinkContextValue {
   status: DeviceLinkStatus;
   sessionId: string | null;
   error: string | null;
+  backupEnabled: boolean;
+  isEnablingBackup: boolean;
   incomingRequests: LinkRequestEventPayload[];
+  startDeviceLinking: () => Promise<void>;
+  restoreFromBackup: (password: string) => Promise<void>;
+  enableBackup: (password: string) => Promise<void>;
   approveRequest: (sessionId: string) => Promise<void>;
   rejectRequest: (sessionId: string) => Promise<void>;
   clearRequest: (sessionId: string) => void;

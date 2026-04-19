@@ -19,6 +19,7 @@ Client responsibilities:
 - Upload public key to backend
 - Encrypt text before send
 - Decrypt encrypted text after receive/fetch
+- Optionally encrypt and upload private-key backup envelope (ciphertext only)
 - Start device-linking flow when a newly authenticated device has no local private key
 
 Server responsibilities:
@@ -48,12 +49,21 @@ Receiver:
 ## 4. Device Linking and Login Gating (Implemented)
 Device linking now preserves E2EE continuity when users sign in on additional devices.
 
+If encrypted backup is enabled, users can restore without waiting for an approved device.
+
 New device flow:
 1. User authenticates with account credentials.
 2. Client checks IndexedDB for local private key.
-3. If missing and account already has server-side public key, client creates temporary RSA key pair.
-4. Client creates a link session and moves to pending state.
-5. Chat access remains gated until encrypted key transfer completes.
+3. If missing and account already has server-side public key, client shows restore gate.
+4. User can either restore with backup password or start device linking.
+5. Chat access remains gated until local private key is restored.
+
+Backup restore flow:
+1. Client fetches encrypted backup envelope from GET /api/backup.
+2. User enters backup password.
+3. Client derives key with PBKDF2 and decrypts private key locally with AES-GCM.
+4. Decrypted key is validated/imported and stored in IndexedDB.
+5. App transitions to ready state and unlocks chat.
 
 Trusted device flow:
 1. Receives real-time link request.
@@ -116,12 +126,11 @@ Zero-knowledge constraint:
 - Private keys and decrypted transfer secrets remain client-side
 
 ## 7. Current Limitations
-- No encrypted private-key backup/recovery mechanism yet
-- Additional device approval requires an already trusted active device
+- Backup is optional; accounts without backup still require trusted-device approval
+- If backup password is lost and no approved device remains, recovery is not possible
 - Existing legacy plaintext messages remain as-is unless migrated
 
 ## 8. Future Improvements
-- Encrypted private-key backup with user passphrase
 - Trusted-device management UI (list/revoke/rename)
 - Transfer conversation/session keys instead of private key bundle
 - Forward secrecy with ephemeral session keys and ratcheting
@@ -148,6 +157,10 @@ Backend link-session endpoints:
 - POST /api/link-session/complete
 - GET /api/link-session/status/:sessionId
 - GET /api/link-session/:sessionId
+
+Backend backup endpoints:
+- POST /api/backup/enable
+- GET /api/backup
 
 Encrypted message payload fields:
 - encryptedMessage
