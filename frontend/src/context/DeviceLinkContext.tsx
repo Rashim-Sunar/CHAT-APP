@@ -512,7 +512,6 @@ export const DeviceLinkProvider = ({ children }: DeviceLinkProviderProps) => {
       if (status !== "ready") return;
 
       setIncomingRequests((prev) => uniqueRequests([...prev, payload]));
-      toast((payload.deviceInfo?.label || "A new device") + " is requesting access");
     };
 
     // Reflects terminal session status changes pushed by server.
