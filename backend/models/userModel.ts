@@ -16,6 +16,11 @@ export interface IUser {
   gender: Gender;
   profilePic?: string;
   publicKey?: Record<string, unknown>;
+  encryptedPrivateKey?: string;
+  backupSalt?: string;
+  backupIv?: string;
+  backupEnabled: boolean;
+  backupUpdatedAt?: Date;
 }
 
 // Extends IUser with mongoose document and custom methods
@@ -59,6 +64,31 @@ const userSchema = new mongoose.Schema<IUser>(
     // the client, which keeps the server unable to decrypt E2EE messages.
     publicKey: {
       type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    // Encrypted backup blob for private key recovery; server stores ciphertext only.
+    encryptedPrivateKey: {
+      type: String,
+      default: null,
+    },
+    // Random salt for PBKDF2 key derivation, base64 encoded.
+    backupSalt: {
+      type: String,
+      default: null,
+    },
+    // AES-GCM IV used to encrypt private key backup, base64 encoded.
+    backupIv: {
+      type: String,
+      default: null,
+    },
+    // Indicates whether user has opted into encrypted private-key backup.
+    backupEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    // Timestamp for latest backup rotation/update.
+    backupUpdatedAt: {
+      type: Date,
       default: null,
     },
   },

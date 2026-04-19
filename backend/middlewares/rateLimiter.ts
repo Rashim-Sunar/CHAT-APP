@@ -107,3 +107,14 @@ export const linkSessionCreateLimiter: RateLimitRequestHandler = createLimiter({
   message:
     'Too many device linking attempts. Please wait a minute before trying again.',
 });
+
+// ----------------------------------------
+// Tier 5 — Backup Restore Fetch
+// Limits repeated backup fetch calls used before password-based local decrypt.
+// ----------------------------------------
+export const backupFetchLimiter: RateLimitRequestHandler = createLimiter({
+  windowMs: 5 * 60 * 1000,
+  limit: 20,
+  message:
+    'Too many backup restore attempts. Please wait a few minutes before trying again.',
+});
