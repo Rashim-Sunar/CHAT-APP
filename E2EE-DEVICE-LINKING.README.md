@@ -4,6 +4,10 @@
 
 Device linking allows a newly authenticated device to receive E2EE key material from an already approved device without exposing plaintext secrets to the server.
 
+This is now one of two recovery paths:
+- Password-based encrypted backup restore (if user enabled backup)
+- Device linking approval from an already trusted device
+
 Why this is needed:
 - Chat payloads are encrypted end-to-end.
 - A device without the correct private key cannot decrypt historical or incoming encrypted messages.
@@ -14,9 +18,15 @@ Why this is needed:
 ### Device2 (new login)
 1. User logs in successfully with account credentials.
 2. Client checks IndexedDB for an existing private key.
-3. If key is missing and server-side public key already exists, Device2 creates a temporary RSA key pair.
-4. Device2 sends tempPublicKey to POST /api/link-session/create.
-5. Device2 enters pending state and shows a waiting screen.
+3. If key is missing and server-side public key already exists, Device2 enters restore gate.
+4. User can choose:
+  - Restore with backup password (GET /api/backup + local decrypt)
+  - Use device linking (steps below)
+
+### Device2 (fallback to device linking)
+1. Device2 creates a temporary RSA key pair.
+2. Device2 sends tempPublicKey to POST /api/link-session/create.
+3. Device2 enters pending state and shows a waiting screen.
 
 ### Device1 (existing approved device)
 1. Device1 receives socket event link_request with sessionId and device metadata.
@@ -51,7 +61,9 @@ The app now enforces a two-layer login state:
 If no local private key exists:
 - Chat UI is blocked.
 - Message fetching/sending is effectively blocked because Home/chat modules are not mounted.
-- User sees: Waiting for approval from another device.
+- User sees restore options:
+  - Restore with backup password
+  - Use device linking (wait for approval)
 
 Security implication:
 - Authentication alone no longer grants data access.
@@ -76,13 +88,12 @@ Security implication:
 
 ## 5. Limitations
 
-- Requires an already approved device that still has local key material.
-- No backup recovery path is implemented in this flow.
-- If all approved devices are lost, key recovery is not possible with current design.
+- Device linking still requires an already approved device that has local key material.
+- If encrypted backup was never enabled, recovery still depends on trusted-device approval.
+- If backup password is lost and no approved devices exist, recovery is not possible.
 
 ## 6. Future Improvements
 
-- Encrypted key backup with user-controlled passphrase.
 - Better multi-device synchronization for session key material.
 - Transfer per-conversation/session keys instead of full private key export.
 - Add explicit device management UI (trusted devices, revoke, rename, last seen).
