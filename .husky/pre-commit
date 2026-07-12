@@ -1,0 +1,20 @@
+#!/usr/bin/env sh
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+printf "\n%b  🔍  Linting staged files...%b\n\n" "${BOLD}" "${RESET}"
+
+if ! npx lint-staged; then
+  printf "\n%b┌─────────────────────────────────────────────────┐%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b│              🚫  Commit blocked                  │%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b│                                                  │%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b│  Lint errors found in staged files.              │%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b│  Fix the errors above, stage the fixes, retry.  │%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b└─────────────────────────────────────────────────┘%b\n\n" "${RED}${BOLD}" "${RESET}"
+  exit 1
+fi
+
+printf "\n%b  ✔  All staged files passed — committing.%b\n\n" "${GREEN}${BOLD}" "${RESET}"
