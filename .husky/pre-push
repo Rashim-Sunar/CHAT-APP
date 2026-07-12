@@ -1,0 +1,111 @@
+#!/usr/bin/env sh
+
+# ── Colours ────────────────────────────────────────────────────────────────
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+RESET='\033[0m'
+
+# ── State ──────────────────────────────────────────────────────────────────
+FAILED=0
+FAILED_LIST=""
+
+# ── Helpers ────────────────────────────────────────────────────────────────
+section() { printf "\n%b  %s%b\n" "${BOLD}" "$1" "${RESET}"; }
+skip()    { printf "%b  ⏭  %s — skipped (no changes)%b\n" "${DIM}" "$1" "${RESET}"; }
+pass()    { printf "%b  ✔  %s%b\n" "${GREEN}" "$1" "${RESET}"; }
+
+fail() {
+  printf "%b  ✘  %s%b\n" "${RED}" "$1" "${RESET}"
+  FAILED=1
+  FAILED_LIST="${FAILED_LIST}
+    •  $1"
+}
+
+run_check() {
+  LABEL="$1"; shift
+  printf "%b  ▶  %s%b\n" "${CYAN}" "$LABEL" "${RESET}"
+  if "$@" > /tmp/husky_prepush.log 2>&1; then
+    pass "$LABEL"
+  else
+    fail "$LABEL"
+    # Print last 20 lines of output indented
+    printf "%b" "${DIM}"
+    tail -20 /tmp/husky_prepush.log | sed 's/^/         /'
+    printf "%b\n" "${RESET}"
+  fi
+}
+
+# ── Detect which workspaces changed ────────────────────────────────────────
+FRONTEND_CHANGED=false
+BACKEND_CHANGED=false
+
+while IFS=' ' read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
+
+  # Branch deletion — nothing to check
+  [ "$LOCAL_SHA" = "0000000000000000000000000000000000000000" ] && exit 0
+
+  # New remote branch — compare against earliest common ancestor on any remote
+  if [ "$REMOTE_SHA" = "0000000000000000000000000000000000000000" ]; then
+    BASE=$(git rev-list --remotes --ancestry-path --max-count=1 "$LOCAL_SHA" 2>/dev/null \
+           || git rev-list --max-parents=0 HEAD | tail -n 1)
+  else
+    BASE="$REMOTE_SHA"
+  fi
+
+  CHANGED=$(git diff --name-only "$BASE" "$LOCAL_SHA" 2>/dev/null || true)
+
+  echo "$CHANGED" | grep -qE '^frontend/' && FRONTEND_CHANGED=true
+  echo "$CHANGED" | grep -qE '^backend/'  && BACKEND_CHANGED=true
+done
+
+# ── Header ─────────────────────────────────────────────────────────────────
+printf "\n%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b\n" "${BOLD}${CYAN}" "${RESET}"
+printf "%b  🚀  Pre-push checks%b\n" "${BOLD}${CYAN}" "${RESET}"
+printf "%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b\n" "${BOLD}${CYAN}" "${RESET}"
+
+# Nothing relevant changed
+if [ "$FRONTEND_CHANGED" = "false" ] && [ "$BACKEND_CHANGED" = "false" ]; then
+  printf "\n%b  ⏭  No workspace files changed — skipping all checks.%b\n\n" "${DIM}" "${RESET}"
+  exit 0
+fi
+
+# ── Frontend ───────────────────────────────────────────────────────────────
+if [ "$FRONTEND_CHANGED" = "true" ]; then
+  section "Frontend"
+  run_check "Frontend / Lint"  npm run lint  --prefix frontend
+  run_check "Frontend / Build" npm run build --prefix frontend
+else
+  skip "Frontend"
+fi
+
+# ── Backend ────────────────────────────────────────────────────────────────
+if [ "$BACKEND_CHANGED" = "true" ]; then
+  section "Backend"
+  run_check "Backend / Build"           npm run build --prefix backend
+  run_check "Backend / Security Audit"  npm audit --audit-level=high --prefix backend
+else
+  skip "Backend"
+fi
+
+# ── Result ─────────────────────────────────────────────────────────────────
+printf "\n"
+
+if [ "$FAILED" = "1" ]; then
+  printf "%b┌─────────────────────────────────────────────────┐%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b│              🚫  Push blocked                   │%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b│                                                  │%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b│  Fix the following checks and push again:        │%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b└─────────────────────────────────────────────────┘%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b%s%b\n" "${RED}" "$FAILED_LIST" "${RESET}"
+  printf "\n%b  Emergency bypass (CI will still catch it):%b\n" "${YELLOW}" "${RESET}"
+  printf "%b  git push --no-verify%b\n\n" "${DIM}" "${RESET}"
+  exit 1
+fi
+
+printf "%b┌─────────────────────────────────────────────────┐%b\n" "${GREEN}${BOLD}" "${RESET}"
+printf "%b│           ✔  All checks passed — pushing!       │%b\n" "${GREEN}${BOLD}" "${RESET}"
+printf "%b└─────────────────────────────────────────────────┘%b\n\n" "${GREEN}${BOLD}" "${RESET}"

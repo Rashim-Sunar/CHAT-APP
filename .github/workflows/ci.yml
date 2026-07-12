@@ -7,12 +7,18 @@ name: CI
       - 'frontend/**'
       - 'backend/**'
       - '.github/workflows/**'
+      - '.husky/**'
+      - 'package.json'
+      - '*.mjs'
   pull_request:
     branches: [master]
     paths:
       - 'frontend/**'
       - 'backend/**'
       - '.github/workflows/**'
+      - '.husky/**'
+      - 'package.json'
+      - '*.mjs'
 
 # Cancel any in-progress run for the same branch/PR when a new push arrives
 concurrency:
