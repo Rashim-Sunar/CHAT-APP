@@ -1,0 +1,256 @@
+name: CI
+
+"on":
+  push:
+    branches: [master]
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - '.github/workflows/**'
+
+# Cancel any in-progress run for the same branch/PR when a new push arrives
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # ── Detect which packages changed ──────────────────────────────
+  changes:
+    name: 'Detect Changes'
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend:  ${{ steps.filter.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed packages
+        id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE_SHA="${{ github.event.before }}"
+            HEAD_SHA="${{ github.sha }}"
+          fi
+
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            BASE_SHA="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
+          fi
+
+          CHANGED="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)"
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          echo "$CHANGED" | grep -qE '^frontend/' && echo "frontend=true" >> "$GITHUB_OUTPUT" || echo "frontend=false" >> "$GITHUB_OUTPUT"
+          echo "$CHANGED" | grep -qE '^backend/'  && echo "backend=true"  >> "$GITHUB_OUTPUT" || echo "backend=false"  >> "$GITHUB_OUTPUT"
+
+  # ── Frontend ────────────────────────────────────────────────────
+  fe-lint:
+    name: 'Frontend / Lint'
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+  fe-build:
+    name: 'Frontend / Build'
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check & Vite build
+        run: npm run build
+
+  # ── Backend ─────────────────────────────────────────────────────
+  be-build:
+    name: 'Backend / Build'
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript compile
+        run: npm run build
+
+  be-audit:
+    name: 'Backend / Security Audit'
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm audit
+        run: npm audit --audit-level=high
+
+  # ── PR Summary Comment ──────────────────────────────────────────
+  report:
+    name: PR Report
+    if: always() && github.event_name == 'pull_request'
+    needs: [changes, fe-lint, fe-build, be-build, be-audit]
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const changed = {
+              frontend: '${{ needs.changes.outputs.frontend }}' === 'true',
+              backend:  '${{ needs.changes.outputs.backend }}'  === 'true',
+            };
+
+            const r = {
+              feLint  : '${{ needs.fe-lint.result }}',
+              feBuild : '${{ needs.fe-build.result }}',
+              beBuild : '${{ needs.be-build.result }}',
+              beAudit : '${{ needs.be-audit.result }}',
+            };
+
+            const failed = [
+              r.feLint  !== 'success' && r.feLint  !== 'skipped' && 'Frontend / Lint',
+              r.feBuild !== 'success' && r.feBuild !== 'skipped' && 'Frontend / Build',
+              r.beBuild !== 'success' && r.beBuild !== 'skipped' && 'Backend / Build',
+              r.beAudit !== 'success' && r.beAudit !== 'skipped' && 'Backend / Security Audit',
+            ].filter(Boolean);
+
+            const icon  = (v) => ({ success: '✅', failure: '❌', cancelled: '⚠️', skipped: '⏭️' })[v] ?? '❓';
+            const box   = (v) => v === 'success' ? '[x]' : '[ ]';
+            const label = (changed, result) => changed ? icon(result) + ' ' + result : '⏭️ skipped (no changes)';
+
+            const run_url = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+
+            const warning = failed.length
+              ? '> [!WARNING]\n> CI checks failed: ' + failed.join(', ') + '. Fix these before requesting a review — this PR is blocked from merging.\n'
+              : '';
+
+            const lines = [
+              '<!-- ci-summary -->',
+              warning,
+              '## CI Summary',
+              '',
+              '> _Add a short description of what this PR changes (max 3 sentences)._',
+              '',
+              '### Automated checks',
+              '',
+              '| Area | Check | Status |',
+              '|------|-------|--------|',
+              '| Frontend | `npm run lint` | '  + label(changed.frontend, r.feLint)  + ' |',
+              '| Frontend | `npm run build` | ' + label(changed.frontend, r.feBuild) + ' |',
+              '| Backend  | `npm run build` | ' + label(changed.backend,  r.beBuild) + ' |',
+              '| Backend  | `npm audit` | '     + label(changed.backend,  r.beAudit) + ' |',
+              '',
+              '<details>',
+              '<summary>Manual checklist (fill in before requesting review)</summary>',
+              '',
+              '- ' + box(r.feLint)  + ' Frontend lint passes with 0 warnings',
+              '- ' + box(r.feBuild) + ' Frontend builds without errors',
+              '- ' + box(r.beBuild) + ' Backend compiles without errors',
+              '- ' + box(r.beAudit) + ' No high-severity vulnerabilities',
+              '- [ ] `npm run dev` starts and the page loads in the browser',
+              '- [ ] Feature works end-to-end on desktop',
+              '- [ ] No visual regressions on mobile (tested via DevTools)',
+              '- [ ] No console errors in the browser',
+              '',
+              '</details>',
+              '',
+              '[View full run ↗](' + run_url + ')',
+            ];
+
+            const body = lines.join('\n');
+            const marker = '<!-- ci-summary -->';
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
