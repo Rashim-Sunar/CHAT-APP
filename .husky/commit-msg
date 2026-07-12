@@ -1,0 +1,37 @@
+#!/usr/bin/env sh
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+RESET='\033[0m'
+
+printf "\n%b  📝  Validating commit message...%b\n\n" "${BOLD}" "${RESET}"
+
+if ! npx --no -- commitlint --edit "$1" > /tmp/husky_commitmsg.log 2>&1; then
+  printf "%b" "${RED}"
+  cat /tmp/husky_commitmsg.log
+  printf "%b" "${RESET}"
+
+  printf "\n%b┌─────────────────────────────────────────────────┐%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b│              🚫  Commit blocked                  │%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b│                                                  │%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b│  Commit message does not follow convention.      │%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b│                                                  │%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b│  Format:  type(scope): subject                   │%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b│                                                  │%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b│  Examples:                                       │%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b│    feat(auth): add login with google             │%b\n" "${DIM}" "${RESET}"
+  printf "%b│    fix(tours): correct price display format      │%b\n" "${DIM}" "${RESET}"
+  printf "%b│    chore: update dependencies                    │%b\n" "${DIM}" "${RESET}"
+  printf "%b│    docs: add api endpoint documentation          │%b\n" "${DIM}" "${RESET}"
+  printf "%b│                                                  │%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b│  Valid types:                                    │%b\n" "${RED}${BOLD}" "${RESET}"
+  printf "%b│  feat fix docs style refactor perf              │%b\n" "${CYAN}" "${RESET}"
+  printf "%b│  test build ci chore revert                     │%b\n" "${CYAN}" "${RESET}"
+  printf "%b└─────────────────────────────────────────────────┘%b\n\n" "${RED}${BOLD}" "${RESET}"
+  exit 1
+fi
+
+printf "%b  ✔  Commit message is valid.%b\n\n" "${GREEN}${BOLD}" "${RESET}"
