@@ -17,6 +17,7 @@ This codebase demonstrates engineering depth across security, realtime architect
 - [E2EE Overview](E2EE.README.md)
 - [E2EE Device Linking and Login Gating](E2EE-DEVICE-LINKING.README.md)
 - [E2EE Encrypted Key Backup and Recovery](E2EE-BACKUP.README.md)
+- [Docker Usage](DOCKER.README.md)
 
 ## Security Highlights (Key Strength)
 
@@ -235,6 +236,7 @@ CHAT_APP/
 |  |- socket/
 |  |- types/
 |  |- Utils/
+|  |- Dockerfile
 |- frontend/
 |  |- src/
 |  |  |- components/
@@ -246,9 +248,14 @@ CHAT_APP/
 |  |  |- types/
 |  |  |- zustand/
 |  |- public/
+|  |- Dockerfile
+|  |- nginx.conf
+|- docker-compose.yml
+|- docker-compose.prod.yml
 |- E2EE.README.md
 |- E2EE-DEVICE-LINKING.README.md
 |- E2EE-BACKUP.README.md
+|- DOCKER.README.md
 |- README.md
 ```
 
