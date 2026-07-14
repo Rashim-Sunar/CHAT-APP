@@ -5,6 +5,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -163,28 +164,28 @@ export const DeviceLinkProvider = ({ children }: DeviceLinkProviderProps) => {
    * Used before starting/restarting polls and during cleanup to avoid
    * duplicate polling loops and stale state updates.
    */
-  const clearPolling = () => {
+  const clearPolling = useCallback(() => {
     if (pollingHandleRef.current) {
       window.clearInterval(pollingHandleRef.current);
       pollingHandleRef.current = null;
     }
-  };
+  }, []);
 
   /**
    * Removes one approval request from local pending-request state.
    * Used after approve/reject actions or manual dismissal to keep
    * trusted-device prompt list synchronized with user intent.
    */
-  const clearRequest = (targetSessionId: string) => {
+  const clearRequest = useCallback((targetSessionId: string) => {
     setIncomingRequests((prev) => prev.filter((request) => request.sessionId !== targetSessionId));
-  };
+  }, []);
 
   /**
    * Starts a new device-link session for users restoring without backup password.
    * Used from the restore gate when local private key is missing and another
    * approved device must relay encrypted key material.
    */
-  const startDeviceLinking = async (): Promise<void> => {
+  const startDeviceLinking = useCallback(async (): Promise<void> => {
     if (!userId) return;
 
     setError(null);
@@ -213,14 +214,14 @@ export const DeviceLinkProvider = ({ children }: DeviceLinkProviderProps) => {
       setError(getErrorMessage(linkError));
       tempPrivateKeyRef.current = null;
     }
-  };
+  }, [userId]);
 
   /**
    * Restores private key from server-stored encrypted backup blob.
    * Used on new devices; all decryption stays local so password and plaintext
    * private key are never transmitted to backend endpoints.
    */
-  const restoreFromBackup = async (password: string): Promise<void> => {
+  const restoreFromBackup = useCallback(async (password: string): Promise<void> => {
     if (!userId) return;
 
     setStatus("restoring");
@@ -282,14 +283,14 @@ export const DeviceLinkProvider = ({ children }: DeviceLinkProviderProps) => {
       clearPolling();
       throw new Error(normalizedMessage);
     }
-  };
+  }, [userId, authUser, clearPolling]);
 
   /**
    * Creates one-time encrypted private-key backup for future password restore.
    * Called only from explicit user action while unlocked so the password is
    * used locally for encryption and never sent to the backend.
    */
-  const enableBackup = async (password: string): Promise<void> => {
+  const enableBackup = useCallback(async (password: string): Promise<void> => {
     if (!userId) {
       throw new Error("You must be logged in to enable backup.");
     }
@@ -330,14 +331,14 @@ export const DeviceLinkProvider = ({ children }: DeviceLinkProviderProps) => {
     } finally {
       setIsEnablingBackup(false);
     }
-  };
+  }, [userId, backupEnabled, setAuthUser]);
 
   /**
    * Rejects a pending link-session request from a trusted device.
    * Used when user denies access for a new device; this prevents any
    * encrypted key relay for that session and surfaces immediate UI feedback.
    */
-  const rejectRequest = async (targetSessionId: string): Promise<void> => {
+  const rejectRequest = useCallback(async (targetSessionId: string): Promise<void> => {
     try {
       await apiFetch<{ status: "success" | "fail"; message?: string }>("/link-session/respond", {
         method: "POST",
@@ -349,14 +350,14 @@ export const DeviceLinkProvider = ({ children }: DeviceLinkProviderProps) => {
     } catch (requestError: unknown) {
       toast.error(getErrorMessage(requestError));
     }
-  };
+  }, [clearRequest]);
 
   /**
    * Approves a pending link session and relays encrypted key material.
    * Used on trusted devices; private key remains local and only encrypted
    * transfer payload is sent so server stays zero-knowledge.
    */
-  const approveRequest = async (targetSessionId: string): Promise<void> => {
+  const approveRequest = useCallback(async (targetSessionId: string): Promise<void> => {
     if (!userId) return;
 
     try {
@@ -399,7 +400,7 @@ export const DeviceLinkProvider = ({ children }: DeviceLinkProviderProps) => {
     } catch (requestError: unknown) {
       toast.error(getErrorMessage(requestError));
     }
-  };
+  }, [userId, clearRequest]);
 
   useEffect(() => {
     let cancelled = false;
@@ -454,7 +455,7 @@ export const DeviceLinkProvider = ({ children }: DeviceLinkProviderProps) => {
       cancelled = true;
       clearPolling();
     };
-  }, [userId, userHasServerPublicKey]);
+  }, [userId, userHasServerPublicKey, clearPolling]);
 
   useEffect(() => {
     // Polls link-session state while request is pending to recover from missed
@@ -500,7 +501,7 @@ export const DeviceLinkProvider = ({ children }: DeviceLinkProviderProps) => {
     return () => {
       clearPolling();
     };
-  }, [sessionId, status]);
+  }, [sessionId, status, clearPolling]);
 
   useEffect(() => {
     // Subscribes to link workflow socket events for real-time approve/reject
@@ -596,7 +597,7 @@ export const DeviceLinkProvider = ({ children }: DeviceLinkProviderProps) => {
       socket.off("link_session_updated", onLinkSessionUpdated);
       socket.off("link_secret_ready", onLinkSecretReady);
     };
-  }, [socket, status, sessionId, userId]);
+  }, [socket, status, sessionId, userId, clearPolling]);
 
   // Exposes a stable context value so consumers re-render only when relevant
   // workflow state/actions change.
@@ -623,6 +624,11 @@ export const DeviceLinkProvider = ({ children }: DeviceLinkProviderProps) => {
       isEnablingBackup,
       incomingRequests,
       startDeviceLinking,
+      restoreFromBackup,
+      enableBackup,
+      approveRequest,
+      rejectRequest,
+      clearRequest,
     ]
   );
 
