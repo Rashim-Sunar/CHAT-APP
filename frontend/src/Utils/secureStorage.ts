@@ -67,21 +67,23 @@ const openKeyDatabase = (): Promise<IDBDatabase> =>
 // - Wrapping in a Promise provides consistent error semantics across all operations
 // - Ensures database close() is called to release connection resources
 // - Catches synchronous errors (e.g., invalid transaction mode) in try/catch
-const runStoreRequest = <T>(
+const runStoreRequest = async <T>(
   mode: IDBTransactionMode,
   // handler: callback that receives an IDBObjectStore and returns an IDBRequest
   // The handler is responsible for constructing the actual put/get/delete operation
   handler: (store: IDBObjectStore) => IDBRequest<T>
-): Promise<T> =>
-  new Promise(async (resolve, reject) => {
+): Promise<T> => {
+  // Step 1: Open database connection (creates if needed). Awaited here, outside
+  // the Promise executor below, so a rejection propagates naturally instead of
+  // requiring an async executor (which can silently swallow errors).
+  const database = await openKeyDatabase();
+
+  return new Promise<T>((resolve, reject) => {
     try {
-      // Step 1: Open database connection (creates if needed)
-      const database = await openKeyDatabase();
-      
       // Step 2: Begin transaction with specified mode (readonly or readwrite)
       const transaction = database.transaction(KEY_STORE, mode);
       const store = transaction.objectStore(KEY_STORE);
-      
+
       // Step 3: Delegate to handler to construct the actual IDBRequest operation
       const request = handler(store);
 
@@ -109,6 +111,7 @@ const runStoreRequest = <T>(
       reject(error);
     }
   });
+};
 
 // ============================================================================
 // Public API - Key Pair Storage Operations
