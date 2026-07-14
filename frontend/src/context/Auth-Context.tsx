@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -95,8 +96,9 @@ export const AuthContextProvider = ({ children }: AuthContextProviderProps) => {
 
   /**
    * Applies auth state and persistence atomically through a single write path.
+   * Memoized so effects that depend on it don't re-run every render.
    */
-  const applyAuthState = (nextAuthUser: AuthResponse | null): void => {
+  const applyAuthState = useCallback((nextAuthUser: AuthResponse | null): void => {
     if (nextAuthUser?.data?.user?._id) {
       localStorage.setItem("chat-user", JSON.stringify(nextAuthUser));
       setAuthUser(nextAuthUser);
@@ -105,34 +107,37 @@ export const AuthContextProvider = ({ children }: AuthContextProviderProps) => {
 
     localStorage.removeItem("chat-user");
     setAuthUser(null);
-  };
+  }, []);
 
   /**
    * Revalidates server session and updates local state.
    * Optional short retries smooth out startup/cookie propagation races.
    */
-  const validateSession = async (retryDelaysMs: number[] = []): Promise<void> => {
-    if (sessionCheckInFlightRef.current) return;
+  const validateSession = useCallback(
+    async (retryDelaysMs: number[] = []): Promise<void> => {
+      if (sessionCheckInFlightRef.current) return;
 
-    sessionCheckInFlightRef.current = true;
-    setLoading(true);
+      sessionCheckInFlightRef.current = true;
+      setLoading(true);
 
-    try {
-      let sessionAuthUser = await fetchCurrentSession().catch(() => null);
+      try {
+        let sessionAuthUser = await fetchCurrentSession().catch(() => null);
 
-      // Covers brief races where session cookies are not yet consistently readable.
-      for (const delay of retryDelaysMs) {
-        if (sessionAuthUser) break;
-        await sleep(delay);
-        sessionAuthUser = await fetchCurrentSession().catch(() => null);
+        // Covers brief races where session cookies are not yet consistently readable.
+        for (const delay of retryDelaysMs) {
+          if (sessionAuthUser) break;
+          await sleep(delay);
+          sessionAuthUser = await fetchCurrentSession().catch(() => null);
+        }
+
+        applyAuthState(sessionAuthUser);
+      } finally {
+        sessionCheckInFlightRef.current = false;
+        setLoading(false);
       }
-
-      applyAuthState(sessionAuthUser);
-    } finally {
-      sessionCheckInFlightRef.current = false;
-      setLoading(false);
-    }
-  };
+    },
+    [applyAuthState]
+  );
 
   useEffect(() => {
     // Startup strategy: if cache exists, validate it; otherwise clear state immediately.
@@ -145,7 +150,7 @@ export const AuthContextProvider = ({ children }: AuthContextProviderProps) => {
     }
 
     void validateSession([250, 450]);
-  }, []);
+  }, [applyAuthState, validateSession]);
 
   useEffect(() => {
     // apiFetch dispatches this event on 401 responses from any API consumer.
@@ -164,7 +169,7 @@ export const AuthContextProvider = ({ children }: AuthContextProviderProps) => {
     return () => {
       window.removeEventListener("auth:unauthorized", handleUnauthorized);
     };
-  }, []);
+  }, [applyAuthState, validateSession]);
 
   useEffect(() => {
     // Clears conversation-scoped client state when user identity changes.
