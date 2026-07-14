@@ -48,9 +48,9 @@ while IFS=' ' read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
   # Branch deletion — nothing to check
   [ "$LOCAL_SHA" = "0000000000000000000000000000000000000000" ] && exit 0
 
-  # New remote branch — compare against earliest common ancestor on any remote
+  # New remote branch — compare against where it diverged from origin/master
   if [ "$REMOTE_SHA" = "0000000000000000000000000000000000000000" ]; then
-    BASE=$(git rev-list --remotes --ancestry-path --max-count=1 "$LOCAL_SHA" 2>/dev/null \
+    BASE=$(git merge-base "$LOCAL_SHA" origin/master 2>/dev/null \
            || git rev-list --max-parents=0 HEAD | tail -n 1)
   else
     BASE="$REMOTE_SHA"
