@@ -108,7 +108,7 @@ export const uploadToCloudinary = async (
             secure_url: string;
           };
           resolve(response.secure_url);
-        } catch (error) {
+        } catch {
           reject(new Error("Upload succeeded but response parsing failed"));
         }
       } else {
