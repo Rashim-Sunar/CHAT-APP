@@ -16,6 +16,7 @@ import type {
   CreateUploadSignatureDto,
   DeleteMessageDto,
   EditMessageDto,
+  ReactToMessageDto,
   SendMessageDto,
 } from '../types/dtos/message.js';
 import { getCloudinary } from '../Utils/cloudinary.js';
@@ -35,6 +36,11 @@ const getFileFormat = (fileName: string): string => {
   // Cloudinary's private_download_url requires a format hint for raw assets.
   // If a file has no extension, fall back to a generic binary payload.
   return extension || 'bin';
+};
+
+type RealtimeMessageReaction = {
+  userId: string;
+  emoji: string;
 };
 
 type RealtimeMessagePayload = {
@@ -57,6 +63,9 @@ type RealtimeMessagePayload = {
   editedAt: Date | null;
   deletedForEveryone: boolean;
   deletedFor: string[];
+  reactions: RealtimeMessageReaction[];
+  replyTo: string | null;
+  forwarded: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -146,6 +155,19 @@ const buildRealtimePayload = (
   const editedAt =
     (messageDoc as unknown as { editedAt?: Date | null }).editedAt || null;
   const visibleText = deletedForEveryone ? MESSAGE_DELETED_TEXT : normalizedText;
+  const rawReactions = Array.isArray(
+    (messageDoc as unknown as { reactions?: Array<{ userId: unknown; emoji: unknown }> }).reactions
+  )
+    ? ((messageDoc as unknown as { reactions?: Array<{ userId: unknown; emoji: unknown }> })
+        .reactions as Array<{ userId: unknown; emoji: unknown }>)
+    : [];
+  const reactions: RealtimeMessageReaction[] = rawReactions
+    .filter((reaction) => typeof reaction?.emoji === 'string')
+    .map((reaction) => ({ userId: String(reaction.userId), emoji: String(reaction.emoji) }));
+  const replyTo = (messageDoc as unknown as { replyTo?: unknown }).replyTo
+    ? String((messageDoc as unknown as { replyTo?: unknown }).replyTo)
+    : null;
+  const forwarded = Boolean((messageDoc as unknown as { forwarded?: boolean }).forwarded);
 
   return {
     _id: String(messageDoc._id),
@@ -170,6 +192,9 @@ const buildRealtimePayload = (
     editedAt,
     deletedForEveryone,
     deletedFor,
+    reactions,
+    replyTo,
+    forwarded,
     createdAt: messageDoc.createdAt,
     updatedAt: messageDoc.updatedAt,
   };
@@ -285,7 +310,7 @@ const getMessageConversation = async (messageId: string): Promise<ConversationDo
 // Fan out message mutation events to both participants and dedupe when sender
 // and receiver resolve to the same socket id (multi-tab and reconnect edge cases).
 const emitMessageUpdateToParticipants = (
-  eventName: 'message:edit' | 'message:delete',
+  eventName: 'message:edit' | 'message:delete' | 'message:reaction',
   payload: RealtimeMessagePayload
 ): void => {
   const senderSocketId = getReceiverSocketId(payload.senderId);
@@ -464,6 +489,21 @@ export const sendMessage = async (
       })) as ConversationDocument;
     }
 
+    // A reply must reference a message that's already part of *this* same
+    // conversation — otherwise silently drop it rather than trusting a
+    // cross-conversation ID the client could have fabricated.
+    let validatedReplyTo: string | undefined;
+    if (payload.replyTo) {
+      const referencedMessageId = String(payload.replyTo);
+      const belongsToConversation = conversation.messages.some(
+        (existingMessageId) => String(existingMessageId) === referencedMessageId
+      );
+
+      if (belongsToConversation) {
+        validatedReplyTo = referencedMessageId;
+      }
+    }
+
     // Persist exactly one message document shape for all message types.
     // For E2EE text, encryptedMessage/encryptedAESKey/iv are stored as-is.
     // The server is intentionally blind and never decrypts or rewrites ciphertext.
@@ -480,6 +520,8 @@ export const sendMessage = async (
       fileSize: payload.fileSize,
       mimeType: payload.mimeType,
       publicId: payload.publicId,
+      replyTo: validatedReplyTo,
+      forwarded: Boolean(payload.forwarded),
     });
 
     // Link message to conversation
@@ -693,8 +735,19 @@ export const deleteMessage = async (
       return;
     }
 
-    if (String(message.senderId) !== senderId) {
-      res.status(403).json({ error: 'You can only delete your own messages' });
+    const isSender = String(message.senderId) === senderId;
+    const isReceiver = String(message.receiverId) === senderId;
+
+    if (deleteType === 'everyone') {
+      // Only the original sender may remove a message for both participants.
+      if (!isSender) {
+        res.status(403).json({ error: 'You can only delete your own messages for everyone' });
+        return;
+      }
+    } else if (!isSender && !isReceiver) {
+      // "me" only hides the message from the requester's own view, so either
+      // participant may do this — but the requester must belong to the conversation.
+      res.status(403).json({ error: 'You are not a participant in this conversation' });
       return;
     }
 
@@ -783,6 +836,95 @@ export const deleteMessage = async (
   } catch (error: unknown) {
     console.log(
       'Error in deleteMessage controller:',
+      error instanceof Error ? error.message : String(error)
+    );
+
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Reactions aren't part of the E2EE guarantee (unlike message text), so a
+// generous but bounded length check is enough to stop garbage/abuse input —
+// compound emoji sequences (skin tone + ZWJ family combos) can run long.
+const MAX_EMOJI_LENGTH = 32;
+
+/**
+ * Adds, replaces, or removes the requester's reaction on a message.
+ * - Same emoji as the requester's existing reaction: removed (toggle off).
+ * - Different emoji: replaces the requester's existing reaction.
+ * - No existing reaction: adds a new one.
+ * Any conversation participant (sender or receiver) may react.
+ */
+export const reactToMessage = async (
+  req: AuthenticatedRequest<{ id: string }, unknown, ReactToMessageDto>,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id: messageId } = req.params;
+    const requesterId = String(req.user);
+    const emoji = req.body.emoji?.trim();
+
+    if (!emoji || emoji.length > MAX_EMOJI_LENGTH) {
+      res.status(400).json({ error: 'A valid emoji is required' });
+      return;
+    }
+
+    const message = (await Message.findById(messageId)) as MessageDocument | null;
+    if (!message) {
+      res.status(404).json({ error: 'Message not found' });
+      return;
+    }
+
+    const isSender = String(message.senderId) === requesterId;
+    const isReceiver = String(message.receiverId) === requesterId;
+    if (!isSender && !isReceiver) {
+      res.status(403).json({ error: 'You are not a participant in this conversation' });
+      return;
+    }
+
+    if (message.deletedForEveryone) {
+      res.status(400).json({ error: 'Deleted messages cannot be reacted to' });
+      return;
+    }
+
+    const conversation = await getMessageConversation(messageId);
+    if (!conversation) {
+      res.status(404).json({ error: 'Conversation not found' });
+      return;
+    }
+
+    const existingReactions = Array.isArray(message.reactions) ? message.reactions : [];
+    const existingReaction = existingReactions.find(
+      (reaction) => String(reaction.userId) === requesterId
+    );
+
+    if (existingReaction && existingReaction.emoji === emoji) {
+      // Same emoji tapped again: remove (toggle off).
+      message.reactions = existingReactions.filter(
+        (reaction) => String(reaction.userId) !== requesterId
+      );
+    } else {
+      // No reaction yet, or a different emoji: add/replace.
+      const otherReactions = existingReactions.filter(
+        (reaction) => String(reaction.userId) !== requesterId
+      );
+      message.reactions = [...otherReactions, { userId: new Types.ObjectId(requesterId), emoji }];
+    }
+
+    await message.save();
+
+    const messageWithTimestamps = message as MessageDocument & {
+      createdAt: Date;
+      updatedAt: Date;
+    };
+    const realtimeMessagePayload = buildRealtimePayload(messageWithTimestamps, String(conversation._id));
+
+    emitMessageUpdateToParticipants('message:reaction', realtimeMessagePayload);
+
+    res.status(200).json({ updatedMessage: realtimeMessagePayload });
+  } catch (error: unknown) {
+    console.log(
+      'Error in reactToMessage controller:',
       error instanceof Error ? error.message : String(error)
     );
 

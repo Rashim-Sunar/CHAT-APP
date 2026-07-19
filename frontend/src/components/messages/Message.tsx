@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { HiOutlineDotsVertical } from "react-icons/hi";
-import { FiCheck, FiEdit2, FiTrash2 } from "react-icons/fi";
+import { FiCheck, FiEdit2, FiTrash2, FiCornerUpLeft, FiCornerUpRight } from "react-icons/fi";
 import { useAuthContext } from "../../context/Auth-Context";
 import useConversation from "../../zustand/useConversation";
 import { getConversationKey } from "../../Utils/conversationKey";
 import { extractTime } from "../../Utils/extractTime";
 import Avatar from "../common/Avatar";
 import MediaPreviewModal from "../common/MediaPreviewModal";
+import MessageReactionBar from "./MessageReactionBar";
 import {
   downloadFileWithFallback,
   getCloudinaryAttachmentUrl,
@@ -21,6 +22,7 @@ import {
 import type { Message as ChatMessage } from "../../types";
 import useMessageActions from "../../hooks/useMessageActions";
 import MessageDeleteModal from "./MessageDeleteModal";
+import ForwardMessageModal from "./ForwardMessageModal";
 
 interface MessageProps {
   message: ChatMessage;
@@ -28,9 +30,11 @@ interface MessageProps {
 
 const Message = ({ message }: MessageProps) => {
   const { authUser } = useAuthContext();
-  const { selectedConversation, messagesByConversation } = useConversation();
-  const { editMessage, deleteMessage, isBusy, canEdit, canDelete } = useMessageActions(message);
+  const { selectedConversation, messagesByConversation, setReplyTarget } = useConversation();
+  const { editMessage, deleteMessage, reactToMessage, isBusy, canEdit, canDelete, canDeleteForEveryone } =
+    useMessageActions(message);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
   const editInputRef = useRef<HTMLInputElement | null>(null);
   const sender = authUser?.data?.user;
   const currentUserId = sender?._id;
@@ -44,10 +48,16 @@ const Message = ({ message }: MessageProps) => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [draftText, setDraftText] = useState(message.text || message.message || "");
   const [isImagePreviewOpen, setIsImagePreviewOpen] = useState(false);
+  // The trigger button always sits at the bubble's top-right corner, so the
+  // dropdown defaults to opening from the right (directly under it). Only
+  // narrow bubbles positioned near the viewport's left edge (short received
+  // messages) can push it off-screen — detected and flipped after mount.
+  const [dropdownAlign, setDropdownAlign] = useState<"right" | "left">("right");
+  const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
 
   const formattedTime = extractTime(message.createdAt);
-  const canOpenActions = fromMe && canDelete && !message.deletedForEveryone;
-  const canEditText = canOpenActions && canEdit && message.messageType === "text";
+  const canOpenActions = canDelete && !message.deletedForEveryone;
+  const canEditText = canOpenActions && fromMe && canEdit && message.messageType === "text";
   const selectedConversationSeenAt = selectedConversation?.seenAt ? new Date(selectedConversation.seenAt) : null;
 
   const latestOutgoingMessageId = (() => {
@@ -64,6 +74,53 @@ const Message = ({ message }: MessageProps) => {
 
     return undefined;
   })();
+
+  // Reply previews are resolved purely client-side from the already-loaded
+  // (and, for text, already-decrypted) local message cache — the server never
+  // stores a plaintext snapshot of the quoted content.
+  const repliedMessage = message.replyTo
+    ? currentConversationMessages.find((candidate) => candidate._id === message.replyTo) || null
+    : null;
+
+  const renderQuotedPreview = () => {
+    if (!message.replyTo) return null;
+
+    if (!repliedMessage) {
+      return (
+        <div className="mb-1 rounded-lg border-l-2 border-slate-300 bg-slate-50 px-2 py-1 text-xs italic text-slate-400">
+          Original message unavailable
+        </div>
+      );
+    }
+
+    const isRepliedFromMe = String(repliedMessage.senderId) === String(currentUserId);
+    const repliedSenderName = isRepliedFromMe ? "You" : selectedConversation?.userName || "them";
+    const repliedSnippet = repliedMessage.deletedForEveryone
+      ? DELETED_MESSAGE_TEXT
+      : repliedMessage.messageType === "image"
+        ? "Photo"
+        : repliedMessage.messageType === "video"
+          ? "Video"
+          : repliedMessage.messageType === "file"
+            ? repliedMessage.fileName || "File"
+            : getMessageBodyText(repliedMessage);
+
+    return (
+      <div className="mb-1 max-w-full rounded-lg border-l-2 border-indigo-400 bg-slate-50 px-2 py-1">
+        <p className="truncate text-xs font-semibold text-indigo-600">{repliedSenderName}</p>
+        <p className="truncate text-xs text-slate-500">{repliedSnippet}</p>
+      </div>
+    );
+  };
+
+  const groupedReactions = (message.reactions || []).reduce<Record<string, string[]>>(
+    (accumulator, reaction) => {
+      accumulator[reaction.emoji] = accumulator[reaction.emoji] || [];
+      accumulator[reaction.emoji].push(reaction.userId);
+      return accumulator;
+    },
+    {}
+  );
 
   const showSeenIndicator = Boolean(
     fromMe &&
@@ -98,6 +155,27 @@ const Message = ({ message }: MessageProps) => {
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, []);
+
+  useLayoutEffect(() => {
+    if (!isMenuOpen) {
+      setDropdownAlign("right");
+      return;
+    }
+
+    const dropdownEl = dropdownRef.current;
+    if (!dropdownEl) return;
+
+    // Compare against the scrollable messages container's own boundary, not
+    // the browser viewport — that container clips with overflow-x-hidden, so
+    // it (not x=0) is where the dropdown actually gets cut off.
+    const rect = dropdownEl.getBoundingClientRect();
+    const scrollContainer = dropdownEl.closest<HTMLElement>("[data-messages-scroll-container]");
+    const boundaryLeft = scrollContainer ? scrollContainer.getBoundingClientRect().left : 0;
+
+    if (rect.left < boundaryLeft) {
+      setDropdownAlign("left");
+    }
+  }, [isMenuOpen]);
 
   if (hiddenForCurrentUser) {
     return null;
@@ -285,7 +363,23 @@ const Message = ({ message }: MessageProps) => {
 
       <div ref={menuRef} className="relative max-w-xs md:max-w-md">
         <div className="relative">
+          {message.forwarded && !message.deletedForEveryone && (
+            <div className="mb-1 flex items-center gap-1 text-xs italic text-slate-400">
+              <FiCornerUpRight size={12} />
+              Forwarded
+            </div>
+          )}
+          {renderQuotedPreview()}
           {renderMessageBody()}
+
+          {canOpenActions && !isEditing && (
+            <div className="absolute -top-2 right-6 flex items-center gap-1">
+              <MessageReactionBar
+                align={fromMe ? "right" : "left"}
+                onSelectEmoji={(emoji) => void reactToMessage(emoji)}
+              />
+            </div>
+          )}
 
           {canOpenActions && !isEditing && (
             <button
@@ -299,7 +393,36 @@ const Message = ({ message }: MessageProps) => {
           )}
 
           {isMenuOpen && canOpenActions && !isEditing && (
-            <div className="absolute right-0 top-10 z-20 w-44 rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
+            <div
+              ref={dropdownRef}
+              className={`absolute top-10 z-20 w-44 rounded-xl border border-slate-200 bg-white p-1 shadow-xl ${
+                dropdownAlign === "right" ? "right-0" : "left-0"
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setReplyTarget(message);
+                  closeActionMenu();
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-100"
+              >
+                <FiCornerUpLeft size={14} />
+                Reply
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsForwardModalOpen(true);
+                  closeActionMenu();
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-100"
+              >
+                <FiCornerUpRight size={14} />
+                Forward
+              </button>
+
               {canEditText && (
                 <button
                   type="button"
@@ -328,6 +451,30 @@ const Message = ({ message }: MessageProps) => {
           )}
         </div>
 
+        {Object.keys(groupedReactions).length > 0 && (
+          <div className={`mt-1 flex flex-wrap gap-1 ${fromMe ? "justify-end" : "justify-start"}`}>
+            {Object.entries(groupedReactions).map(([emoji, userIds]) => {
+              const isOwnReaction = Boolean(currentUserId && userIds.includes(currentUserId));
+
+              return (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => void reactToMessage(emoji)}
+                  className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition ${
+                    isOwnReaction
+                      ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  <span>{emoji}</span>
+                  {userIds.length > 1 && <span className="font-medium">{userIds.length}</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div className="mt-1 flex items-center justify-end gap-2 text-xs text-slate-400">
           <span>{formattedTime}</span>
           {isMessageEdited(message) && <span className="italic text-slate-400">(edited)</span>}
@@ -350,6 +497,7 @@ const Message = ({ message }: MessageProps) => {
         onClose={() => setIsDeleteModalOpen(false)}
         onDeleteForMe={() => void handleDelete("me")}
         onDeleteForEveryone={() => void handleDelete("everyone")}
+        canDeleteForEveryone={canDeleteForEveryone}
         isDeleting={isBusy}
       />
 
@@ -359,6 +507,12 @@ const Message = ({ message }: MessageProps) => {
           onClose={() => setIsImagePreviewOpen(false)}
         />
       )}
+
+      <ForwardMessageModal
+        isOpen={isForwardModalOpen}
+        message={message}
+        onClose={() => setIsForwardModalOpen(false)}
+      />
     </div>
   );
 };

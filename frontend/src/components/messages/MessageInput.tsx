@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { BsFillSendFill } from "react-icons/bs";
-import { FiImage, FiFileText, FiVideo, FiPlay, FiX, FiAlertCircle, FiCheck } from "react-icons/fi";
+import { FiImage, FiFileText, FiVideo, FiPlay, FiX, FiAlertCircle, FiCheck, FiCornerUpLeft } from "react-icons/fi";
 import useSendMessage from "../../hooks/useSendMessage";
 import useConversation from "../../zustand/useConversation";
+import { useAuthContext } from "../../context/Auth-Context";
 import { validateFileForUpload } from "../../Utils/mediaValidation";
+import { getMessageBodyText } from "../../Utils/messageDisplay";
 import toast from "react-hot-toast";
 import type { UploadJob } from "../../types";
 
@@ -41,24 +43,34 @@ const CircularProgress = ({ progress, size = 32, strokeWidth = 3 }: CircularProg
 
 const MessageInput = () => {
   const { loading, sendMessage, sendFiles } = useSendMessage();
+  const { authUser } = useAuthContext();
   const uploadQueue = useConversation((state) => state.uploadQueue);
+  const selectedConversation = useConversation((state) => state.selectedConversation);
+  const replyTarget = useConversation((state) => state.replyTarget);
+  const setReplyTarget = useConversation((state) => state.setReplyTarget);
   const [message, setMessage] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+
+  const currentUserId = authUser?.data?.user?._id;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!message.trim() && selectedFiles.length === 0) return;
 
+    const replyTo = replyTarget?._id;
+
     if (message.trim()) {
-      await sendMessage(message);
+      await sendMessage(message, replyTo);
       setMessage("");
     }
 
     if (selectedFiles.length > 0) {
-      await sendFiles(selectedFiles);
+      await sendFiles(selectedFiles, replyTo);
       setSelectedFiles([]);
     }
+
+    setReplyTarget(null);
   };
 
   const handleFileSelection = (event: ChangeEvent<HTMLInputElement>) => {
@@ -111,8 +123,43 @@ const MessageInput = () => {
     return map;
   }, [uploadQueue]);
 
+  const replySnippet = replyTarget
+    ? replyTarget.deletedForEveryone
+      ? "This message was deleted"
+      : replyTarget.messageType === "image"
+        ? "Photo"
+        : replyTarget.messageType === "video"
+          ? "Video"
+          : replyTarget.messageType === "file"
+            ? replyTarget.fileName || "File"
+            : getMessageBodyText(replyTarget)
+    : "";
+  const replySenderName = replyTarget
+    ? String(replyTarget.senderId) === String(currentUserId)
+      ? "You"
+      : selectedConversation?.userName || "them"
+    : "";
+
   return (
     <div className="p-4 space-y-3">
+      {replyTarget && (
+        <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+          <FiCornerUpLeft className="shrink-0 text-indigo-500" size={16} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold text-indigo-600">Replying to {replySenderName}</p>
+            <p className="truncate text-xs text-slate-500">{replySnippet}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReplyTarget(null)}
+            aria-label="Cancel reply"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600"
+          >
+            <FiX size={14} />
+          </button>
+        </div>
+      )}
+
       {filePreviews.length > 0 && (
         <div className="flex flex-wrap gap-2.5">
           {filePreviews.map(({ file, url }) => {
