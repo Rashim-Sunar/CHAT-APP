@@ -10,11 +10,11 @@ import {
 } from "react-icons/bi";
 import useConversation from "../../zustand/useConversation";
 import useGetConversations from "../../hooks/useGetConversations";
-import { getAvatarByGender } from "../../Utils/getAvatarByGender";
 import { useAuthContext } from "../../context/Auth-Context";
 import useLogout from "../../hooks/useLogout";
 import useUserProfile from "../../hooks/useUserProfile";
 import ProfileModal from "../sidebar/ProfileModal";
+import Avatar from "../common/Avatar";
 
 const MobileConversationBar = () => {
   const { conversations } = useGetConversations();
@@ -75,8 +75,10 @@ const MobileConversationBar = () => {
             className="relative w-9 h-9 rounded-full overflow-hidden border border-slate-200"
           >
             {currentUser ? (
-              <img
-                src={currentUser.profilePic || getAvatarByGender(currentUser.gender)}
+              <Avatar
+                src={currentUser.profilePic}
+                gender={currentUser.gender}
+                name={currentUser.userName}
                 alt={`${currentUser.userName}'s profile picture`}
                 className="w-full h-full object-cover"
               />
@@ -102,7 +104,6 @@ const MobileConversationBar = () => {
       <div className="flex overflow-x-auto px-4 pb-4 gap-4 no-scrollbar">
         {filteredConversations.map((conversation) => {
           const isSelected = activeConversationId === conversation._id;
-          const avatarSrc = conversation.profilePic || getAvatarByGender(conversation.gender);
 
           return (
             <div
@@ -114,8 +115,10 @@ const MobileConversationBar = () => {
                 className={`w-14 h-14 rounded-full overflow-hidden border-2
                   ${isSelected ? "border-indigo-600" : "border-transparent"}`}
               >
-                <img
-                  src={avatarSrc}
+                <Avatar
+                  src={conversation.profilePic}
+                  gender={conversation.gender}
+                  name={conversation.userName}
                   alt="avatar"
                   className="w-full h-full object-cover"
                 />
@@ -154,8 +157,10 @@ const MobileConversationBar = () => {
             <div className="px-4 py-5 border-b border-slate-100 flex items-center gap-3">
               <div className="w-12 h-12 rounded-full overflow-hidden border border-slate-200">
                 {currentUser ? (
-                  <img
-                    src={currentUser.profilePic || getAvatarByGender(currentUser.gender)}
+                  <Avatar
+                    src={currentUser.profilePic}
+                    gender={currentUser.gender}
+                    name={currentUser.userName}
                     alt="Your profile picture"
                     className="w-full h-full object-cover"
                   />
