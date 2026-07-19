@@ -6,6 +6,7 @@ import useConversation from "../../zustand/useConversation";
 import { getConversationKey } from "../../Utils/conversationKey";
 import { extractTime } from "../../Utils/extractTime";
 import Avatar from "../common/Avatar";
+import MediaPreviewModal from "../common/MediaPreviewModal";
 import {
   downloadFileWithFallback,
   getCloudinaryAttachmentUrl,
@@ -42,6 +43,7 @@ const Message = ({ message }: MessageProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [draftText, setDraftText] = useState(message.text || message.message || "");
+  const [isImagePreviewOpen, setIsImagePreviewOpen] = useState(false);
 
   const formattedTime = extractTime(message.createdAt);
   const canOpenActions = fromMe && canDelete && !message.deletedForEveryone;
@@ -170,13 +172,18 @@ const Message = ({ message }: MessageProps) => {
 
     if (message.messageType === "image" && message.fileUrl) {
       return (
-        <a href={message.fileUrl} target="_blank" rel="noreferrer" className="block">
+        <button
+          type="button"
+          onClick={() => setIsImagePreviewOpen(true)}
+          className="block cursor-zoom-in"
+          aria-label="Open image preview"
+        >
           <img
             src={message.fileUrl}
             alt={message.fileName || "Shared image"}
             className="max-h-72 w-auto rounded-xl object-cover"
           />
-        </a>
+        </button>
       );
     }
 
@@ -345,6 +352,13 @@ const Message = ({ message }: MessageProps) => {
         onDeleteForEveryone={() => void handleDelete("everyone")}
         isDeleting={isBusy}
       />
+
+      {message.messageType === "image" && message.fileUrl && (
+        <MediaPreviewModal
+          item={isImagePreviewOpen ? { type: "image", url: message.fileUrl } : null}
+          onClose={() => setIsImagePreviewOpen(false)}
+        />
+      )}
     </div>
   );
 };

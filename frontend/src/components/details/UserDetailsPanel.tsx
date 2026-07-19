@@ -4,6 +4,7 @@ import { FiChevronDown, FiChevronUp, FiDownload, FiFileText, FiImage, FiLink2, F
 import useConversation from "../../zustand/useConversation";
 import useUserDetails from "../../hooks/useUserDetails";
 import Avatar from "../common/Avatar";
+import MediaPreviewModal from "../common/MediaPreviewModal";
 import { useSocketContext } from "../../context/SocketContext";
 import type { SharedDocumentItem, SharedLinkItem, SharedMediaItem } from "../../types";
 
@@ -387,49 +388,7 @@ const UserDetailsPanel = ({ isOpen, onClose, variant = "desktop" }: UserDetailsP
         )}
       </div>
 
-      <AnimatePresence>
-        {previewItem && (
-          <motion.div
-            className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setPreviewItem(null)}
-            role="dialog"
-            aria-modal="true"
-          >
-            <motion.div
-              className="relative max-w-3xl w-full max-h-[85vh]"
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <button
-                type="button"
-                onClick={() => setPreviewItem(null)}
-                className="absolute -top-10 right-0 h-8 w-8 rounded-lg bg-white/20 hover:bg-white/30 text-white flex items-center justify-center"
-                aria-label="Close media preview"
-              >
-                <FiX />
-              </button>
-
-              {previewItem.type === "image" ? (
-                <img
-                  src={previewItem.url}
-                  alt="Preview shared media"
-                  className="w-full max-h-[85vh] rounded-xl object-contain bg-black"
-                />
-              ) : (
-                <video controls autoPlay className="w-full max-h-[85vh] rounded-xl bg-black">
-                  <source src={previewItem.url} type="video/mp4" />
-                </video>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <MediaPreviewModal item={previewItem} onClose={() => setPreviewItem(null)} />
     </motion.aside>
   );
 
