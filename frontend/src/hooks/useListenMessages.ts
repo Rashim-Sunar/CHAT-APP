@@ -188,6 +188,25 @@ const useListenMessages = () => {
       }
     };
 
+    // Reaction payloads carry the full message shape (including blank `text`
+    // for E2EE messages), so — like edits — this must decrypt-if-needed
+    // before merging, otherwise it would blank out already-decrypted text.
+    const onMessageReaction = (updatedMessage: Message) => {
+      if (!currentUserId) return;
+
+      void (async () => {
+        const hydratedMessage = await decryptMessageIfNeeded(updatedMessage, currentUserId);
+
+        const conversationKey = getConversationKey(
+          hydratedMessage?.senderId,
+          hydratedMessage?.receiverId
+        );
+        if (!conversationKey || !hydratedMessage?._id) return;
+
+        updateMessageInConversation(conversationKey, hydratedMessage._id, hydratedMessage);
+      })();
+    };
+
     const onConversationSeen = (payload: { conversationId: string; readerId: string; seenAt: string }) => {
       if (!currentUserId) return;
       markConversationSeen(payload.conversationId, payload.readerId, payload.seenAt, currentUserId);
@@ -197,12 +216,14 @@ const useListenMessages = () => {
     socket.on("conversation:seen", onConversationSeen);
     socket.on("message:edit", onMessageEdit);
     socket.on("message:delete", onMessageDelete);
+    socket.on("message:reaction", onMessageReaction);
 
     return () => {
       socket.off("newMessage", onNewMessage);
       socket.off("conversation:seen", onConversationSeen);
       socket.off("message:edit", onMessageEdit);
       socket.off("message:delete", onMessageDelete);
+      socket.off("message:reaction", onMessageReaction);
     };
   }, [
     socket,

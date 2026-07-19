@@ -114,7 +114,7 @@ const useSendMessage = () => {
     * @param {string} message The text content to send.
     * @returns {Promise<void>} Resolves after the message has been accepted or an error has been shown.
    */
-  const sendMessage = async (message: string): Promise<void> => {
+  const sendMessage = async (message: string, replyTo?: string): Promise<void> => {
     if (!selectedConversation?._id || !currentUserId) return;
 
     setLoading(true);
@@ -131,6 +131,7 @@ const useSendMessage = () => {
       await sendPayload({
         messageType: "text",
         ...encryptedPayload,
+        replyTo,
       });
     } catch (error: unknown) {
       toast.error(getErrorMessage(error));
@@ -150,7 +151,10 @@ const useSendMessage = () => {
   * @param {FileList | File[] | null | undefined} fileList Files selected by the user.
   * @returns {Promise<void>} Resolves after all upload and send attempts have settled.
    */
-  const sendFiles = async (fileList: FileList | File[] | null | undefined): Promise<void> => {
+  const sendFiles = async (
+    fileList: FileList | File[] | null | undefined,
+    replyTo?: string
+  ): Promise<void> => {
     if (!selectedConversation?._id || !fileList?.length) return;
 
     const files = Array.from(fileList);
@@ -192,7 +196,7 @@ const useSendMessage = () => {
 
           const mediaMessagePayload = result.value;
           // Message creation can still fail after upload (API/network/auth errors).
-          await sendPayload(mediaMessagePayload);
+          await sendPayload({ ...mediaMessagePayload, replyTo });
           updateUploadJob(job.id, { status: "completed", progress: 100 });
         })
       );
