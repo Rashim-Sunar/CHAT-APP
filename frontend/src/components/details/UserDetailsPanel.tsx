@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { FiChevronDown, FiChevronUp, FiDownload, FiFileText, FiImage, FiLink2, FiX } from "react-icons/fi";
 import useConversation from "../../zustand/useConversation";
 import useUserDetails from "../../hooks/useUserDetails";
-import { getAvatarByGender } from "../../Utils/getAvatarByGender";
+import Avatar from "../common/Avatar";
 import { useSocketContext } from "../../context/SocketContext";
 import type { SharedDocumentItem, SharedLinkItem, SharedMediaItem } from "../../types";
 
@@ -220,7 +220,6 @@ const UserDetailsPanel = ({ isOpen, onClose, variant = "desktop" }: UserDetailsP
   const { onlineUsers } = useSocketContext();
   const { details, loading, error, refetch } = useUserDetails();
   const [previewItem, setPreviewItem] = useState<SharedMediaItem | null>(null);
-  const [avatarBroken, setAvatarBroken] = useState(false);
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     media: true,
     links: false,
@@ -228,8 +227,6 @@ const UserDetailsPanel = ({ isOpen, onClose, variant = "desktop" }: UserDetailsP
   });
 
   const baseAvatar = details?.user?.profilePic || selectedConversation?.profilePic || "";
-  const fallbackAvatar = getAvatarByGender(selectedConversation?.gender);
-  const profilePic = !avatarBroken && baseAvatar ? baseAvatar : fallbackAvatar;
   const userName = details?.user?.username || selectedConversation?.userName || "User";
   const isOnline = selectedConversation?._id ? onlineUsers.includes(selectedConversation._id) : false;
   const mediaItems = details?.media || [];
@@ -249,10 +246,6 @@ const UserDetailsPanel = ({ isOpen, onClose, variant = "desktop" }: UserDetailsP
       setPreviewItem(null);
     }
   }, [showPanel]);
-
-  useEffect(() => {
-    setAvatarBroken(false);
-  }, [baseAvatar]);
 
   useEffect(() => {
     setOpenSections({
@@ -321,11 +314,13 @@ const UserDetailsPanel = ({ isOpen, onClose, variant = "desktop" }: UserDetailsP
         )}
 
         <div className="flex flex-col items-center text-center">
-          <img
-            src={profilePic}
+          <Avatar
+            src={baseAvatar}
+            gender={selectedConversation?.gender}
+            name={userName}
             alt={`${userName} profile`}
             className="h-20 w-20 rounded-full object-cover border border-slate-200 shadow-sm"
-            onError={() => setAvatarBroken(true)}
+            textClassName="text-2xl"
           />
 
           <div className="mt-3 min-w-0">
@@ -439,7 +434,9 @@ const UserDetailsPanel = ({ isOpen, onClose, variant = "desktop" }: UserDetailsP
   );
 
   if (variant === "desktop") {
-    return <AnimatePresence>{panel}</AnimatePresence>;
+    // The parent (Home) owns mount/unmount and the collapse animation for the
+    // desktop layout, so this only needs its own slide-in on first mount.
+    return panel;
   }
 
   return (

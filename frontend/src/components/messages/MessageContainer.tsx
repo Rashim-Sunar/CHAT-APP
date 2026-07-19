@@ -1,20 +1,25 @@
 import { useEffect, useState } from "react";
 import { HiOutlineDotsVertical } from "react-icons/hi";
 import { IoArrowBack } from "react-icons/io5";
+import { TbLayoutSidebarRightCollapse, TbLayoutSidebarRightExpand } from "react-icons/tb";
 import Messages from "./Messages";
 import MessageInput from "./MessageInput";
 import useConversation from "../../zustand/useConversation";
-import { getAvatarByGender } from "../../Utils/getAvatarByGender";
 import { useAuthContext } from "../../context/Auth-Context";
 import UserDetailsPanel from "../details/UserDetailsPanel";
+import Avatar from "../common/Avatar";
 
-const MessageContainer = () => {
+interface MessageContainerProps {
+  desktopDetailsOpen: boolean;
+  onToggleDesktopDetails: () => void;
+}
+
+const MessageContainer = ({ desktopDetailsOpen, onToggleDesktopDetails }: MessageContainerProps) => {
   const { selectedConversation, setSelectedConversation } = useConversation();
   const { authUser } = useAuthContext();
   const currentUserId = authUser?.data?.user?._id;
 
   const [showDetails, setShowDetails] = useState(false);
-  const avatarSrc = selectedConversation?.profilePic || getAvatarByGender(selectedConversation?.gender);
 
   useEffect(() => {
     return () => setSelectedConversation(null, currentUserId);
@@ -43,8 +48,10 @@ const MessageContainer = () => {
             <IoArrowBack size={22} />
           </button>
 
-          <img
-            src={avatarSrc}
+          <Avatar
+            src={selectedConversation.profilePic}
+            gender={selectedConversation.gender}
+            name={selectedConversation.userName}
             alt="avatar"
             className="w-9 h-9 md:w-10 md:h-10 rounded-full object-cover"
           />
@@ -60,6 +67,19 @@ const MessageContainer = () => {
           aria-label="Open user details"
         >
           <HiOutlineDotsVertical size={20} />
+        </button>
+
+        <button
+          onClick={onToggleDesktopDetails}
+          className="hidden xl:flex text-slate-600 h-8 w-8 rounded-lg hover:bg-slate-100 items-center justify-center"
+          aria-label={desktopDetailsOpen ? "Hide user details panel" : "Show user details panel"}
+          title={desktopDetailsOpen ? "Hide details panel" : "Show details panel"}
+        >
+          {desktopDetailsOpen ? (
+            <TbLayoutSidebarRightCollapse size={20} />
+          ) : (
+            <TbLayoutSidebarRightExpand size={20} />
+          )}
         </button>
       </div>
 
