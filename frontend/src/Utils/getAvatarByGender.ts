@@ -1,17 +1,16 @@
-import maleAvatar from "../assets/male.png";
-import femaleAvatar from "../assets/female-avatar.jpg";
 import type { Gender } from "../types";
 
-// Use a predictable avatar fallback so missing or partial profile data still renders cleanly.
-export const getAvatarByGender = (gender?: Gender | string | null): string => {
-  if (!gender) return maleAvatar;
-
-  // Accept the typed union as well as older string values coming from persisted data.
-  const normalized = String(gender).toLowerCase();
+// Dynamically imported (rather than a static top-level import) so these default
+// avatar images are code-split out of the main bundle and only fetched over the
+// network when a fallback is actually needed.
+export const loadGenderAvatar = async (gender?: Gender | string | null): Promise<string> => {
+  const normalized = gender ? String(gender).toLowerCase() : "";
 
   if (normalized === "female" || normalized === "f") {
+    const { default: femaleAvatar } = await import("../assets/female-avatar.jpg");
     return femaleAvatar;
   }
 
+  const { default: maleAvatar } = await import("../assets/male.png");
   return maleAvatar;
 };

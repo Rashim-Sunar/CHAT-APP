@@ -26,11 +26,11 @@ import {
 } from "react-icons/bi";
 import useLogout from "../../hooks/useLogout";
 import useUserProfile from "../../hooks/useUserProfile";
-import { getAvatarByGender } from "../../Utils/getAvatarByGender";
 import Conversations from "./Conversations";
 import ProfileModal from "./ProfileModal";
 import SearchInput from "./SearchInput";
 import UserProfileControl from "./UserProfileControl";
+import Avatar from "../common/Avatar";
 
 const Sidebar = () => {
   const { authUser } = useAuthContext();
@@ -81,8 +81,10 @@ const Sidebar = () => {
           <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3">
             <div className="w-12 h-12 rounded-full overflow-hidden border border-slate-200">
               {user ? (
-                <img
-                  src={user.profilePic || getAvatarByGender(user.gender)}
+                <Avatar
+                  src={user.profilePic}
+                  gender={user.gender}
+                  name={user.userName}
                   alt="Your profile picture"
                   className="w-full h-full object-cover"
                 />

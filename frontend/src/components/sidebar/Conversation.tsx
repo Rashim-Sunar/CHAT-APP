@@ -1,9 +1,9 @@
 import { useSocketContext } from "../../context/SocketContext";
 import useConversation from "../../zustand/useConversation";
-import { getAvatarByGender } from "../../Utils/getAvatarByGender";
 import { useAuthContext } from "../../context/Auth-Context";
 import { getConversationKey } from "../../Utils/conversationKey";
 import { DELETED_MESSAGE_TEXT } from "../../Utils/messageDisplay";
+import Avatar from "../common/Avatar";
 import type { Conversation } from "../../types";
 
 interface ConversationProps {
@@ -22,7 +22,6 @@ const ConversationItem = ({ conversation }: ConversationProps) => {
   const isOnline = onlineUsers.includes(conversation._id);
   const conversationKey = getConversationKey(conversation._id, currentUserId);
   const unreadCount = conversationKey ? unreadByConversation[conversationKey] || 0 : 0;
-  const avatarSrc = conversation.profilePic || getAvatarByGender(conversation.gender);
   const isCurrentUserLastSender = Boolean(
     currentUserId &&
       conversation.lastMessageSenderId &&
@@ -53,8 +52,10 @@ const ConversationItem = ({ conversation }: ConversationProps) => {
                   ${isSelected ? "bg-indigo-50" : "hover:bg-slate-100"}`}
     >
       <div className="relative">
-        <img
-          src={avatarSrc}
+        <Avatar
+          src={conversation.profilePic}
+          gender={conversation.gender}
+          name={conversation.userName}
           alt="avatar"
           className="w-11 h-11 rounded-full object-cover"
         />

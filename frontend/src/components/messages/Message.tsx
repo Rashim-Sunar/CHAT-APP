@@ -5,7 +5,7 @@ import { useAuthContext } from "../../context/Auth-Context";
 import useConversation from "../../zustand/useConversation";
 import { getConversationKey } from "../../Utils/conversationKey";
 import { extractTime } from "../../Utils/extractTime";
-import { getAvatarByGender } from "../../Utils/getAvatarByGender";
+import Avatar from "../common/Avatar";
 import {
   downloadFileWithFallback,
   getCloudinaryAttachmentUrl,
@@ -42,10 +42,6 @@ const Message = ({ message }: MessageProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [draftText, setDraftText] = useState(message.text || message.message || "");
-
-  const profilePic = fromMe
-    ? getAvatarByGender(sender?.gender)
-    : getAvatarByGender(selectedConversation?.gender);
 
   const formattedTime = extractTime(message.createdAt);
   const canOpenActions = fromMe && canDelete && !message.deletedForEveryone;
@@ -270,7 +266,15 @@ const Message = ({ message }: MessageProps) => {
       event.preventDefault();
       setIsMenuOpen(true);
     }}>
-      {!fromMe && <img src={profilePic} className="mr-2 h-8 w-8 rounded-full" alt="avatar" />}
+      {!fromMe && (
+        <Avatar
+          src={selectedConversation?.profilePic}
+          gender={selectedConversation?.gender}
+          name={selectedConversation?.userName}
+          alt="avatar"
+          className="mr-2 h-8 w-8 rounded-full"
+        />
+      )}
 
       <div ref={menuRef} className="relative max-w-xs md:max-w-md">
         <div className="relative">
