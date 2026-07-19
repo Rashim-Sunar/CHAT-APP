@@ -37,7 +37,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { BiX, BiArrowBack } from "react-icons/bi";
-import { getAvatarByGender } from "../../Utils/getAvatarByGender";
+import { loadGenderAvatar } from "../../Utils/getAvatarByGender";
+import { getInitial } from "../../Utils/getInitial";
 import type { User } from "../../types";
 
 type ModalMode = "view" | "edit-name" | "upload";
@@ -69,6 +70,9 @@ const ProfileModal = ({
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
+  const [profileImageFailed, setProfileImageFailed] = useState(false);
+  const [genderAvatarUrl, setGenderAvatarUrl] = useState<string | null>(null);
+  const [genderAvatarFailed, setGenderAvatarFailed] = useState(false);
   const minZoomPercent = 100;
   const maxZoomPercent = 400;
   const zoomStep = 10;
@@ -81,6 +85,32 @@ const ProfileModal = ({
     setPanOffset({ x: 0, y: 0 });
     setIsPanning(false);
   }, [initialMode, user]);
+
+  useEffect(() => {
+    setProfileImageFailed(false);
+  }, [user?.profilePic]);
+
+  // Only fetch the (code-split) default avatar when it's actually needed, i.e.
+  // there's no real profile picture or it failed to load.
+  useEffect(() => {
+    if (user?.profilePic && !profileImageFailed) return;
+
+    let cancelled = false;
+    setGenderAvatarUrl(null);
+    setGenderAvatarFailed(false);
+
+    loadGenderAvatar(user?.gender)
+      .then((url) => {
+        if (!cancelled) setGenderAvatarUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setGenderAvatarFailed(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.gender, user?.profilePic, profileImageFailed]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -97,7 +127,8 @@ const ProfileModal = ({
 
   if (!isOpen || !user) return null;
 
-  const avatarSrc = user.profilePic ? user.profilePic : getAvatarByGender(user.gender);
+  const showRealProfilePic = Boolean(user.profilePic) && !profileImageFailed;
+  const avatarSrc = showRealProfilePic ? (user.profilePic as string) : !genderAvatarFailed ? genderAvatarUrl : null;
 
   // Keep zoom changes bounded so the viewer stays usable and never renders
   // an image so small or so large that it becomes difficult to inspect.
@@ -297,18 +328,30 @@ const ProfileModal = ({
           onPointerLeave={handlePanEnd}
           style={{ touchAction: "none" }}
         >
-          <img
-            src={avatarSrc}
-            alt={`${user.userName}'s profile picture`}
-            draggable={false}
-            className={`select-none rounded-xl object-contain shadow-lg transition-transform duration-150 ${zoomPercent > minZoomPercent ? (isPanning ? "cursor-grabbing" : "cursor-grab") : "cursor-zoom-in"}`}
-            style={{
-              transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomPercent / 100})`,
-              transformOrigin: "center center",
-              maxWidth: "none",
-              maxHeight: "72vh",
-            }}
-          />
+          {avatarSrc ? (
+            <img
+              src={avatarSrc}
+              alt={`${user.userName}'s profile picture`}
+              draggable={false}
+              onError={() => (showRealProfilePic ? setProfileImageFailed(true) : setGenderAvatarFailed(true))}
+              className={`select-none rounded-xl object-contain shadow-lg transition-transform duration-150 ${zoomPercent > minZoomPercent ? (isPanning ? "cursor-grabbing" : "cursor-grab") : "cursor-zoom-in"}`}
+              style={{
+                transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomPercent / 100})`,
+                transformOrigin: "center center",
+                maxWidth: "none",
+                maxHeight: "72vh",
+              }}
+            />
+          ) : (
+            // Instant fallback while the default avatar loads (or if it fails too).
+            <div
+              role="img"
+              aria-label={`${user.userName}'s profile picture`}
+              className="flex h-40 w-40 select-none items-center justify-center rounded-xl bg-indigo-500 text-5xl font-semibold text-white shadow-lg"
+            >
+              {getInitial(user.userName)}
+            </div>
+          )}
         </div>
 
         {/* Zoom controls are kept outside the image container so the user can
