@@ -105,6 +105,12 @@ const useConversation = create<ConversationState>()((set, get) => ({
   unreadByConversation: {},
   uploadQueue: [],
   detailsRefreshVersion: 0,
+  replyTarget: null,
+
+  // Shared between Message.tsx (sets it via the action menu) and
+  // MessageInput.tsx (reads/clears it) — both are siblings, so the store
+  // avoids an awkward prop-drill through Messages.tsx.
+  setReplyTarget: (message) => set({ replyTarget: message }),
 
   // Opening a chat clears its unread badge and keeps both selected and active
   // conversation references aligned for downstream components.
@@ -121,12 +127,14 @@ const useConversation = create<ConversationState>()((set, get) => ({
         return {
           selectedConversation,
           activeChat: selectedConversation,
+          replyTarget: null,
         };
       }
 
       return {
         selectedConversation,
         activeChat: selectedConversation,
+        replyTarget: null,
         unreadByConversation: {
           ...state.unreadByConversation,
           [conversationKey]: 0,
@@ -298,6 +306,7 @@ const useConversation = create<ConversationState>()((set, get) => ({
       unreadByConversation: {},
       uploadQueue: [],
       detailsRefreshVersion: 0,
+      replyTarget: null,
     }),
 
   // Seed unread badges from API-provided unread counts after login/reload.

@@ -7,6 +7,11 @@ import mongoose, { Document, Types } from 'mongoose';
 
 export type MessageType = 'text' | 'image' | 'video' | 'file';
 
+export interface IMessageReaction {
+  userId: Types.ObjectId;
+  emoji: string;
+}
+
 export interface IMessage {
   senderId: Types.ObjectId;
   receiverId: Types.ObjectId;
@@ -24,6 +29,9 @@ export interface IMessage {
   editedAt?: Date;
   deletedForEveryone?: boolean;
   deletedFor?: Types.ObjectId[];
+  reactions?: IMessageReaction[];
+  replyTo?: Types.ObjectId;
+  forwarded?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -104,6 +112,28 @@ const messageSchema = new mongoose.Schema<IMessage>(
         ref: 'user',
       },
     ],
+    reactions: [
+      {
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'user',
+          required: true,
+        },
+        emoji: {
+          type: String,
+          required: true,
+        },
+        _id: false,
+      },
+    ],
+    replyTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'message',
+    },
+    forwarded: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true } // Adds createdAt & updatedAt for message tracking
 );

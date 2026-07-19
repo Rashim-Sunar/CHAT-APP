@@ -141,6 +141,56 @@ const useMessageActions = (message: Message) => {
   };
 
   /**
+   * Adds, replaces, or removes (toggle) the current user's reaction on this
+   * message. Optimistic like edit/delete, but deliberately doesn't set
+   * busyAction — reactions should feel instant, not gate the whole menu.
+   */
+  const reactToMessage = async (emoji: string): Promise<boolean> => {
+    if (!messageId || !conversationKey || !currentUserId) return false;
+
+    const trimmedEmoji = emoji.trim();
+    if (!trimmedEmoji) return false;
+
+    const previousMessages = snapshotMessages();
+    const existingReactions = message.reactions || [];
+    const existingReaction = existingReactions.find((reaction) => reaction.userId === currentUserId);
+
+    const optimisticReactions =
+      existingReaction && existingReaction.emoji === trimmedEmoji
+        ? existingReactions.filter((reaction) => reaction.userId !== currentUserId)
+        : [
+            ...existingReactions.filter((reaction) => reaction.userId !== currentUserId),
+            { userId: currentUserId, emoji: trimmedEmoji },
+          ];
+
+    updateMessageInConversation(conversationKey, messageId, { reactions: optimisticReactions });
+
+    try {
+      const data = await apiFetch<ApiErrorResponse & { updatedMessage?: Message }>(
+        `/messages/${messageId}/react`,
+        {
+          method: "POST",
+          body: JSON.stringify({ emoji: trimmedEmoji }),
+        }
+      );
+
+      if (data.error) {
+        throw new Error(data.error || "Failed to react to message");
+      }
+
+      if (data.updatedMessage) {
+        updateMessageInConversation(conversationKey, messageId, data.updatedMessage);
+      }
+
+      return true;
+    } catch (error: unknown) {
+      restoreMessages(previousMessages);
+      toast.error(getErrorMessage(error));
+      return false;
+    }
+  };
+
+  /**
    * Deletes a message for current user or all participants, with optimistic UI.
    * Falls back to snapshot rollback if server mutation fails.
    */
@@ -205,9 +255,13 @@ const useMessageActions = (message: Message) => {
     isEditing: busyAction === "edit",
     isDeleting: busyAction === "delete",
     canEdit: Boolean(messageId && currentUserId && String(message.senderId) === String(currentUserId)),
-    canDelete: Boolean(messageId && currentUserId && String(message.senderId) === String(currentUserId)),
+    // "Delete for me" hides a message from the requester's own view only, so
+    // either participant may do it. "Delete for everyone" stays sender-only.
+    canDelete: Boolean(messageId && currentUserId),
+    canDeleteForEveryone: Boolean(messageId && currentUserId && String(message.senderId) === String(currentUserId)),
     editMessage,
     deleteMessage,
+    reactToMessage,
   };
 };
 

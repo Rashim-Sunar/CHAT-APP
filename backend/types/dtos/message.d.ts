@@ -20,6 +20,8 @@ export interface SendMessageDto {
   fileSize?: number;
   mimeType?: string;
   publicId?: string;
+  replyTo?: string;
+  forwarded?: boolean;
 }
 
 /**
@@ -58,4 +60,11 @@ export interface EditMessageDto {
  */
 export interface DeleteMessageDto {
   type: 'me' | 'everyone';
+}
+
+/**
+ * @desc    Payload used to add/replace/remove the requester's reaction on a message.
+ */
+export interface ReactToMessageDto {
+  emoji: string;
 }

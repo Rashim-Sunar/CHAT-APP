@@ -83,7 +83,10 @@ const MessageContainer = ({ desktopDetailsOpen, onToggleDesktopDetails }: Messag
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 md:px-6 py-4 bg-slate-50 min-w-0">
+      <div
+        data-messages-scroll-container
+        className="flex-1 overflow-y-auto overflow-x-hidden px-4 md:px-6 py-4 bg-slate-50 min-w-0"
+      >
         <Messages />
       </div>
 
