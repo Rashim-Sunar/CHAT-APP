@@ -1,10 +1,43 @@
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { BsFillSendFill } from "react-icons/bs";
-import { FiImage, FiFileText, FiVideo } from "react-icons/fi";
+import { FiImage, FiFileText, FiVideo, FiPlay, FiX, FiAlertCircle, FiCheck } from "react-icons/fi";
 import useSendMessage from "../../hooks/useSendMessage";
 import useConversation from "../../zustand/useConversation";
 import { validateFileForUpload } from "../../Utils/mediaValidation";
 import toast from "react-hot-toast";
+import type { UploadJob } from "../../types";
+
+interface CircularProgressProps {
+  progress: number;
+  size?: number;
+  strokeWidth?: number;
+}
+
+// Compact ring indicator overlaid directly on a thumbnail while it uploads,
+// mirroring the in-place progress pattern chat apps like WhatsApp use.
+const CircularProgress = ({ progress, size = 32, strokeWidth = 3 }: CircularProgressProps) => {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (Math.min(Math.max(progress, 0), 100) / 100) * circumference;
+
+  return (
+    <svg width={size} height={size} className="-rotate-90">
+      <circle cx={size / 2} cy={size / 2} r={radius} stroke="rgba(255,255,255,0.3)" strokeWidth={strokeWidth} fill="none" />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        stroke="white"
+        strokeWidth={strokeWidth}
+        fill="none"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        className="transition-[stroke-dashoffset] duration-300 ease-out"
+      />
+    </svg>
+  );
+};
 
 const MessageInput = () => {
   const { loading, sendMessage, sendFiles } = useSendMessage();
@@ -53,52 +86,139 @@ const MessageInput = () => {
     setSelectedFiles((current) => current.filter((file) => file.name !== targetName));
   };
 
+  // Local object URLs for instant image/video thumbnails, revoked whenever the
+  // selection changes so we don't leak memory while the user is composing.
+  const filePreviews = useMemo(
+    () =>
+      selectedFiles.map((file) => ({
+        file,
+        url: file.type.startsWith("image/") || file.type.startsWith("video/") ? URL.createObjectURL(file) : null,
+      })),
+    [selectedFiles]
+  );
+
+  useEffect(() => {
+    return () => {
+      filePreviews.forEach(({ url }) => {
+        if (url) URL.revokeObjectURL(url);
+      });
+    };
+  }, [filePreviews]);
+
+  const uploadJobByFileName = useMemo(() => {
+    const map = new Map<string, UploadJob>();
+    uploadQueue.forEach((job) => map.set(job.fileName, job));
+    return map;
+  }, [uploadQueue]);
+
   return (
     <div className="p-4 space-y-3">
-      {selectedFiles.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {selectedFiles.map((file) => {
+      {filePreviews.length > 0 && (
+        <div className="flex flex-wrap gap-2.5">
+          {filePreviews.map(({ file, url }) => {
             const isImage = file.type.startsWith("image/");
             const isVideo = file.type.startsWith("video/");
+            const isMedia = isImage || isVideo;
+            const key = `${file.name}-${file.size}-${file.lastModified}`;
+            const uploadJob = uploadJobByFileName.get(file.name);
+            const isUploading = uploadJob?.status === "uploading";
+            const isCompleted = uploadJob?.status === "completed";
+            const isFailed = uploadJob?.status === "failed";
+            const progress = Math.min(uploadJob?.progress || 0, 100);
+
+            if (isMedia) {
+              return (
+                <div
+                  key={key}
+                  className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-sm"
+                >
+                  {isImage ? (
+                    <img src={url ?? undefined} alt={file.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <>
+                      <video src={url ?? undefined} className="h-full w-full object-cover" muted />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                        <FiPlay className="text-white drop-shadow" size={20} />
+                      </div>
+                    </>
+                  )}
+
+                  {!uploadJob && (
+                    <>
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-4 text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                        {file.name}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeSelectedFile(file.name)}
+                        aria-label={`Remove ${file.name}`}
+                        className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+                      >
+                        <FiX size={12} />
+                      </button>
+                    </>
+                  )}
+
+                  {isUploading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                      <CircularProgress progress={progress} />
+                    </div>
+                  )}
+
+                  {isCompleted && (
+                    <div className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white shadow">
+                      <FiCheck size={12} />
+                    </div>
+                  )}
+
+                  {isFailed && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-rose-900/70">
+                      <FiAlertCircle className="text-white" size={16} />
+                      <span className="text-[10px] font-semibold text-white">Failed</span>
+                    </div>
+                  )}
+                </div>
+              );
+            }
 
             return (
               <div
-                key={`${file.name}-${file.size}`}
-                className="flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-2 bg-slate-50"
+                key={key}
+                className="group relative flex max-w-[220px] items-center gap-2 rounded-xl border border-slate-200 bg-white py-2 pl-2.5 pr-8 shadow-sm"
               >
-                <div className="text-slate-500">
-                  {isImage ? <FiImage /> : isVideo ? <FiVideo /> : <FiFileText />}
-                </div>
-                <p className="text-xs text-slate-700 truncate flex-1">{file.name}</p>
-                <button
-                  type="button"
-                  className="text-xs text-rose-600"
-                  onClick={() => removeSelectedFile(file.name)}
+                <div
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                    isFailed ? "bg-rose-50 text-rose-500" : isCompleted ? "bg-emerald-50 text-emerald-600" : "bg-indigo-50 text-indigo-600"
+                  }`}
                 >
-                  Remove
-                </button>
+                  {isUploading ? (
+                    <CircularProgress progress={progress} size={22} strokeWidth={2.5} />
+                  ) : isCompleted ? (
+                    <FiCheck size={16} />
+                  ) : isFailed ? (
+                    <FiAlertCircle size={16} />
+                  ) : (
+                    <FiFileText size={16} />
+                  )}
+                </div>
+                <p className="min-w-0 flex-1 truncate text-xs font-medium text-slate-700">{file.name}</p>
+
+                {isUploading && <span className="shrink-0 text-[10px] font-semibold text-indigo-600">{progress}%</span>}
+                {isFailed && <span className="shrink-0 text-[10px] font-semibold text-rose-500">Failed</span>}
+
+                {!uploadJob && (
+                  <button
+                    type="button"
+                    onClick={() => removeSelectedFile(file.name)}
+                    aria-label={`Remove ${file.name}`}
+                    className="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                  >
+                    <FiX size={13} />
+                  </button>
+                )}
               </div>
             );
           })}
-        </div>
-      )}
-
-      {uploadQueue.length > 0 && (
-        <div className="space-y-1">
-          {uploadQueue.map((job) => (
-            <div key={job.id} className="text-xs text-slate-600">
-              <div className="flex justify-between">
-                <span className="truncate max-w-[70%]">{job.fileName}</span>
-                <span>{job.status === "failed" ? "failed" : `${Math.min(job.progress || 0, 100)}%`}</span>
-              </div>
-              <div className="h-1.5 bg-slate-200 rounded-full mt-1 overflow-hidden">
-                <div
-                  className={`h-full ${job.status === "failed" ? "bg-rose-500" : "bg-indigo-500"}`}
-                  style={{ width: `${Math.min(job.progress || 0, 100)}%` }}
-                />
-              </div>
-            </div>
-          ))}
         </div>
       )}
 
@@ -106,7 +226,7 @@ const MessageInput = () => {
         <input
           type="text"
           placeholder="Type a message..."
-          className="flex-1 h-12 px-4 rounded-full border border-slate-300 
+          className="flex-1 h-12 px-4 rounded-full border border-slate-300
                     focus:outline-none focus:ring-2 focus:ring-indigo-500
                     transition duration-200"
           value={message}
@@ -137,7 +257,7 @@ const MessageInput = () => {
         <button
           type="submit"
           disabled={loading}
-          className="w-12 h-12 rounded-full bg-indigo-600 text-white 
+          className="w-12 h-12 rounded-full bg-indigo-600 text-white
                     flex items-center justify-center
                     hover:bg-indigo-700 transition duration-200 disabled:opacity-50"
         >
