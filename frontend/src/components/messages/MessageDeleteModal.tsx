@@ -3,6 +3,7 @@ interface MessageDeleteModalProps {
   onClose: () => void;
   onDeleteForMe: () => void;
   onDeleteForEveryone: () => void;
+  canDeleteForEveryone: boolean;
   isDeleting: boolean;
 }
 
@@ -15,6 +16,7 @@ const MessageDeleteModal = ({
   onClose,
   onDeleteForMe,
   onDeleteForEveryone,
+  canDeleteForEveryone,
   isDeleting,
 }: MessageDeleteModalProps) => {
   if (!isOpen) return null;
@@ -30,7 +32,9 @@ const MessageDeleteModal = ({
       >
         <h4 className="text-lg font-semibold text-slate-900">Delete message</h4>
         <p className="mt-2 text-sm text-slate-600">
-          Choose whether this message should disappear only for you or for everyone in the conversation.
+          {canDeleteForEveryone
+            ? "Choose whether this message should disappear only for you or for everyone in the conversation."
+            : "This removes the message from your view only. The other participant will still see it."}
         </p>
 
         <div className="mt-5 space-y-2">
@@ -43,14 +47,16 @@ const MessageDeleteModal = ({
             Delete for me
           </button>
 
-          <button
-            type="button"
-            onClick={onDeleteForEveryone}
-            disabled={isDeleting}
-            className="w-full rounded-xl bg-rose-600 px-4 py-3 text-left text-sm font-medium text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Delete for everyone
-          </button>
+          {canDeleteForEveryone && (
+            <button
+              type="button"
+              onClick={onDeleteForEveryone}
+              disabled={isDeleting}
+              className="w-full rounded-xl bg-rose-600 px-4 py-3 text-left text-sm font-medium text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Delete for everyone
+            </button>
+          )}
         </div>
 
         <button

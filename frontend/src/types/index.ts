@@ -123,6 +123,11 @@ export interface Conversation {
   __isPlaceholder?: boolean;
 }
 
+export interface MessageReaction {
+  userId: string;
+  emoji: string;
+}
+
 export interface Message {
   _id?: string;
   conversationId?: string;
@@ -144,6 +149,9 @@ export interface Message {
   editedAt?: string;
   deletedForEveryone?: boolean;
   deletedFor?: string[];
+  reactions?: MessageReaction[];
+  replyTo?: string | null;
+  forwarded?: boolean;
   createdAt: string;
   updatedAt?: string;
   __isOptimistic?: boolean;
@@ -178,6 +186,7 @@ export interface ServerToClientEvents {
   "conversation:seen": (payload: { conversationId: string; readerId: string; seenAt: string }) => void;
   "message:edit": (message: Message) => void;
   "message:delete": (message: Message) => void;
+  "message:reaction": (message: Message) => void;
   link_request: (payload: LinkRequestEventPayload) => void;
   link_session_updated: (payload: LinkSessionUpdatedEventPayload) => void;
   link_secret_ready: (payload: LinkSecretReadyEventPayload) => void;
@@ -209,6 +218,8 @@ export interface ConversationState {
   unreadByConversation: Record<string, number>;
   uploadQueue: UploadJob[];
   detailsRefreshVersion: number;
+  replyTarget: Message | null;
+  setReplyTarget: (message: Message | null) => void;
   setSelectedConversation: (
     selectedConversation: Conversation | null,
     currentUserId?: string
@@ -272,6 +283,8 @@ export interface SendMessagePayload {
   fileSize?: number;
   mimeType?: string;
   publicId?: string;
+  replyTo?: string;
+  forwarded?: boolean;
 }
 
 export interface FileValidationResult {

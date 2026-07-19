@@ -13,6 +13,7 @@ import {
 	createFileDeliveryUrl,
 	editMessage,
 	deleteMessage,
+	reactToMessage,
 } from '../controllers/messageController.js';
 
 const router = express.Router();
@@ -55,5 +56,12 @@ router.put('/:id', protectRoute, editMessage);
 // @access  Private
 // ----------------------------------------
 router.delete('/:id', protectRoute, deleteMessage);
+
+// ----------------------------------------
+// @desc    Adds, replaces, or removes the requester's reaction on a message
+// @route   POST /api/messages/:id/react
+// @access  Private
+// ----------------------------------------
+router.post('/:id/react', protectRoute, reactToMessage);
 
 export default router;
