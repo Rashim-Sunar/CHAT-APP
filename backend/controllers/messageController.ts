@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import { Types } from 'mongoose';
 import Conversation, { ConversationDocument } from '../models/conversationModel.js';
 import Message, { MessageDocument } from '../models/messageModel.js';
-import { getReceiverSocketId, io } from '../socket/socket.js';
+import { emitToUserDevices } from '../socket/socket.js';
 import { recordConversationSeen } from '../Utils/readReceipt.js';
 import type { AuthenticatedRequest } from '../types/express/index.js';
 import type {
@@ -43,16 +43,20 @@ type RealtimeMessageReaction = {
   emoji: string;
 };
 
-type RealtimeMessagePayload = {
+export type RealtimeMessagePayload = {
   _id: string;
   senderId: string;
-  receiverId: string;
+  // Populated for direct messages only; null for group messages, which have
+  // no single recipient — routing/authorization uses conversation
+  // participants instead (see messageController.ts).
+  receiverId: string | null;
   conversationId: string;
   messageType: 'text' | 'image' | 'video' | 'file';
   text: string;
   message: string;
   encryptedMessage: string | null;
   encryptedAESKey: string | null;
+  encryptedAESKeys: { userId: string; wrappedKey: string }[];
   iv: string | null;
   fileUrl: string | null;
   fileName: string | null;
@@ -72,7 +76,7 @@ type RealtimeMessagePayload = {
 
 // Enforce Cloudinary-owned asset URLs only. This prevents clients from sending
 // arbitrary third-party links as media attachments.
-const isCloudinaryUrl = (url: string): boolean => {
+export const isCloudinaryUrl = (url: string): boolean => {
   try {
     const parsed = new URL(url);
     return parsed.hostname.endsWith('res.cloudinary.com');
@@ -90,7 +94,7 @@ const cloudinaryPathByType: Record<'image' | 'video' | 'file', string> = {
 
 // Ensures the Cloudinary URL path aligns with the declared message type.
 // Example: a "video" message must resolve to /video/upload/.
-const isCloudinaryPathValidForType = (
+export const isCloudinaryPathValidForType = (
   url: string,
   messageType: 'image' | 'video' | 'file'
 ): boolean => {
@@ -109,7 +113,7 @@ const isCloudinaryPathValidForType = (
 // needs to render the message without guessing which legacy field name to use.
 // Keeping this logic centralized also prevents REST responses and socket
 // events from drifting apart over time.
-const buildRealtimePayload = (
+export const buildRealtimePayload = (
   messageDoc: MessageDocument & { createdAt: Date; updatedAt: Date },
   conversationId: string
 ): RealtimeMessagePayload => {
@@ -168,11 +172,21 @@ const buildRealtimePayload = (
     ? String((messageDoc as unknown as { replyTo?: unknown }).replyTo)
     : null;
   const forwarded = Boolean((messageDoc as unknown as { forwarded?: boolean }).forwarded);
+  const rawEncryptedAESKeys = Array.isArray(
+    (messageDoc as unknown as { encryptedAESKeys?: Array<{ userId: unknown; wrappedKey: unknown }> })
+      .encryptedAESKeys
+  )
+    ? ((messageDoc as unknown as { encryptedAESKeys?: Array<{ userId: unknown; wrappedKey: unknown }> })
+        .encryptedAESKeys as Array<{ userId: unknown; wrappedKey: unknown }>)
+    : [];
+  const encryptedAESKeys = rawEncryptedAESKeys
+    .filter((entry) => typeof entry?.wrappedKey === 'string')
+    .map((entry) => ({ userId: String(entry.userId), wrappedKey: String(entry.wrappedKey) }));
 
   return {
     _id: String(messageDoc._id),
     senderId: String(messageDoc.senderId),
-    receiverId: String(messageDoc.receiverId),
+    receiverId: messageDoc.receiverId ? String(messageDoc.receiverId) : null,
     conversationId,
     messageType: normalizedMessageType,
     text: visibleText,
@@ -180,6 +194,7 @@ const buildRealtimePayload = (
     message: visibleText,
     encryptedMessage,
     encryptedAESKey,
+    encryptedAESKeys,
     iv,
     fileUrl: messageDoc.fileUrl || null,
     fileName: messageDoc.fileName || null,
@@ -279,12 +294,12 @@ const validateSendPayload = (
 };
 
 // Canonical deleted placeholder used in normalized payloads for all clients.
-const MESSAGE_DELETED_TEXT = 'This message was deleted';
+export const MESSAGE_DELETED_TEXT = 'This message was deleted';
 
 // Per-user visibility guard for soft-deleted messages.
 // "Deleted for everyone" remains visible as a placeholder, while
 // "deleted for me" removes the message from that specific user's timeline.
-const isMessageDeletedForUser = (messageDoc: MessageDocument, userId: string): boolean => {
+export const isMessageDeletedForUser = (messageDoc: MessageDocument, userId: string): boolean => {
   if (!userId) return false;
 
   const deletedForEveryone = Boolean(
@@ -303,24 +318,24 @@ const isMessageDeletedForUser = (messageDoc: MessageDocument, userId: string): b
 
 // Resolve parent conversation once for edit/delete flows so socket events can
 // include a stable conversationId in the realtime payload.
-const getMessageConversation = async (messageId: string): Promise<ConversationDocument | null> => {
+export const getMessageConversation = async (messageId: string): Promise<ConversationDocument | null> => {
   return (await Conversation.findOne({ messages: messageId })) as ConversationDocument | null;
 };
 
-// Fan out message mutation events to both participants and dedupe when sender
-// and receiver resolve to the same socket id (multi-tab and reconnect edge cases).
+// Fan out message mutation events to every current conversation participant
+// (not just sender+receiver — required for groups, and as a side effect also
+// fixes 1:1 chats never reaching a sender's second open tab/device, since
+// emitToUserDevices — unlike the old getReceiverSocketId path — reaches every
+// active socket for a user, not just the first one).
 const emitMessageUpdateToParticipants = (
   eventName: 'message:edit' | 'message:delete' | 'message:reaction',
+  conversation: ConversationDocument,
   payload: RealtimeMessagePayload
 ): void => {
-  const senderSocketId = getReceiverSocketId(payload.senderId);
-  const receiverSocketId = getReceiverSocketId(payload.receiverId);
-  const socketIds = new Set([senderSocketId, receiverSocketId]);
+  const participantIds = new Set(conversation.participants.map((participantId) => String(participantId)));
 
-  socketIds.forEach((socketId) => {
-    if (socketId) {
-      io.to(socketId).emit(eventName, payload);
-    }
+  participantIds.forEach((participantId) => {
+    emitToUserDevices(participantId, eventName, payload);
   });
 };
 
@@ -540,12 +555,14 @@ export const sendMessage = async (
       String(conversation._id)
     );
 
-    // Emit to receiver socket only; sender appends via HTTP response path.
-    // This avoids duplicate local rendering for the sender.
-    const receiverSocketId = getReceiverSocketId(receiverId);
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit('newMessage', realtimeMessagePayload);
-    }
+    // Emit to every device of every participant. The sender's *current* tab
+    // already has the message via the HTTP response, but other open
+    // tabs/devices for the sender only ever learn about it through this
+    // socket event — the frontend already dedupes by message _id, so the
+    // redundant emit to the sender's current tab is a harmless no-op.
+    conversation.participants.forEach((participantId) => {
+      emitToUserDevices(String(participantId), 'newMessage', realtimeMessagePayload);
+    });
 
     res.status(201).json({ newMessage: realtimeMessagePayload });
   } catch (error: unknown) {
@@ -590,10 +607,9 @@ export const getMessage = async (
 
     const receipt = await recordConversationSeen(String(conversation._id), String(senderId));
     if (receipt) {
-      const recipientSocketId = getReceiverSocketId(receipt.recipientId);
-      if (recipientSocketId) {
-        io.to(recipientSocketId).emit('conversation:seen', receipt);
-      }
+      receipt.recipientIds.forEach((recipientId) => {
+        emitToUserDevices(recipientId, 'conversation:seen', receipt);
+      });
     }
 
     const messages = (conversation.messages as unknown as MessageDocument[])
@@ -696,7 +712,7 @@ export const editMessage = async (
     };
     const realtimeMessagePayload = buildRealtimePayload(messageWithTimestamps, String(conversation._id));
 
-    emitMessageUpdateToParticipants('message:edit', realtimeMessagePayload);
+    emitMessageUpdateToParticipants('message:edit', conversation, realtimeMessagePayload);
 
     res.status(200).json({ updatedMessage: realtimeMessagePayload });
   } catch (error: unknown) {
@@ -735,25 +751,27 @@ export const deleteMessage = async (
       return;
     }
 
+    const conversation = await getMessageConversation(messageId);
+    if (!conversation) {
+      res.status(404).json({ error: 'Conversation not found' });
+      return;
+    }
+
     const isSender = String(message.senderId) === senderId;
-    const isReceiver = String(message.receiverId) === senderId;
+    const isParticipant = conversation.participants.some(
+      (participantId) => String(participantId) === senderId
+    );
 
     if (deleteType === 'everyone') {
-      // Only the original sender may remove a message for both participants.
+      // Only the original sender may remove a message for every participant.
       if (!isSender) {
         res.status(403).json({ error: 'You can only delete your own messages for everyone' });
         return;
       }
-    } else if (!isSender && !isReceiver) {
-      // "me" only hides the message from the requester's own view, so either
-      // participant may do this — but the requester must belong to the conversation.
+    } else if (!isParticipant) {
+      // "me" only hides the message from the requester's own view, so any
+      // current conversation participant may do this.
       res.status(403).json({ error: 'You are not a participant in this conversation' });
-      return;
-    }
-
-    const conversation = await getMessageConversation(messageId);
-    if (!conversation) {
-      res.status(404).json({ error: 'Conversation not found' });
       return;
     }
 
@@ -777,7 +795,7 @@ export const deleteMessage = async (
           String(conversation._id)
         );
 
-        emitMessageUpdateToParticipants('message:delete', realtimeMessagePayload);
+        emitMessageUpdateToParticipants('message:delete', conversation, realtimeMessagePayload);
         res.status(200).json({ updatedMessage: realtimeMessagePayload });
         return;
       }
@@ -806,7 +824,7 @@ export const deleteMessage = async (
           String(conversation._id)
         );
 
-        emitMessageUpdateToParticipants('message:delete', realtimeMessagePayload);
+        emitMessageUpdateToParticipants('message:delete', conversation, realtimeMessagePayload);
         res.status(200).json({ updatedMessage: realtimeMessagePayload });
         return;
       }
@@ -830,7 +848,7 @@ export const deleteMessage = async (
     };
     const realtimeMessagePayload = buildRealtimePayload(messageWithTimestamps, String(conversation._id));
 
-    emitMessageUpdateToParticipants('message:delete', realtimeMessagePayload);
+    emitMessageUpdateToParticipants('message:delete', conversation, realtimeMessagePayload);
 
     res.status(200).json({ updatedMessage: realtimeMessagePayload });
   } catch (error: unknown) {
@@ -875,13 +893,6 @@ export const reactToMessage = async (
       return;
     }
 
-    const isSender = String(message.senderId) === requesterId;
-    const isReceiver = String(message.receiverId) === requesterId;
-    if (!isSender && !isReceiver) {
-      res.status(403).json({ error: 'You are not a participant in this conversation' });
-      return;
-    }
-
     if (message.deletedForEveryone) {
       res.status(400).json({ error: 'Deleted messages cannot be reacted to' });
       return;
@@ -890,6 +901,14 @@ export const reactToMessage = async (
     const conversation = await getMessageConversation(messageId);
     if (!conversation) {
       res.status(404).json({ error: 'Conversation not found' });
+      return;
+    }
+
+    const isParticipant = conversation.participants.some(
+      (participantId) => String(participantId) === requesterId
+    );
+    if (!isParticipant) {
+      res.status(403).json({ error: 'You are not a participant in this conversation' });
       return;
     }
 
@@ -919,7 +938,7 @@ export const reactToMessage = async (
     };
     const realtimeMessagePayload = buildRealtimePayload(messageWithTimestamps, String(conversation._id));
 
-    emitMessageUpdateToParticipants('message:reaction', realtimeMessagePayload);
+    emitMessageUpdateToParticipants('message:reaction', conversation, realtimeMessagePayload);
 
     res.status(200).json({ updatedMessage: realtimeMessagePayload });
   } catch (error: unknown) {

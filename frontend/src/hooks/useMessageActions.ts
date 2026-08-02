@@ -8,13 +8,12 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { useAuthContext } from "../context/Auth-Context";
-import { getConversationKey } from "../Utils/conversationKey";
 import { getErrorMessage } from "../Utils/getErrorMessage";
 import { DELETED_MESSAGE_TEXT } from "../Utils/messageDisplay";
 import useConversation from "../zustand/useConversation";
 import type { ApiErrorResponse, Message } from "../types";
 import { apiFetch } from "../Utils/apiFetch";
-import { encryptTextMessage, getPublicKeyByUserId, requireUserKeyPair } from "../Utils/crypto";
+import { encryptTextMessageForRecipients, getRecipientPublicKeys, requireUserKeyPair } from "../Utils/crypto";
 
 /**
  * Exposes guarded edit/delete actions for one message instance.
@@ -31,11 +30,17 @@ import { encryptTextMessage, getPublicKeyByUserId, requireUserKeyPair } from "..
 const useMessageActions = (message: Message) => {
   const [busyAction, setBusyAction] = useState<"edit" | "delete" | null>(null);
   const { authUser } = useAuthContext();
-  const { setMessagesForConversation, updateMessageInConversation, removeMessageFromConversation, syncConversationPreview, bumpDetailsRefreshVersion } =
-    useConversation();
+  const {
+    selectedConversation,
+    setMessagesForConversation,
+    updateMessageInConversation,
+    removeMessageFromConversation,
+    syncConversationPreview,
+    bumpDetailsRefreshVersion,
+  } = useConversation();
 
   const currentUserId = authUser?.data?.user?._id;
-  const conversationKey = getConversationKey(message.senderId, message.receiverId);
+  const conversationKey = message.conversationId;
   const messageId = message._id;
 
   // Captures pre-mutation state for deterministic rollback on request failure.
@@ -89,23 +94,27 @@ const useMessageActions = (message: Message) => {
       let updatePayload: {
         content?: string;
         encryptedMessage?: string;
-        encryptedAESKey?: string;
+        encryptedAESKeys?: { userId: string; wrappedKey: string }[];
         iv?: string;
       };
 
       if (message.messageType === "text") {
-        // E2EE path: edits are encrypted on the client before transport.
-        const { publicKey: senderPublicKey } = await requireUserKeyPair(currentUserId);
-        const receiverPublicKey = await getPublicKeyByUserId(String(message.receiverId));
-        const encryptedPayload = await encryptTextMessage(
-          trimmedContent,
-          receiverPublicKey,
-          senderPublicKey
-        );
+        // E2EE path: edits are re-encrypted on the client, wrapped for every
+        // current conversation participant (same as a fresh send).
+        await requireUserKeyPair(currentUserId);
+        const participantIds =
+          selectedConversation?.participants.map((participant) => participant._id) || [];
+        const recipients = await getRecipientPublicKeys(participantIds);
+
+        if (recipients.length < participantIds.length) {
+          throw new Error("One or more participants haven't set up encryption yet");
+        }
+
+        const encryptedPayload = await encryptTextMessageForRecipients(trimmedContent, recipients);
 
         updatePayload = {
           encryptedMessage: encryptedPayload.encryptedMessage,
-          encryptedAESKey: encryptedPayload.encryptedAESKey,
+          encryptedAESKeys: encryptedPayload.encryptedAESKeys,
           iv: encryptedPayload.iv,
         };
       } else {

@@ -13,6 +13,7 @@ import {
   deleteProfilePicture,
   savePublicKey,
   getUserPublicKey,
+  getUserPublicKeysBatch,
 } from '../controllers/userController.js';
 import protectRoute from '../middlewares/protectRoute.js';
 
@@ -30,6 +31,10 @@ router.get('/', protectRoute, getUsersForSidebar);
 router.post('/public-key', protectRoute, savePublicKey);
 
 router.get('/:id/public-key', protectRoute, getUserPublicKey);
+
+// Batch variant — used when resolving a group's full membership before
+// encrypting an outgoing message.
+router.post('/public-keys', protectRoute, getUserPublicKeysBatch);
 
 // ----------------------------------------
 // @desc    Retrieves selected user details with shared media/links/documents

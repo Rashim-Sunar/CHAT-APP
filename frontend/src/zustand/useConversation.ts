@@ -1,10 +1,11 @@
 import { create } from "zustand";
-import { getConversationKey } from "../Utils/conversationKey";
 import { getMessagePreviewText, shouldHideMessageForUser } from "../Utils/messageDisplay";
 import type { Conversation, ConversationState, Message } from "../types";
 
-// Conversation state is split by conversation key so socket events and HTTP fetches
-// can converge on the same record without duplicating message lists.
+// Conversation state is keyed directly by the real conversation _id (which
+// also equals message.conversationId on every message payload) — no derived
+// key needed, unlike the old per-pair getConversationKey scheme this
+// replaced, which couldn't represent groups anyway.
 const dedupeMessages = (messages: Message[] = []): Message[] => {
   const seen = new Set<string>();
 
@@ -47,20 +48,19 @@ const getConversationPreviewFromMessages = (
 };
 
 // Keep the conversation list in sync when a new message arrives.
-// Existing conversations are updated in place; missing ones are inserted as
-// lightweight placeholders until the full profile data is loaded.
+// Existing conversations are updated in place; a conversation the client
+// hasn't seen yet (e.g. someone just started a new direct chat, or added
+// this user to a group) is inserted as a lightweight placeholder until the
+// next full conversation-list refresh fills in real display info.
 const upsertConversationWithMessage = (
   conversations: Conversation[],
-  incomingMessage: Message,
-  currentUserId: string
+  incomingMessage: Message
 ): Conversation[] => {
-  const partnerId =
-    String(incomingMessage.senderId) === String(currentUserId)
-      ? String(incomingMessage.receiverId)
-      : String(incomingMessage.senderId);
+  const conversationId = incomingMessage.conversationId;
+  if (!conversationId) return conversations;
 
   const existingIndex = conversations.findIndex(
-    (conversation) => String(conversation._id) === partnerId
+    (conversation) => String(conversation._id) === conversationId
   );
 
   const lastMessage = getMessagePreviewText(incomingMessage);
@@ -84,9 +84,10 @@ const upsertConversationWithMessage = (
 
   return [
     {
-      _id: partnerId,
-      userName: "New message",
-      gender: "male",
+      _id: conversationId,
+      type: "direct",
+      displayName: "New message",
+      participants: [],
       lastMessage,
       lastMessageAt,
       lastMessageSenderId,
@@ -114,16 +115,9 @@ const useConversation = create<ConversationState>()((set, get) => ({
 
   // Opening a chat clears its unread badge and keeps both selected and active
   // conversation references aligned for downstream components.
-  setSelectedConversation: (selectedConversation, currentUserId) =>
+  setSelectedConversation: (selectedConversation) =>
     set((state) => {
-      const conversationKey = getConversationKey(
-        selectedConversation?._id,
-        currentUserId
-      );
-
-      if (!conversationKey) {
-  // Merge fresh conversation payloads with cached preview metadata so socket
-  // updates do not get overwritten by later list refreshes.
+      if (!selectedConversation?._id) {
         return {
           selectedConversation,
           activeChat: selectedConversation,
@@ -137,7 +131,7 @@ const useConversation = create<ConversationState>()((set, get) => ({
         replyTarget: null,
         unreadByConversation: {
           ...state.unreadByConversation,
-          [conversationKey]: 0,
+          [selectedConversation._id]: 0,
         },
       };
     }),
@@ -165,7 +159,27 @@ const useConversation = create<ConversationState>()((set, get) => ({
         };
       });
 
-      return { conversations: mergedConversations };
+      // setConversations always carries the full authoritative list from
+      // GET /conversations, so this also keeps the open conversation (e.g. a
+      // group's member list/name shown in the details panel) in sync with
+      // fresh server data, and clears it if this device is no longer a
+      // participant (removed/left elsewhere).
+      const mergedById = new Map(
+        mergedConversations.map((conversation) => [String(conversation._id), conversation])
+      );
+
+      const nextSelectedConversation = state.selectedConversation
+        ? mergedById.get(String(state.selectedConversation._id)) ?? null
+        : state.selectedConversation;
+      const nextActiveChat = state.activeChat
+        ? mergedById.get(String(state.activeChat._id)) ?? null
+        : state.activeChat;
+
+      return {
+        conversations: mergedConversations,
+        selectedConversation: nextSelectedConversation,
+        activeChat: nextActiveChat,
+      };
     }),
 
   // Store messages under a stable key and remove duplicates caused by the
@@ -246,11 +260,8 @@ const useConversation = create<ConversationState>()((set, get) => ({
       const currentMessages = state.messagesByConversation[conversationKey] || [];
       const preview = getConversationPreviewFromMessages(currentMessages, currentUserId);
 
-      const [firstParticipantId, secondParticipantId] = conversationKey.split("_");
-      const partnerId = firstParticipantId === currentUserId ? secondParticipantId : firstParticipantId;
-
       const updatedConversations = state.conversations.map((conversation) => {
-        if (String(conversation._id) !== String(partnerId)) return conversation;
+        if (String(conversation._id) !== conversationKey) return conversation;
 
         return {
           ...conversation,
@@ -282,15 +293,10 @@ const useConversation = create<ConversationState>()((set, get) => ({
       },
     })),
 
-  // Insert or refresh conversation metadata from a socket message, deriving the
-  // partner ID from the participants so routing stays deterministic.
-  upsertConversationFromMessage: (incomingMessage, currentUserId) =>
+  // Insert or refresh conversation metadata from a socket message.
+  upsertConversationFromMessage: (incomingMessage) =>
     set((state) => ({
-      conversations: upsertConversationWithMessage(
-        state.conversations,
-        incomingMessage,
-        currentUserId
-      ),
+      conversations: upsertConversationWithMessage(state.conversations, incomingMessage),
     })),
 
   // Expose a read helper so callers do not need to know the internal map shape.
@@ -318,14 +324,14 @@ const useConversation = create<ConversationState>()((set, get) => ({
       const selectedId = state.selectedConversation?._id;
 
       conversations.forEach((conversation) => {
-        const conversationKey = getConversationKey(conversation._id, currentUserId);
-        if (!conversationKey) return;
+        const conversationId = conversation._id;
+        if (!conversationId) return;
 
         const serverUnread = Number(conversation.unreadCount || 0);
-        const localUnread = state.unreadByConversation[conversationKey] || 0;
-        const isSelected = selectedId ? String(selectedId) === String(conversation._id) : false;
+        const localUnread = state.unreadByConversation[conversationId] || 0;
+        const isSelected = selectedId ? String(selectedId) === String(conversationId) : false;
 
-        nextUnreadByConversation[conversationKey] = isSelected
+        nextUnreadByConversation[conversationId] = isSelected
           ? 0
           : Math.max(localUnread, serverUnread);
       });
@@ -335,19 +341,18 @@ const useConversation = create<ConversationState>()((set, get) => ({
       };
     }),
 
-  // Sync the seen timestamp after a read receipt so sender-side UI updates instantly.
-  // Important: UI conversations are keyed by partner user id, while the socket payload
-  // includes both backend conversationId and readerId. We map by readerId here.
+  // Sync the seen timestamp after a read receipt so sender-side UI updates
+  // instantly. Matches directly on the conversationId the receipt already
+  // carries — previously this derived a key from readerId instead, which
+  // only ever worked by accident under the old model where a conversation's
+  // _id happened to equal the other participant's user id.
   markConversationSeen: (conversationId, readerId, seenAt, currentUserId) =>
     set((state) => {
       if (!currentUserId) return state;
       if (!conversationId || !readerId || !seenAt) return state;
 
-      const conversationKey = getConversationKey(readerId, currentUserId);
-      if (!conversationKey) return state;
-
       const patchConversation = (conversation: Conversation | null): Conversation | null => {
-        if (!conversation || String(conversation._id) !== String(readerId)) return conversation;
+        if (!conversation || String(conversation._id) !== String(conversationId)) return conversation;
 
         return {
           ...conversation,
@@ -358,7 +363,7 @@ const useConversation = create<ConversationState>()((set, get) => ({
 
       return {
         conversations: state.conversations.map((conversation) =>
-          String(conversation._id) === String(readerId)
+          String(conversation._id) === String(conversationId)
             ? { ...conversation, seenAt, unreadCount: 0 }
             : conversation
         ),
@@ -366,7 +371,7 @@ const useConversation = create<ConversationState>()((set, get) => ({
         activeChat: patchConversation(state.activeChat),
         unreadByConversation: {
           ...state.unreadByConversation,
-          [conversationKey]: 0,
+          [conversationId]: 0,
         },
       };
     }),
