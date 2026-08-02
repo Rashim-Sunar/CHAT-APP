@@ -30,6 +30,7 @@ import Conversations from "./Conversations";
 import ProfileModal from "./ProfileModal";
 import SearchInput from "./SearchInput";
 import UserProfileControl from "./UserProfileControl";
+import NewConversationMenu from "./NewConversationMenu";
 import Avatar from "../common/Avatar";
 
 const Sidebar = () => {
@@ -52,8 +53,9 @@ const Sidebar = () => {
     <div className="flex flex-col w-full h-full bg-white">
       {!desktopProfileOpen ? (
         <>
-          <div className="px-6 py-4 border-b border-slate-200">
+          <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
             <h2 className="text-xl font-semibold text-slate-800">Chats</h2>
+            <NewConversationMenu />
           </div>
 
           <div className="px-6 py-4 border-b border-slate-100">

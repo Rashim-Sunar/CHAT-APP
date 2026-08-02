@@ -446,6 +446,63 @@ export const getUserPublicKey = async (
   }
 };
 
+// Soft cap on a single batch lookup so a client can't force one large query
+// across the whole user collection.
+const MAX_BATCH_PUBLIC_KEY_LOOKUP = 300;
+
+/**
+ * @desc    Batch-fetches public keys for multiple users in one call — needed
+ *          for group message encryption, where sequential per-user lookups
+ *          (GET /users/:id/public-key) don't scale to larger memberships.
+ * @route   POST /api/users/public-keys
+ * @access  Private
+ */
+export const getUserPublicKeysBatch = async (
+  req: AuthenticatedRequest<unknown, unknown, { userIds?: string[] }>,
+  res: Response
+): Promise<void> => {
+  try {
+    const userIds = Array.isArray(req.body.userIds) ? req.body.userIds : [];
+
+    if (userIds.length === 0) {
+      res.status(400).json({ status: 'fail', error: 'userIds is required' });
+      return;
+    }
+
+    if (userIds.length > MAX_BATCH_PUBLIC_KEY_LOOKUP) {
+      res.status(400).json({
+        status: 'fail',
+        error: `Cannot look up more than ${MAX_BATCH_PUBLIC_KEY_LOOKUP} users at once`,
+      });
+      return;
+    }
+
+    const validUserIds = userIds.filter((userId) => mongoose.Types.ObjectId.isValid(userId));
+    const users = await User.find({ _id: { $in: validUserIds } }).select('publicKey');
+
+    const publicKeys: Record<string, unknown> = {};
+    userIds.forEach((userId) => {
+      const user = users.find((candidate) => String(candidate._id) === userId);
+      publicKeys[userId] = user?.publicKey || null;
+    });
+
+    res.status(200).json({
+      status: 'success',
+      publicKeys,
+    });
+  } catch (error: unknown) {
+    console.log(
+      'Error in getUserPublicKeysBatch',
+      error instanceof Error ? error.message : String(error)
+    );
+
+    res.status(500).json({
+      status: 'fail',
+      error: 'Internal server error',
+    });
+  }
+};
+
 /**
  * @desc    Retrieves details for selected conversation user, shared media, links and documents
  * @route   GET /api/users/:id/details

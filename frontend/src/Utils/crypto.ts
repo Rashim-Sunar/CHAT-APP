@@ -41,12 +41,25 @@ import { getUserKeyMaterial, saveUserKeyMaterial } from "./secureStorage";
 // Type Definitions
 // ============================================================================
 
-// EncryptedMessagePayload: Wire format for encrypted messages transmitted over HTTP/WebSocket.
-// All values are base64-encoded strings for JSON serialization compatibility.
+// EncryptedAesKeyEntry: one recipient's RSA-wrapped copy of a message's AES key.
+export interface EncryptedAesKeyEntry {
+  userId: string;
+  wrappedKey: string; // Base64-encoded RSA-OAEP ciphertext
+}
+
+// EncryptedMessagePayload: Wire format for encrypted messages transmitted over
+// HTTP/WebSocket. The AES key is wrapped once per recipient — 2 entries for a
+// direct message (receiver + sender's own copy), N entries for a group
+// (every current member) — all values base64-encoded for JSON transport.
 export interface EncryptedMessagePayload {
   encryptedMessage: string; // Base64-encoded AES-GCM ciphertext
-  encryptedAESKey: string; // JSON string containing RSA-wrapped AES keys (receiver & sender)
+  encryptedAESKeys: EncryptedAesKeyEntry[];
   iv: string; // Base64-encoded initialization vector (12 bytes for AES-GCM)
+}
+
+export interface RecipientPublicKey {
+  userId: string;
+  publicKeyJwk: JsonWebKey;
 }
 
 // UserKeyJwkPair: In-memory representation of a user's asymmetric key pair.
@@ -54,14 +67,6 @@ export interface EncryptedMessagePayload {
 export interface UserKeyJwkPair {
   publicKey: JsonWebKey; // Public key (shareable; used for encryption by peers)
   privateKey: JsonWebKey; // Private key (secret; stored locally in IndexedDB, never uploaded)
-}
-
-// PublicKeyResponse: Server response when fetching a user's public key.
-// Allows for both success and error responses in a single interface.
-interface PublicKeyResponse {
-  status?: "success" | "fail";
-  publicKey?: JsonWebKey; // Public key in JWK format
-  error?: string; // Error reason if fetch failed
 }
 
 // ============================================================================
@@ -159,82 +164,73 @@ const importAesDecryptKey = (rawKey: ArrayBuffer): Promise<CryptoKey> =>
 // Message Decryption Helpers
 // ============================================================================
 
-// resolveEncryptedAesKeyForViewer: Selects the correct RSA-wrapped AES key variant
-// based on whether the viewer is the sender or receiver.
-//
-// Why this function exists:
-// - encryptedAESKey is stored as a JSON string containing BOTH wrapped variants
-// - Sender uses their own wrapped key to access sent message history
-// - Receiver uses the receiver-wrapped key to decrypt incoming messages
-// - Server can't distinguish who's viewing (stays blind)
-//
-// Format: {"receiver": "base64...", "sender": "base64..."}
-// Each variant is RSA-wrapped with the corresponding user's public key.
-const resolveEncryptedAesKeyForViewer = (
-  encryptedAESKey: string,
-  currentUserId: string,
-  senderId: string
-): string => {
-  try {
-    const parsed = JSON.parse(encryptedAESKey) as { receiver?: string; sender?: string };
-
-    // Sender accessing their own message: use sender-wrapped AES key
-    if (String(currentUserId) === String(senderId) && parsed.sender) {
-      return parsed.sender;
-    }
-
-    // Receiver or other viewers: use receiver-wrapped AES key
-    if (parsed.receiver) {
-      return parsed.receiver;
-    }
-  } catch {
-    // Fallback for legacy messages (single base64 key, not JSON envelope)
+// resolveWrappedAesKeyForViewer: Finds the current viewer's own RSA-wrapped
+// AES key entry — works identically for direct (2 entries) and group (N
+// entries) messages, since both use the same encryptedAESKeys array. Falls
+// back to the legacy single-string {"receiver","sender"} JSON envelope for
+// messages that predate the schema migration.
+const resolveWrappedAesKeyForViewer = (message: Message, currentUserId: string): string | null => {
+  if (Array.isArray(message.encryptedAESKeys) && message.encryptedAESKeys.length > 0) {
+    const entry = message.encryptedAESKeys.find((candidate) => candidate.userId === currentUserId);
+    return entry?.wrappedKey || null;
   }
 
-  return encryptedAESKey;
+  if (typeof message.encryptedAESKey === "string") {
+    try {
+      const parsed = JSON.parse(message.encryptedAESKey) as { receiver?: string; sender?: string };
+
+      if (String(currentUserId) === String(message.senderId) && parsed.sender) {
+        return parsed.sender;
+      }
+
+      if (parsed.receiver) {
+        return parsed.receiver;
+      }
+    } catch {
+      // Legacy pre-dual-wrap format: a single raw base64 key, not JSON.
+      return message.encryptedAESKey;
+    }
+  }
+
+  return null;
 };
 
 // decryptTextPayload: Core decryption logic—unwraps AES key and decrypts message.
 //
 // High-level flow:
 // 1. Import user's private RSA key from JWK
-// 2. Resolve which AES key variant to use (sender vs. receiver wrapped)
-// 3. Use private key to unwrap RSA-encrypted AES key
-// 4. Use unwrapped AES key to decrypt message ciphertext with IV
-// 5. Decode bytes to UTF-8 string
+// 2. Use private key to unwrap the caller-resolved, already-wrapped AES key
+// 3. Use unwrapped AES key to decrypt message ciphertext with IV
+// 4. Decode bytes to UTF-8 string
 //
 // Why this is separate:
 // - Decryption can fail at multiple points; caller handles errors
 // - Reused by both direct decryption and batch decryption flows
-// - Allows injection of different key material for testing/recovery scenarios
+// - Key-variant resolution (resolveWrappedAesKeyForViewer) is the caller's
+//   job, decoupling "which key" from "how to decrypt with a given key"
 
 const decryptTextPayload = async (
-  payload: EncryptedMessagePayload,
-  privateKeyJwk: JsonWebKey,
-  currentUserId: string,
-  senderId: string
+  encryptedMessage: string,
+  wrappedAesKeyBase64: string,
+  iv: string,
+  privateKeyJwk: JsonWebKey
 ): Promise<string> => {
   const privateKey = await importPrivateKey(privateKeyJwk);
-  const encryptedAesKey = resolveEncryptedAesKeyForViewer(
-    payload.encryptedAESKey,
-    currentUserId,
-    senderId
-  );
 
   const aesRawKey = await crypto.subtle.decrypt(
     RSA_ENCRYPTION_ALGORITHM,
     privateKey,
-    fromBase64(encryptedAesKey)
+    fromBase64(wrappedAesKeyBase64)
   );
 
   const aesKey = await importAesKey(aesRawKey);
   const decryptedBytes = await crypto.subtle.decrypt(
     {
       name: AES_ALGORITHM,
-      iv: new Uint8Array(fromBase64(payload.iv)),
+      iv: new Uint8Array(fromBase64(iv)),
     },
     aesKey,
-    fromBase64(payload.encryptedMessage)
+    fromBase64(encryptedMessage)
   );
 
   return TEXT_DECODING.decode(decryptedBytes);
@@ -259,16 +255,17 @@ const buildCorruptedMessage = (message: Message): Message => ({
 // Public API - Encryption and Decryption Functions
 // ============================================================================
 
-// encryptTextMessage: Hybrid encryption of a plaintext message using RSA+AES.
+// encryptTextMessageForRecipients: Hybrid encryption of a plaintext message
+// using RSA+AES, generalized to wrap the AES key once per recipient instead
+// of exactly twice — 2 entries for a direct chat (receiver + sender's own
+// copy), N entries for a group (every current member, including sender).
 //
 // High-level flow:
 //   1. Generate a random AES-256 key (ephemeral, single-use)
 //   2. Generate random 96-bit IV for GCM mode
-//   3. Encrypt plaintext with AES-GCM using generated key and IV
-//   4. Wrap the AES key twice with RSA-OAEP:
-//      - Once with receiver's public key (receiver will unwrap with their private key)
-//      - Once with sender's public key (sender will unwrap to access own sent messages)
-//   5. Return {encryptedMessage, encryptedAESKey (JSON envelope), iv} for transport
+//   3. Encrypt plaintext once with AES-GCM using the generated key and IV
+//   4. Wrap that same AES key once per recipient with RSA-OAEP (parallelized)
+//   5. Return {encryptedMessage, encryptedAESKeys, iv} for transport
 //
 // Why hybrid approach:
 // - RSA alone would be slow and require breaks for large messages
@@ -277,30 +274,29 @@ const buildCorruptedMessage = (message: Message): Message => ({
 // - Ephemeral AES keys limit exposure window (no key reuse across messages)
 //
 // Security properties:
-// - Receiver can decrypt: has private key to unwrap receiver-wrapped AES key
-// - Sender can decrypt: has private key to unwrap sender-wrapped AES key
+// - Every recipient can decrypt: each has a copy of the AES key wrapped with
+//   their own public key
 // - Server cannot decrypt: has no private keys
 // - Tampering detected: AES-GCM provides authentication tag
+//
+// Callers MUST include the sender in `recipients` if they want to be able to
+// re-read their own sent message later — this function does not implicitly
+// add anyone.
 //
 // When called:
 // - useSendMessage hook before sending to backend
 // - useMessageActions (edit message) before sending edit payload
-//
-// Parameters:
-//   plainText: Message content to encrypt
-//   receiverPublicKeyJwk: Recipient's public key (fetched from backend via API)
-//   senderPublicKeyJwk: Sender's public key (own key, from IndexedDB)
-//
-// Returns: Promise<EncryptedMessagePayload>
-//   - All values are base64-encoded strings for JSON transport
-//   - encryptedAESKey is a JSON string (not base64) containing {receiver, sender} variants
+// - ForwardMessageModal before re-encrypting for a new target conversation
 //
 // Errors: Rejects if key generation or encryption fails (rare in production)
-export const encryptTextMessage = async (
+export const encryptTextMessageForRecipients = async (
   plainText: string,
-  receiverPublicKeyJwk: JsonWebKey,
-  senderPublicKeyJwk: JsonWebKey
+  recipients: RecipientPublicKey[]
 ): Promise<EncryptedMessagePayload> => {
+  if (recipients.length === 0) {
+    throw new Error("At least one recipient is required to encrypt a message");
+  }
+
   // Step 1: Generate ephemeral AES key for this message only
   // Why per-message: Fresh key limits damage if any single key is compromised
   // Why extractable: Must export to raw bytes for RSA wrapping
@@ -331,35 +327,21 @@ export const encryptTextMessage = async (
 
   // Step 4: Export AES key as raw bytes (needed for RSA wrapping)
   const rawAesKey = await crypto.subtle.exportKey("raw", aesKey);
-  
-  // Step 5: Import both public keys from JWK format
-  const receiverPublicKey = await importPublicKey(receiverPublicKeyJwk);
-  const senderPublicKey = await importPublicKey(senderPublicKeyJwk);
 
-  // Step 6: Wrap the AES key with receiver's public key
-  // Receiver will use their private key to unwrap this
-  const receiverWrappedKey = await crypto.subtle.encrypt(
-    RSA_ENCRYPTION_ALGORITHM,
-    receiverPublicKey,
-    rawAesKey
+  // Step 5: Wrap the same AES key once per recipient, in parallel — this is
+  // the only part that scales with recipient count (cheap: Web Crypto
+  // RSA-OAEP encrypt is a few ms each).
+  const encryptedAESKeys = await Promise.all(
+    recipients.map(async (recipient) => {
+      const publicKey = await importPublicKey(recipient.publicKeyJwk);
+      const wrapped = await crypto.subtle.encrypt(RSA_ENCRYPTION_ALGORITHM, publicKey, rawAesKey);
+      return { userId: recipient.userId, wrappedKey: toBase64(wrapped) };
+    })
   );
 
-  // Step 7: Wrap the AES key with sender's public key
-  // Sender will use their private key to unwrap this (access own sent messages)
-  const senderWrappedKey = await crypto.subtle.encrypt(
-    RSA_ENCRYPTION_ALGORITHM,
-    senderPublicKey,
-    rawAesKey
-  );
-
-  // Step 8: Return payload with both wrapped keys in JSON envelope
-  // Format allows either participant to decrypt while server stays blind
   return {
     encryptedMessage: toBase64(encryptedMessage),
-    encryptedAESKey: JSON.stringify({
-      receiver: toBase64(receiverWrappedKey),
-      sender: toBase64(senderWrappedKey),
-    }),
+    encryptedAESKeys,
     iv: toBase64(iv),
   };
 };
@@ -393,9 +375,10 @@ export const decryptMessageIfNeeded = async (
   message: Message,
   currentUserId: string
 ): Promise<Message> => {
-  const payloadPresent = Boolean(
-    message.encryptedMessage && message.encryptedAESKey && message.iv
-  );
+  const hasKeyMaterial =
+    (Array.isArray(message.encryptedAESKeys) && message.encryptedAESKeys.length > 0) ||
+    typeof message.encryptedAESKey === "string";
+  const payloadPresent = Boolean(message.encryptedMessage && message.iv && hasKeyMaterial);
 
   if (message.messageType !== "text" || !payloadPresent) {
     return message;
@@ -411,16 +394,19 @@ export const decryptMessageIfNeeded = async (
     };
   }
 
+  const wrappedAesKey = resolveWrappedAesKeyForViewer(message, currentUserId);
+  if (!wrappedAesKey) {
+    // No key entry for this viewer (e.g. joined a group after this message
+    // was sent) — not a crypto failure, just genuinely inaccessible.
+    return buildCorruptedMessage(message);
+  }
+
   try {
     const decryptedText = await decryptTextPayload(
-      {
-        encryptedMessage: message.encryptedMessage as string,
-        encryptedAESKey: message.encryptedAESKey as string,
-        iv: message.iv as string,
-      },
-      keyMaterial.privateKeyJwk,
-      currentUserId,
-      message.senderId
+      message.encryptedMessage as string,
+      wrappedAesKey,
+      message.iv as string,
+      keyMaterial.privateKeyJwk
     );
 
     return {
@@ -595,38 +581,45 @@ export const savePublicKey = async (publicKey: JsonWebKey): Promise<void> => {
   }
 };
 
-// getPublicKeyByUserId: Fetches a user's public key from the backend for encryption.
-//
-// Cross-peer encryption flow:
-// 1. Before sending a message, call this to fetch recipient's public key
-// 2. Pass public key to encryptTextMessage() to wrap the AES key
-// 3. Send encrypted payload to backend
-// 4. Recipient fetches and decrypts (using their private key)
-//
-// When called:
-// - useSendMessage hook: get recipient's public key before encryption
-// - useMessageActions (edit): get recipient's public key before re-encrypting edit
-//
-// Parameters:
-//   userId: ID of the user whose public key to fetch
-//
-// Returns: Promise<JsonWebKey>
-//   - Public key in JWK format, ready for crypto.subtle.importKey()
-//
-// Errors:
-// - Rejects if user has no public key on backend (E2EE not set up for them)
-// - Rejects if API error or 404 (user not found)
-// - Network errors propagate; 401 handled by apiFetch middleware
-export const getPublicKeyByUserId = async (userId: string): Promise<JsonWebKey> => {
-  const response = await apiFetch<PublicKeyResponse>(`/users/${userId}/public-key`, {
-    method: "GET",
-  });
+// In-memory cache for recipient public keys — safe to keep indefinitely for
+// the lifetime of the tab, since this app has exactly one RSA keypair per
+// account (not per-device) with no rotation flow outside device-linking.
+const recipientPublicKeyCache = new Map<string, JsonWebKey>();
 
-  if (response.error || !response.publicKey) {
-    throw new Error(response.error || "Recipient public key is not available");
+interface PublicKeysBatchResponse {
+  status?: "success" | "fail";
+  publicKeys?: Record<string, JsonWebKey | null>;
+  error?: string;
+}
+
+// getRecipientPublicKeys: Resolves public keys for a set of user ids,
+// batching the network round-trip and reusing the in-memory cache — needed
+// for group message encryption, where sequential per-user lookups don't
+// scale to larger memberships (a 20-person group would mean 20 sequential
+// GET /users/:id/public-key round-trips before encryption could even start).
+//
+// Users with no public key on file (E2EE not set up for them) are silently
+// omitted from the result — callers that require full coverage (e.g. before
+// encrypting a message) must check the returned list's length against the
+// intended recipient list themselves.
+export const getRecipientPublicKeys = async (userIds: string[]): Promise<RecipientPublicKey[]> => {
+  const uniqueUserIds = [...new Set(userIds)];
+  const uncachedUserIds = uniqueUserIds.filter((userId) => !recipientPublicKeyCache.has(userId));
+
+  if (uncachedUserIds.length > 0) {
+    const response = await apiFetch<PublicKeysBatchResponse>("/users/public-keys", {
+      method: "POST",
+      body: JSON.stringify({ userIds: uncachedUserIds }),
+    });
+
+    Object.entries(response.publicKeys || {}).forEach(([userId, publicKey]) => {
+      if (publicKey) recipientPublicKeyCache.set(userId, publicKey);
+    });
   }
 
-  return response.publicKey;
+  return uniqueUserIds
+    .filter((userId) => recipientPublicKeyCache.has(userId))
+    .map((userId) => ({ userId, publicKeyJwk: recipientPublicKeyCache.get(userId) as JsonWebKey }));
 };
 
 // ensureUserKeyPair: Orchestrates key pair initialization for the logged-in user.

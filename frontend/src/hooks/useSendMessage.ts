@@ -1,20 +1,19 @@
-// Orchestrates outbound chat sends for the selected conversation, including
-// text messages, media uploads, optimistic queue updates, and post-send sync.
-// Depends on the selected conversation, auth context, shared conversation store,
-// Cloudinary upload helpers, and the message API.
+// Orchestrates outbound chat sends for the selected conversation (direct or
+// group), including text messages, media uploads, optimistic queue updates,
+// and post-send sync. Depends on the selected conversation, auth context,
+// shared conversation store, Cloudinary upload helpers, and the message API.
 import { useState } from "react";
 import toast from "react-hot-toast";
 import useConversation from "../zustand/useConversation";
 import { useAuthContext } from "../context/Auth-Context";
-import { getConversationKey } from "../Utils/conversationKey";
 import { uploadFilesToCloudinary } from "../Utils/uploadService";
 import { getErrorMessage } from "../Utils/getErrorMessage";
 import type { ApiErrorResponse, Message, SendMessagePayload } from "../types";
 import { apiFetch } from "../Utils/apiFetch";
 import {
   decryptMessageIfNeeded,
-  encryptTextMessage,
-  getPublicKeyByUserId,
+  encryptTextMessageForRecipients,
+  getRecipientPublicKeys,
   requireUserKeyPair,
 } from "../Utils/crypto";
 import { saveConversationPreview } from "../Utils/conversationPreviewCache";
@@ -53,19 +52,16 @@ const useSendMessage = () => {
    * - a single path prevents drift between message list, sidebar preview, and details panel
    */
   const persistMessage = (outgoingMessage: Message) => {
-    const conversationKey = getConversationKey(
-      outgoingMessage?.senderId,
-      outgoingMessage?.receiverId
-    );
+    const conversationId = outgoingMessage?.conversationId;
 
-    if (conversationKey && outgoingMessage) {
-      appendMessageToConversation(conversationKey, outgoingMessage);
+    if (conversationId && outgoingMessage) {
+      appendMessageToConversation(conversationId, outgoingMessage);
 
       if (currentUserId) {
         upsertConversationFromMessage(outgoingMessage, currentUserId);
         // Persist a local preview so sender-side sidebar survives reloads with
         // readable text even though the server stores encrypted message bodies.
-        saveConversationPreview(currentUserId, String(outgoingMessage.receiverId), {
+        saveConversationPreview(currentUserId, conversationId, {
           lastMessage: getMessagePreviewText(outgoingMessage),
           lastMessageAt: outgoingMessage.createdAt,
           lastMessageSenderId: String(outgoingMessage.senderId),
@@ -74,8 +70,7 @@ const useSendMessage = () => {
         // The details panel (media/links/documents) reads from a refetched summary endpoint.
         // Receiver-side updates are triggered by socket events, but sender-side local sends do
         // not pass through that socket path, so we explicitly trigger a refresh here.
-        const activeConversationKey = getConversationKey(selectedConversation?._id, currentUserId);
-        if (activeConversationKey === conversationKey) {
+        if (selectedConversation?._id === conversationId) {
           bumpDetailsRefreshVersion();
         }
       }
@@ -90,7 +85,7 @@ const useSendMessage = () => {
    */
   const sendPayload = async (payload: SendMessagePayload): Promise<void> => {
     const data = await apiFetch<ApiErrorResponse & { newMessage?: Message }>(
-      `/messages/send/${selectedConversation?._id}`,
+      `/conversations/${selectedConversation?._id}/messages`,
       {
         method: "POST",
         body: JSON.stringify(payload),
@@ -119,14 +114,18 @@ const useSendMessage = () => {
 
     setLoading(true);
     try {
-      const { publicKey: senderPublicKey } = await requireUserKeyPair(currentUserId);
-      const receiverPublicKey = await getPublicKeyByUserId(String(selectedConversation._id));
+      await requireUserKeyPair(currentUserId);
 
-      const encryptedPayload = await encryptTextMessage(
-        message,
-        receiverPublicKey,
-        senderPublicKey
-      );
+      // Every current participant needs a wrapped copy of the AES key,
+      // including the sender (so they can re-read their own sent history).
+      const participantIds = selectedConversation.participants.map((participant) => participant._id);
+      const recipients = await getRecipientPublicKeys(participantIds);
+
+      if (recipients.length < participantIds.length) {
+        throw new Error("One or more participants haven't set up encryption yet");
+      }
+
+      const encryptedPayload = await encryptTextMessageForRecipients(message, recipients);
 
       await sendPayload({
         messageType: "text",

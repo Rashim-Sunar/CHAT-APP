@@ -8,6 +8,7 @@ import useConversation from "../../zustand/useConversation";
 import { useAuthContext } from "../../context/Auth-Context";
 import UserDetailsPanel from "../details/UserDetailsPanel";
 import Avatar from "../common/Avatar";
+import { getOtherParticipant } from "../../Utils/conversationDisplay";
 
 interface MessageContainerProps {
   desktopDetailsOpen: boolean;
@@ -49,15 +50,16 @@ const MessageContainer = ({ desktopDetailsOpen, onToggleDesktopDetails }: Messag
           </button>
 
           <Avatar
-            src={selectedConversation.profilePic}
-            gender={selectedConversation.gender}
-            name={selectedConversation.userName}
+            src={selectedConversation.displayAvatar}
+            gender={getOtherParticipant(selectedConversation, currentUserId)?.gender}
+            name={selectedConversation.displayName}
             alt="avatar"
             className="w-9 h-9 md:w-10 md:h-10 rounded-full object-cover"
+            kind={selectedConversation.type === "group" ? "group" : "user"}
           />
 
           <h3 className="font-semibold text-slate-800 text-sm md:text-base">
-            {selectedConversation.userName}
+            {selectedConversation.displayName}
           </h3>
         </div>
 

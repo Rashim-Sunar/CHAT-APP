@@ -7,11 +7,11 @@ import { useAuthContext } from "../../context/Auth-Context";
 import useConversation from "../../zustand/useConversation";
 import Avatar from "../common/Avatar";
 import { apiFetch } from "../../Utils/apiFetch";
-import { getConversationKey } from "../../Utils/conversationKey";
+import { getOtherParticipant } from "../../Utils/conversationDisplay";
 import {
   decryptMessageIfNeeded,
-  encryptTextMessage,
-  getPublicKeyByUserId,
+  encryptTextMessageForRecipients,
+  getRecipientPublicKeys,
   requireUserKeyPair,
 } from "../../Utils/crypto";
 import { getErrorMessage } from "../../Utils/getErrorMessage";
@@ -42,7 +42,7 @@ const ForwardMessageModal = ({ isOpen, message, onClose }: ForwardMessageModalPr
   const filteredConversations = useMemo(
     () =>
       conversations.filter((conversation) =>
-        conversation.userName.toLowerCase().includes(search.trim().toLowerCase())
+        conversation.displayName.toLowerCase().includes(search.trim().toLowerCase())
       ),
     [conversations, search]
   );
@@ -70,16 +70,19 @@ const ForwardMessageModal = ({ isOpen, message, onClose }: ForwardMessageModalPr
     if (!currentUserId) return;
 
     const normalizedMessage = await decryptMessageIfNeeded(outgoingMessage, currentUserId);
-    const conversationKey = getConversationKey(normalizedMessage?.senderId, normalizedMessage?.receiverId);
+    const conversationId = normalizedMessage?.conversationId;
 
-    if (!conversationKey) return;
+    if (!conversationId) return;
 
-    appendMessageToConversation(conversationKey, normalizedMessage);
+    appendMessageToConversation(conversationId, normalizedMessage);
     upsertConversationFromMessage(normalizedMessage, currentUserId);
   };
 
   const forwardToConversation = async (targetId: string): Promise<void> => {
     if (!currentUserId) throw new Error("Not authenticated");
+
+    const targetConversation = conversations.find((conversation) => conversation._id === targetId);
+    if (!targetConversation) throw new Error("Chat not found");
 
     if (message.messageType === "text") {
       if (message.decryptionFailed) {
@@ -89,36 +92,48 @@ const ForwardMessageModal = ({ isOpen, message, onClose }: ForwardMessageModalPr
       const plainText = (message.text || message.message || "").trim();
       if (!plainText) throw new Error("Message has no content to forward");
 
-      const { publicKey: senderPublicKey } = await requireUserKeyPair(currentUserId);
-      const receiverPublicKey = await getPublicKeyByUserId(targetId);
-      const encryptedPayload = await encryptTextMessage(plainText, receiverPublicKey, senderPublicKey);
+      await requireUserKeyPair(currentUserId);
+      const participantIds = targetConversation.participants.map((participant) => participant._id);
+      const recipients = await getRecipientPublicKeys(participantIds);
 
-      const data = await apiFetch<ApiErrorResponse & { newMessage?: Message }>(`/messages/send/${targetId}`, {
-        method: "POST",
-        body: JSON.stringify({
-          messageType: "text",
-          ...encryptedPayload,
-          forwarded: true,
-        }),
-      });
+      if (recipients.length < participantIds.length) {
+        throw new Error("One or more participants haven't set up encryption yet");
+      }
+
+      const encryptedPayload = await encryptTextMessageForRecipients(plainText, recipients);
+
+      const data = await apiFetch<ApiErrorResponse & { newMessage?: Message }>(
+        `/conversations/${targetId}/messages`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            messageType: "text",
+            ...encryptedPayload,
+            forwarded: true,
+          }),
+        }
+      );
       if (data.error) throw new Error(data.error);
       if (data.newMessage) await persistForwardedMessage(data.newMessage);
       return;
     }
 
     // Media messages reuse the existing Cloudinary asset — no re-upload needed.
-    const data = await apiFetch<ApiErrorResponse & { newMessage?: Message }>(`/messages/send/${targetId}`, {
-      method: "POST",
-      body: JSON.stringify({
-        messageType: message.messageType,
-        fileUrl: message.fileUrl,
-        fileName: message.fileName,
-        fileSize: message.fileSize,
-        mimeType: message.mimeType,
-        publicId: message.publicId,
-        forwarded: true,
-      }),
-    });
+    const data = await apiFetch<ApiErrorResponse & { newMessage?: Message }>(
+      `/conversations/${targetId}/messages`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          messageType: message.messageType,
+          fileUrl: message.fileUrl,
+          fileName: message.fileName,
+          fileSize: message.fileSize,
+          mimeType: message.mimeType,
+          publicId: message.publicId,
+          forwarded: true,
+        }),
+      }
+    );
     if (data.error) throw new Error(data.error);
     if (data.newMessage) await persistForwardedMessage(data.newMessage);
   };
@@ -198,14 +213,15 @@ const ForwardMessageModal = ({ isOpen, message, onClose }: ForwardMessageModalPr
                   className="flex w-full items-center gap-3 px-5 py-2.5 transition hover:bg-slate-50"
                 >
                   <Avatar
-                    src={conversation.profilePic}
-                    gender={conversation.gender}
-                    name={conversation.userName}
+                    src={conversation.displayAvatar}
+                    gender={getOtherParticipant(conversation, currentUserId)?.gender}
+                    name={conversation.displayName}
                     alt="avatar"
                     className="h-10 w-10 shrink-0 rounded-full object-cover"
+                    kind={conversation.type === "group" ? "group" : "user"}
                   />
                   <span className="min-w-0 flex-1 truncate text-left text-sm font-medium text-slate-800">
-                    {conversation.userName}
+                    {conversation.displayName}
                   </span>
                   <span
                     className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition ${

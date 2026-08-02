@@ -1,15 +1,24 @@
-// Fetches messages for the selected conversation and stores them by conversation key.
-// Depends on the authenticated user, the active conversation, the shared message map,
-// and the API for canonical message history.
+// Fetches messages for the selected conversation and stores them by
+// conversation id (which is also the store key — no derived key needed).
+// Depends on the authenticated user, the active conversation, the shared
+// message map, and the API for canonical message history.
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import useConversation from "../zustand/useConversation";
 import { useAuthContext } from "../context/Auth-Context";
-import { getConversationKey } from "../Utils/conversationKey";
-import type { Message, ApiErrorResponse } from "../types";
+import type { Message } from "../types";
 import { getErrorMessage } from "../Utils/getErrorMessage";
 import { apiFetch } from "../Utils/apiFetch";
 import { decryptMessagesIfNeeded } from "../Utils/crypto";
+
+interface ConversationMessagesResponse {
+  error?: string;
+  status?: string;
+  data?: {
+    messages?: Message[];
+    hasMore?: boolean;
+  };
+}
 
 /**
  * Load the selected conversation history into the per-conversation message store.
@@ -24,12 +33,12 @@ const useGetMessages = () => {
     useConversation();
 
   const currentUserId = authUser?.data?.user?._id;
-  const conversationKey = getConversationKey(selectedConversation?._id, currentUserId);
+  const conversationId = selectedConversation?._id;
 
-  const messages = conversationKey ? messagesByConversation[conversationKey] || [] : [];
+  const messages = conversationId ? messagesByConversation[conversationId] || [] : [];
 
   useEffect(() => {
-    if (!selectedConversation?._id || !conversationKey) return;
+    if (!conversationId) return;
 
     let ignore = false;
 
@@ -37,23 +46,21 @@ const useGetMessages = () => {
     const getMessages = async () => {
       setLoading(true);
       try {
-        const data = await apiFetch<Message[] | (ApiErrorResponse & { error?: string })>(
-          `/messages/${selectedConversation._id}`,
+        const response = await apiFetch<ConversationMessagesResponse>(
+          `/conversations/${conversationId}/messages`,
           {
             method: "GET",
           }
         );
-        if (Array.isArray(data)) {
-          if (!ignore) {
-            const normalizedMessages = currentUserId
-              ? await decryptMessagesIfNeeded(data, currentUserId)
-              : data;
-            setMessagesForConversation(conversationKey, normalizedMessages);
-          }
-          return;
-        }
+        if (response.error) throw new Error(response.error);
 
-        if (data.error) throw new Error(data.error);
+        const fetchedMessages = response?.data?.messages || [];
+        if (!ignore) {
+          const normalizedMessages = currentUserId
+            ? await decryptMessagesIfNeeded(fetchedMessages, currentUserId)
+            : fetchedMessages;
+          setMessagesForConversation(conversationId, normalizedMessages);
+        }
       } catch (error: unknown) {
         const message = getErrorMessage(error);
         if (!message.includes("API Error: 401")) {
@@ -71,7 +78,7 @@ const useGetMessages = () => {
     return () => {
       ignore = true;
     };
-  }, [selectedConversation?._id, conversationKey, setMessagesForConversation, currentUserId]);
+  }, [conversationId, setMessagesForConversation, currentUserId]);
 
   return { loading, messages };
 };

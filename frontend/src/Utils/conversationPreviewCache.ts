@@ -1,5 +1,4 @@
 import type { Conversation } from "../types";
-import { getConversationKey } from "./conversationKey";
 
 interface ConversationPreviewCacheEntry {
   lastMessage: string;
@@ -31,18 +30,17 @@ const writeCache = (userId: string, cache: Record<string, ConversationPreviewCac
 
 // This cache only stores client-side conversation previews so the sender can
 // keep seeing the original text after reloads without exposing plaintext to the server.
+// Keyed directly by the real conversationId — works identically for direct
+// and group conversations, no per-pair key derivation needed.
 export const saveConversationPreview = (
   userId: string,
-  partnerId: string,
+  conversationId: string,
   preview: Pick<ConversationPreviewCacheEntry, "lastMessage" | "lastMessageAt" | "lastMessageSenderId">
 ): void => {
-  if (!userId || !partnerId) return;
-
-  const conversationKey = getConversationKey(userId, partnerId);
-  if (!conversationKey) return;
+  if (!userId || !conversationId) return;
 
   const cache = readCache(userId);
-  cache[conversationKey] = {
+  cache[conversationId] = {
     lastMessage: preview.lastMessage,
     lastMessageAt: preview.lastMessageAt,
     lastMessageSenderId: preview.lastMessageSenderId,
@@ -50,19 +48,16 @@ export const saveConversationPreview = (
   writeCache(userId, cache);
 };
 
-// Lookup is scoped by current user + partner key to avoid cross-account leakage
-// on shared browsers where multiple accounts log in on the same device.
+// Lookup is scoped by current user to avoid cross-account leakage on shared
+// browsers where multiple accounts log in on the same device.
 export const getCachedConversationPreview = (
   userId: string,
-  partnerId: string
+  conversationId: string
 ): ConversationPreviewCacheEntry | null => {
-  if (!userId || !partnerId) return null;
-
-  const conversationKey = getConversationKey(userId, partnerId);
-  if (!conversationKey) return null;
+  if (!userId || !conversationId) return null;
 
   const cache = readCache(userId);
-  return cache[conversationKey] || null;
+  return cache[conversationId] || null;
 };
 
 // Server summaries for encrypted text are intentionally generic. This merge step

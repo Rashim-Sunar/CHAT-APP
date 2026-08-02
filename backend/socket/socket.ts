@@ -83,10 +83,9 @@ io.on('connection', (socket) => {
       const receipt = await recordConversationSeen(payload.conversationId, payload.readerId);
       if (!receipt) return;
 
-      const recipientSocketId = getReceiverSocketId(receipt.recipientId);
-      if (recipientSocketId) {
-        io.to(recipientSocketId).emit('conversation:seen', receipt);
-      }
+      receipt.recipientIds.forEach((recipientId) => {
+        emitToUserDevices(recipientId, 'conversation:seen', receipt);
+      });
     } catch (error) {
       console.log(
         'Error in conversation:seen handler',

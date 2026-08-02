@@ -3,8 +3,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import { FiChevronDown, FiChevronUp, FiDownload, FiFileText, FiImage, FiLink2, FiX } from "react-icons/fi";
 import useConversation from "../../zustand/useConversation";
 import useUserDetails from "../../hooks/useUserDetails";
+import { useAuthContext } from "../../context/Auth-Context";
+import { getOtherParticipant } from "../../Utils/conversationDisplay";
 import Avatar from "../common/Avatar";
 import MediaPreviewModal from "../common/MediaPreviewModal";
+import GroupInfoPanel from "../groups/GroupInfoPanel";
 import { useSocketContext } from "../../context/SocketContext";
 import type { SharedDocumentItem, SharedLinkItem, SharedMediaItem } from "../../types";
 
@@ -219,6 +222,8 @@ const DocumentsList = ({ documents }: { documents: SharedDocumentItem[] }) => {
 const UserDetailsPanel = ({ isOpen, onClose, variant = "desktop" }: UserDetailsPanelProps) => {
   const { selectedConversation } = useConversation();
   const { onlineUsers } = useSocketContext();
+  const { authUser } = useAuthContext();
+  const currentUserId = authUser?.data?.user?._id;
   const { details, loading, error, refetch } = useUserDetails();
   const [previewItem, setPreviewItem] = useState<SharedMediaItem | null>(null);
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
@@ -227,9 +232,10 @@ const UserDetailsPanel = ({ isOpen, onClose, variant = "desktop" }: UserDetailsP
     documents: false,
   });
 
-  const baseAvatar = details?.user?.profilePic || selectedConversation?.profilePic || "";
-  const userName = details?.user?.username || selectedConversation?.userName || "User";
-  const isOnline = selectedConversation?._id ? onlineUsers.includes(selectedConversation._id) : false;
+  const otherParticipant = getOtherParticipant(selectedConversation, currentUserId);
+  const baseAvatar = details?.user?.profilePic || selectedConversation?.displayAvatar || "";
+  const userName = details?.user?.username || selectedConversation?.displayName || "User";
+  const isOnline = Boolean(otherParticipant && onlineUsers.includes(otherParticipant._id));
   const mediaItems = details?.media || [];
   const linkItems = details?.links || [];
   const documentItems = details?.documents || [];
@@ -302,93 +308,99 @@ const UserDetailsPanel = ({ isOpen, onClose, variant = "desktop" }: UserDetailsP
       aria-label="User details panel"
       onKeyDown={onContainerKeyDown}
     >
-      <div className="relative px-5 pt-5 pb-6 border-b border-slate-200 bg-gradient-to-b from-white to-slate-50">
-        {variant === "drawer" && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute top-4 right-4 h-8 w-8 rounded-lg hover:bg-slate-100 text-slate-600 flex items-center justify-center"
-            aria-label="Close details panel"
-          >
-            <FiX size={17} />
-          </button>
-        )}
+      {selectedConversation?.type === "group" ? (
+        <GroupInfoPanel conversation={selectedConversation} currentUserId={currentUserId} variant={variant} onClose={onClose} />
+      ) : (
+        <>
+          <div className="relative px-5 pt-5 pb-6 border-b border-slate-200 bg-gradient-to-b from-white to-slate-50">
+            {variant === "drawer" && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="absolute top-4 right-4 h-8 w-8 rounded-lg hover:bg-slate-100 text-slate-600 flex items-center justify-center"
+                aria-label="Close details panel"
+              >
+                <FiX size={17} />
+              </button>
+            )}
 
-        <div className="flex flex-col items-center text-center">
-          <Avatar
-            src={baseAvatar}
-            gender={selectedConversation?.gender}
-            name={userName}
-            alt={`${userName} profile`}
-            className="h-20 w-20 rounded-full object-cover border border-slate-200 shadow-sm"
-            textClassName="text-2xl"
-          />
+            <div className="flex flex-col items-center text-center">
+              <Avatar
+                src={baseAvatar}
+                gender={otherParticipant?.gender}
+                name={userName}
+                alt={`${userName} profile`}
+                className="h-20 w-20 rounded-full object-cover border border-slate-200 shadow-sm"
+                textClassName="text-2xl"
+              />
 
-          <div className="mt-3 min-w-0">
-            <p className="text-lg font-semibold text-slate-900 truncate">{userName}</p>
-            <p className="text-sm text-slate-500 mt-1 flex items-center justify-center gap-1.5">
-              <span className={`inline-block h-2.5 w-2.5 rounded-full ${isOnline ? "bg-emerald-500" : "bg-slate-300"}`} aria-hidden="true" />
-              {isOnline ? "Online" : "Offline"}
-            </p>
+              <div className="mt-3 min-w-0">
+                <p className="text-lg font-semibold text-slate-900 truncate">{userName}</p>
+                <p className="text-sm text-slate-500 mt-1 flex items-center justify-center gap-1.5">
+                  <span className={`inline-block h-2.5 w-2.5 rounded-full ${isOnline ? "bg-emerald-500" : "bg-slate-300"}`} aria-hidden="true" />
+                  {isOnline ? "Online" : "Offline"}
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <div className="flex-1 overflow-y-auto px-4 md:px-5 py-4 space-y-3">
-        {loading && <SkeletonRows />}
+          <div className="flex-1 overflow-y-auto px-4 md:px-5 py-4 space-y-3">
+            {loading && <SkeletonRows />}
 
-        {!loading && error && (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
-            <p className="text-sm text-rose-700">{error}</p>
-            <button
-              type="button"
-              onClick={refetch}
-              className="mt-2 text-xs font-medium text-rose-700 underline underline-offset-2"
-            >
-              Retry
-            </button>
+            {!loading && error && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+                <p className="text-sm text-rose-700">{error}</p>
+                <button
+                  type="button"
+                  onClick={refetch}
+                  className="mt-2 text-xs font-medium text-rose-700 underline underline-offset-2"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {!loading && !error && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+                <AccordionSection
+                  id="media"
+                  title="Shared media"
+                  count={mediaItems.length}
+                  isOpen={openSections.media}
+                  onToggle={toggleSection}
+                  icon={<FiImage size={15} />}
+                >
+                  <MediaGrid items={mediaItems} onPreview={setPreviewItem} />
+                </AccordionSection>
+
+                <AccordionSection
+                  id="links"
+                  title="Shared links"
+                  count={linkItems.length}
+                  isOpen={openSections.links}
+                  onToggle={toggleSection}
+                  icon={<FiLink2 size={15} />}
+                >
+                  <LinksList links={linkItems} />
+                </AccordionSection>
+
+                <AccordionSection
+                  id="documents"
+                  title="Shared documents"
+                  count={documentItems.length}
+                  isOpen={openSections.documents}
+                  onToggle={toggleSection}
+                  icon={<FiFileText size={15} />}
+                >
+                  <DocumentsList documents={documentItems} />
+                </AccordionSection>
+              </motion.div>
+            )}
           </div>
-        )}
 
-        {!loading && !error && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
-            <AccordionSection
-              id="media"
-              title="Shared media"
-              count={mediaItems.length}
-              isOpen={openSections.media}
-              onToggle={toggleSection}
-              icon={<FiImage size={15} />}
-            >
-              <MediaGrid items={mediaItems} onPreview={setPreviewItem} />
-            </AccordionSection>
-
-            <AccordionSection
-              id="links"
-              title="Shared links"
-              count={linkItems.length}
-              isOpen={openSections.links}
-              onToggle={toggleSection}
-              icon={<FiLink2 size={15} />}
-            >
-              <LinksList links={linkItems} />
-            </AccordionSection>
-
-            <AccordionSection
-              id="documents"
-              title="Shared documents"
-              count={documentItems.length}
-              isOpen={openSections.documents}
-              onToggle={toggleSection}
-              icon={<FiFileText size={15} />}
-            >
-              <DocumentsList documents={documentItems} />
-            </AccordionSection>
-          </motion.div>
-        )}
-      </div>
-
-      <MediaPreviewModal item={previewItem} onClose={() => setPreviewItem(null)} />
+          <MediaPreviewModal item={previewItem} onClose={() => setPreviewItem(null)} />
+        </>
+      )}
     </motion.aside>
   );
 
