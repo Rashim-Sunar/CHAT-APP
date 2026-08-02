@@ -3,7 +3,6 @@ import { HiOutlineDotsVertical } from "react-icons/hi";
 import { FiCheck, FiEdit2, FiTrash2, FiCornerUpLeft, FiCornerUpRight } from "react-icons/fi";
 import { useAuthContext } from "../../context/Auth-Context";
 import useConversation from "../../zustand/useConversation";
-import { getConversationKey } from "../../Utils/conversationKey";
 import { extractTime } from "../../Utils/extractTime";
 import Avatar from "../common/Avatar";
 import MediaPreviewModal from "../common/MediaPreviewModal";
@@ -40,8 +39,13 @@ const Message = ({ message }: MessageProps) => {
   const currentUserId = sender?._id;
   const fromMe = Boolean(sender && message.senderId === sender._id);
   const hiddenForCurrentUser = shouldHideMessageForUser(message, currentUserId);
-  const conversationKey = getConversationKey(selectedConversation?._id, currentUserId);
+  const conversationKey = selectedConversation?._id;
   const currentConversationMessages = conversationKey ? messagesByConversation[conversationKey] || [] : [];
+  // Who actually sent THIS message — for a direct chat that's always "the
+  // other participant", but for a group it varies message-to-message.
+  const messageSenderParticipant = selectedConversation?.participants.find(
+    (participant) => participant._id === String(message.senderId)
+  );
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -94,7 +98,10 @@ const Message = ({ message }: MessageProps) => {
     }
 
     const isRepliedFromMe = String(repliedMessage.senderId) === String(currentUserId);
-    const repliedSenderName = isRepliedFromMe ? "You" : selectedConversation?.userName || "them";
+    const repliedSenderParticipant = selectedConversation?.participants.find(
+      (participant) => participant._id === String(repliedMessage.senderId)
+    );
+    const repliedSenderName = isRepliedFromMe ? "You" : repliedSenderParticipant?.userName || "them";
     const repliedSnippet = repliedMessage.deletedForEveryone
       ? DELETED_MESSAGE_TEXT
       : repliedMessage.messageType === "image"
@@ -353,9 +360,9 @@ const Message = ({ message }: MessageProps) => {
     }}>
       {!fromMe && (
         <Avatar
-          src={selectedConversation?.profilePic}
-          gender={selectedConversation?.gender}
-          name={selectedConversation?.userName}
+          src={messageSenderParticipant?.profilePic}
+          gender={messageSenderParticipant?.gender}
+          name={messageSenderParticipant?.userName}
           alt="avatar"
           className="mr-2 h-8 w-8 rounded-full"
         />

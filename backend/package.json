@@ -7,7 +7,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsx watch server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "migrate:group-chat": "tsx scripts/migrateToUnifiedConversationSchema.ts"
   },
   "keywords": [],
   "author": "",

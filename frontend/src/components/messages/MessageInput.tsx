@@ -137,7 +137,9 @@ const MessageInput = () => {
   const replySenderName = replyTarget
     ? String(replyTarget.senderId) === String(currentUserId)
       ? "You"
-      : selectedConversation?.userName || "them"
+      : selectedConversation?.participants.find(
+          (participant) => participant._id === String(replyTarget.senderId)
+        )?.userName || "them"
     : "";
 
   return (

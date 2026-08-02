@@ -10,15 +10,27 @@ interface AvatarProps {
   alt: string;
   className?: string;
   textClassName?: string;
+  // Groups have no gender to fall back on — "group" skips straight from src
+  // to initials, since falling through to loadGenderAvatar(undefined) would
+  // silently render a male person icon for an unnamed/unphotographed group.
+  kind?: "user" | "group";
 }
 
 /**
- * Three-tier avatar: the real profile picture if given; otherwise the
- * gender-based default image, fetched on demand; otherwise (while that's
- * loading, or if it also fails) an instant initials letter that never
- * depends on a network request.
+ * Three-tier avatar: the real profile picture if given; otherwise (for
+ * users only) the gender-based default image, fetched on demand; otherwise
+ * (while that's loading, if it also fails, or for groups) an instant
+ * initials letter that never depends on a network request.
  */
-const Avatar = ({ src, gender, name, alt, className, textClassName = "text-base" }: AvatarProps) => {
+const Avatar = ({
+  src,
+  gender,
+  name,
+  alt,
+  className,
+  textClassName = "text-base",
+  kind = "user",
+}: AvatarProps) => {
   const [srcFailed, setSrcFailed] = useState(false);
   const [genderAvatarUrl, setGenderAvatarUrl] = useState<string | null>(null);
   const [genderAvatarFailed, setGenderAvatarFailed] = useState(false);
@@ -27,7 +39,7 @@ const Avatar = ({ src, gender, name, alt, className, textClassName = "text-base"
     setSrcFailed(false);
   }, [src]);
 
-  const needsGenderAvatar = !src || srcFailed;
+  const needsGenderAvatar = kind === "user" && (!src || srcFailed);
 
   useEffect(() => {
     if (!needsGenderAvatar) return;
@@ -53,7 +65,7 @@ const Avatar = ({ src, gender, name, alt, className, textClassName = "text-base"
     return <img src={src} alt={alt} onError={() => setSrcFailed(true)} className={className} />;
   }
 
-  if (genderAvatarUrl && !genderAvatarFailed) {
+  if (needsGenderAvatar && genderAvatarUrl && !genderAvatarFailed) {
     return (
       <img src={genderAvatarUrl} alt={alt} onError={() => setGenderAvatarFailed(true)} className={className} />
     );

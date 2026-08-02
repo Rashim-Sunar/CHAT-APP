@@ -1,8 +1,8 @@
 import { useSocketContext } from "../../context/SocketContext";
 import useConversation from "../../zustand/useConversation";
 import { useAuthContext } from "../../context/Auth-Context";
-import { getConversationKey } from "../../Utils/conversationKey";
 import { DELETED_MESSAGE_TEXT } from "../../Utils/messageDisplay";
+import { getOtherParticipant } from "../../Utils/conversationDisplay";
 import Avatar from "../common/Avatar";
 import type { Conversation } from "../../types";
 
@@ -19,9 +19,9 @@ const ConversationItem = ({ conversation }: ConversationProps) => {
   const currentUserId = authUser?.data?.user?._id;
 
   const isSelected = selectedConversation?._id === conversation._id;
-  const isOnline = onlineUsers.includes(conversation._id);
-  const conversationKey = getConversationKey(conversation._id, currentUserId);
-  const unreadCount = conversationKey ? unreadByConversation[conversationKey] || 0 : 0;
+  const otherParticipant = getOtherParticipant(conversation, currentUserId);
+  const isOnline = Boolean(otherParticipant && onlineUsers.includes(otherParticipant._id));
+  const unreadCount = unreadByConversation[conversation._id] || 0;
   const isCurrentUserLastSender = Boolean(
     currentUserId &&
       conversation.lastMessageSenderId &&
@@ -35,7 +35,7 @@ const ConversationItem = ({ conversation }: ConversationProps) => {
     if (preview === DELETED_MESSAGE_TEXT) {
       return isCurrentUserLastSender
         ? "You deleted a message"
-        : `${conversation.userName} deleted a message`;
+        : `${conversation.displayName} deleted a message`;
     }
 
     if (!isCurrentUserLastSender) return preview;
@@ -53,22 +53,23 @@ const ConversationItem = ({ conversation }: ConversationProps) => {
     >
       <div className="relative">
         <Avatar
-          src={conversation.profilePic}
-          gender={conversation.gender}
-          name={conversation.userName}
+          src={conversation.displayAvatar}
+          gender={otherParticipant?.gender}
+          name={conversation.displayName}
           alt="avatar"
           className="w-11 h-11 rounded-full object-cover"
+          kind={conversation.type === "group" ? "group" : "user"}
         />
 
         {isOnline && (
-          <span className="absolute bottom-0 right-0 w-3 h-3 
-                           bg-green-500 border-2 border-white 
+          <span className="absolute bottom-0 right-0 w-3 h-3
+                           bg-green-500 border-2 border-white
                            rounded-full"></span>
         )}
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className="font-medium text-slate-800 truncate">{conversation.userName}</p>
+        <p className="font-medium text-slate-800 truncate">{conversation.displayName}</p>
         <div className="flex items-center gap-2 min-w-0">
           <p className="text-xs text-slate-500 truncate">
             {sidebarPreviewText}

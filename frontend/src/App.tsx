@@ -1,15 +1,17 @@
 import "./App.css";
 import "./index.css";
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import Login from "./pages/login/Login";
 import Home from "./pages/home/Home";
 import SignUp from "./pages/signup/Signup";
+import JoinGroupPage from "./pages/join/JoinGroupPage";
 import { useAuthContext } from "./context/Auth-Context";
 import { useDeviceLinkContext } from "./context/DeviceLinkContext";
 import useLogout from "./hooks/useLogout";
 import { getErrorMessage } from "./Utils/getErrorMessage";
+import { consumePostLoginRedirect, savePostLoginRedirect } from "./Utils/postLoginRedirect";
 
 const MIN_BACKUP_PASSWORD_LENGTH = 10;
 
@@ -240,6 +242,26 @@ const BackupSetupPrompt = ({
   );
 };
 
+// After a successful login, sends the user back to whatever page they were
+// trying to reach (e.g. an invite link opened while signed out) instead of
+// always landing on "/".
+const PostLoginRedirect = () => {
+  const [target] = useState(() => consumePostLoginRedirect() || "/");
+  return <Navigate to={target} replace />;
+};
+
+// Stashes the intended destination before bouncing a signed-out user to
+// login, so PostLoginRedirect can send them back once authenticated.
+const RedirectToLoginPreservingPath = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    savePostLoginRedirect(location.pathname);
+  }, [location.pathname]);
+
+  return <Navigate to="/login" replace />;
+};
+
 function App() {
   const { authUser, loading } = useAuthContext();
   const {
@@ -409,9 +431,13 @@ function App() {
       ) : null}
 
       <Routes>
-        <Route path="/login" element={authUser ? <Navigate to="/" /> : <Login />} />
+        <Route path="/login" element={authUser ? <PostLoginRedirect /> : <Login />} />
         <Route path="/signup" element={authUser ? <Navigate to="/" /> : <SignUp />} />
         <Route path="/" element={authUser ? <Home /> : <Navigate to="/login" />} />
+        <Route
+          path="/join/:token"
+          element={authUser ? <JoinGroupPage /> : <RedirectToLoginPreservingPath />}
+        />
       </Routes>
     </div>
   );

@@ -22,14 +22,14 @@ const SearchInput = () => {
     }
 
     const conversation = conversations.find((candidate) =>
-      candidate.userName.toLowerCase().includes(search.toLowerCase())
+      candidate.displayName.toLowerCase().includes(search.toLowerCase())
     );
 
     if (conversation) {
       setSelectedConversation(conversation, currentUserId);
       setSearch("");
     } else {
-      toast.error("User not found");
+      toast.error("Chat not found");
     }
   };
 

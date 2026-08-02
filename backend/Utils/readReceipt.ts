@@ -5,7 +5,7 @@ export type SeenReceiptPayload = {
   conversationId: string;
   readerId: string;
   seenAt: string;
-  recipientId: string;
+  recipientIds: string[];
 };
 
 type MessageLike = {
@@ -25,12 +25,10 @@ const isVisibleToReader = (message: MessageLike, readerId: string): boolean => {
   return !deletedFor.includes(String(readerId));
 };
 
-const getConversationParticipant = (conversation: ConversationDocument, readerId: string): string | null => {
-  const participant = conversation.participants
+const getOtherParticipants = (conversation: ConversationDocument, readerId: string): string[] => {
+  return conversation.participants
     .map((value) => String(value))
-    .find((participantId) => participantId !== String(readerId));
-
-  return participant || null;
+    .filter((participantId) => participantId !== String(readerId));
 };
 
 /**
@@ -50,8 +48,8 @@ export const recordConversationSeen = async (
 
   if (!conversation) return null;
 
-  const recipientId = getConversationParticipant(conversation, readerId);
-  if (!recipientId) return null;
+  const recipientIds = getOtherParticipants(conversation, readerId);
+  if (recipientIds.length === 0) return null;
 
   const currentReadBy = Array.isArray(
     (conversation as unknown as { readBy?: Array<{ userId: Types.ObjectId; seenAt: Date }> }).readBy
@@ -91,6 +89,6 @@ export const recordConversationSeen = async (
     conversationId: String(conversation._id),
     readerId: String(readerId),
     seenAt: seenAt.toISOString(),
-    recipientId: String(recipientId),
+    recipientIds,
   };
 };
