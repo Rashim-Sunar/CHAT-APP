@@ -8,12 +8,21 @@ export type MessageType = 'text' | 'image' | 'video' | 'file';
 /**
  * @desc    Data required to send either a text or media message
  */
+export interface EncryptedAesKeyEntryDto {
+  userId: string;
+  wrappedKey: string;
+}
+
 export interface SendMessageDto {
   messageType?: MessageType;
   message?: string;
   text?: string;
   encryptedMessage?: string;
+  // Legacy dual-wrap single-string field, still accepted for the existing
+  // direct-message send path. New (conversation-based) sends use
+  // encryptedAESKeys instead — see conversation.d.ts's SendConversationMessageDto.
   encryptedAESKey?: string;
+  encryptedAESKeys?: EncryptedAesKeyEntryDto[];
   iv?: string;
   fileUrl?: string;
   fileName?: string;

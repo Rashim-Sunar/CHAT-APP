@@ -14,7 +14,9 @@ import { useAuthContext } from "../../context/Auth-Context";
 import useLogout from "../../hooks/useLogout";
 import useUserProfile from "../../hooks/useUserProfile";
 import ProfileModal from "../sidebar/ProfileModal";
+import NewConversationMenu from "../sidebar/NewConversationMenu";
 import Avatar from "../common/Avatar";
+import { getOtherParticipant } from "../../Utils/conversationDisplay";
 
 const MobileConversationBar = () => {
   const { conversations } = useGetConversations();
@@ -32,7 +34,7 @@ const MobileConversationBar = () => {
   const activeConversationId = selectedConversation?._id;
 
   const filteredConversations = conversations.filter((conversation) =>
-    conversation.userName.toLowerCase().includes(search.toLowerCase())
+    conversation.displayName.toLowerCase().includes(search.toLowerCase())
   );
 
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -68,22 +70,25 @@ const MobileConversationBar = () => {
             Chat App
           </h1>
 
-          <button
-            type="button"
-            onClick={() => setMenuOpen(true)}
-            aria-label="Open user profile menu"
-            className="relative w-9 h-9 rounded-full overflow-hidden border border-slate-200"
-          >
-            {currentUser ? (
-              <Avatar
-                src={currentUser.profilePic}
-                gender={currentUser.gender}
-                name={currentUser.userName}
-                alt={`${currentUser.userName}'s profile picture`}
-                className="w-full h-full object-cover"
-              />
-            ) : null}
-          </button>
+          <div className="flex items-center gap-1">
+            <NewConversationMenu />
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              aria-label="Open user profile menu"
+              className="relative w-9 h-9 rounded-full overflow-hidden border border-slate-200"
+            >
+              {currentUser ? (
+                <Avatar
+                  src={currentUser.profilePic}
+                  gender={currentUser.gender}
+                  name={currentUser.userName}
+                  alt={`${currentUser.userName}'s profile picture`}
+                  className="w-full h-full object-cover"
+                />
+              ) : null}
+            </button>
+          </div>
         </div>
 
         <div className="relative">
@@ -116,16 +121,17 @@ const MobileConversationBar = () => {
                   ${isSelected ? "border-indigo-600" : "border-transparent"}`}
               >
                 <Avatar
-                  src={conversation.profilePic}
-                  gender={conversation.gender}
-                  name={conversation.userName}
+                  src={conversation.displayAvatar}
+                  gender={getOtherParticipant(conversation, currentUserId)?.gender}
+                  name={conversation.displayName}
                   alt="avatar"
                   className="w-full h-full object-cover"
+                  kind={conversation.type === "group" ? "group" : "user"}
                 />
               </div>
 
               <span className="text-xs mt-1 truncate w-full text-center text-slate-600">
-                {conversation.userName}
+                {conversation.displayName}
               </span>
             </div>
           );

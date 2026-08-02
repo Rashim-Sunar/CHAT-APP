@@ -33,12 +33,6 @@ export interface ApiErrorResponse {
   status?: "fail" | "error";
 }
 
-export interface EncryptedMessagePayload {
-  encryptedMessage: string;
-  encryptedAESKey: string;
-  iv: string;
-}
-
 export interface EncryptedLinkedSecret {
   encryptedPayload: string;
   encryptedAesKey: string;
@@ -110,11 +104,28 @@ export interface UserKeyPairJwk {
   privateKey: JsonWebKey;
 }
 
-export interface Conversation {
+export type ConversationType = "direct" | "group";
+
+export interface ConversationParticipant {
   _id: string;
   userName: string;
   gender: Gender;
   profilePic?: string;
+  isAdmin?: boolean;
+}
+
+export interface Conversation {
+  _id: string; // real conversation id (not a user id)
+  type: ConversationType;
+  // Server-computed so components never need to branch on `type` themselves:
+  // the other user's name/photo for direct, groupName/groupAvatar for group.
+  displayName: string;
+  displayAvatar?: string;
+  participants: ConversationParticipant[];
+  groupName?: string;
+  groupAvatar?: string;
+  createdBy?: string;
+  admins?: string[];
   lastMessage?: string;
   lastMessageAt?: string;
   lastMessageSenderId?: string;
@@ -128,16 +139,26 @@ export interface MessageReaction {
   emoji: string;
 }
 
+export interface EncryptedAesKeyEntry {
+  userId: string;
+  wrappedKey: string;
+}
+
 export interface Message {
   _id?: string;
   conversationId?: string;
   senderId: string;
-  receiverId: string;
+  // Populated for direct messages only; absent/null for group messages,
+  // which have no single recipient.
+  receiverId?: string | null;
   messageType: MessageType;
   text?: string;
   message?: string;
   encryptedMessage?: string;
+  // Legacy single-string dual-wrap envelope, kept only as a decrypt-side
+  // fallback during the schema migration window.
   encryptedAESKey?: string;
+  encryptedAESKeys?: EncryptedAesKeyEntry[];
   iv?: string;
   decryptionFailed?: boolean;
   fileUrl?: string | null;
@@ -187,6 +208,10 @@ export interface ServerToClientEvents {
   "message:edit": (message: Message) => void;
   "message:delete": (message: Message) => void;
   "message:reaction": (message: Message) => void;
+  "conversation:updated": (payload: { conversationId: string; groupName?: string; groupAvatar?: string }) => void;
+  "conversation:membersAdded": (payload: { conversationId: string; addedUserIds: string[] }) => void;
+  "conversation:memberRemoved": (payload: { conversationId: string; removedUserId: string }) => void;
+  "conversation:adminPromoted": (payload: { conversationId: string; newAdminUserId: string }) => void;
   link_request: (payload: LinkRequestEventPayload) => void;
   link_session_updated: (payload: LinkSessionUpdatedEventPayload) => void;
   link_secret_ready: (payload: LinkSecretReadyEventPayload) => void;
@@ -276,7 +301,7 @@ export interface SendMessagePayload {
   messageType: MessageType;
   text?: string;
   encryptedMessage?: string;
-  encryptedAESKey?: string;
+  encryptedAESKeys?: EncryptedAesKeyEntry[];
   iv?: string;
   fileUrl?: string;
   fileName?: string;
