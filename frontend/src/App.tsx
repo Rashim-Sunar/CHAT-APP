@@ -7,6 +7,7 @@ import Login from "./pages/login/Login";
 import Home from "./pages/home/Home";
 import SignUp from "./pages/signup/Signup";
 import JoinGroupPage from "./pages/join/JoinGroupPage";
+import Landing from "./pages/landing/Landing";
 import { useAuthContext } from "./context/Auth-Context";
 import { useDeviceLinkContext } from "./context/DeviceLinkContext";
 import useLogout from "./hooks/useLogout";
@@ -361,8 +362,13 @@ function App() {
     );
   }
 
+  // Every routed page below manages its own full-height layout (Login/SignUp/
+  // JoinGroupPage each wrap in min-h-screen + centering, Home and Landing use
+  // their own h-screen/min-h-screen + scroll behavior), so this container
+  // stays unconstrained rather than forcing a shared h-screen/flex-center —
+  // that would clip Landing, which is taller than the viewport.
   return (
-    <div className="p-4 h-screen flex items-center justify-center">
+    <div>
       <Toaster />
       {authUser && deviceLinkStatus === "ready" ? <DeviceApprovalBanner /> : null}
       {shouldShowBackupPrompt ? (
@@ -433,7 +439,7 @@ function App() {
       <Routes>
         <Route path="/login" element={authUser ? <PostLoginRedirect /> : <Login />} />
         <Route path="/signup" element={authUser ? <Navigate to="/" /> : <SignUp />} />
-        <Route path="/" element={authUser ? <Home /> : <Navigate to="/login" />} />
+        <Route path="/" element={authUser ? <Home /> : <Landing />} />
         <Route
           path="/join/:token"
           element={authUser ? <JoinGroupPage /> : <RedirectToLoginPreservingPath />}
