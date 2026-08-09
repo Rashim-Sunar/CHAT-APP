@@ -31,6 +31,7 @@ import ProfileModal from "./ProfileModal";
 import SearchInput from "./SearchInput";
 import UserProfileControl from "./UserProfileControl";
 import NewConversationMenu from "./NewConversationMenu";
+import ConversationFilterTabs, { type ConversationFilterKey } from "./ConversationFilterTabs";
 import Avatar from "../common/Avatar";
 
 const Sidebar = () => {
@@ -40,6 +41,7 @@ const Sidebar = () => {
   const [desktopProfileOpen, setDesktopProfileOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"view" | "edit-name" | "upload">("view");
+  const [conversationFilter, setConversationFilter] = useState<ConversationFilterKey>("all");
 
   const user = authUser?.data?.user;
 
@@ -58,12 +60,13 @@ const Sidebar = () => {
             <NewConversationMenu />
           </div>
 
-          <div className="px-6 py-4 border-b border-slate-100">
+          <div className="px-6 py-4 border-b border-slate-100 space-y-3">
             <SearchInput />
+            <ConversationFilterTabs active={conversationFilter} onChange={setConversationFilter} />
           </div>
 
           <div className="flex-1 overflow-y-auto sidebar-scroll">
-            <Conversations />
+            <Conversations filter={conversationFilter} />
           </div>
         </>
       ) : (

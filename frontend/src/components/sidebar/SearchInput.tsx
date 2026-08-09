@@ -44,13 +44,13 @@ const SearchInput = () => {
         placeholder="Search"
         value={search}
         onChange={handleChange}
-        className="w-full h-10 pl-10 pr-4 rounded-full 
-                   border border-slate-300 
+        className="w-full h-9 pl-9 pr-4 rounded-full
+                   border border-slate-300
                    focus:outline-none focus:ring-2 focus:ring-indigo-500
                    transition duration-200 text-sm"
       />
 
-      <IoSearchSharp className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+      <IoSearchSharp className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
     </form>
   );
 };
