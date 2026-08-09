@@ -112,6 +112,10 @@ export interface ConversationParticipant {
   gender: Gender;
   profilePic?: string;
   isAdmin?: boolean;
+  isCreator?: boolean;
+  addedByUserId?: string;
+  addedByUserName?: string;
+  joinedViaInvite?: boolean;
 }
 
 export interface Conversation {

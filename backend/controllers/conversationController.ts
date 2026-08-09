@@ -46,6 +46,46 @@ type ConversationParticipantSummary = {
   gender: string;
   profilePic?: string;
   isAdmin: boolean;
+  isCreator: boolean;
+  addedByUserId?: string;
+  addedByUserName?: string;
+  // True when we have a memberMeta record for them (so we know they didn't
+  // just predate this tracking) but no addedBy — the only way that happens
+  // is joining via invite link, since every other join path sets addedBy.
+  joinedViaInvite: boolean;
+};
+
+// Shared by listConversations and getConversationById so both API shapes
+// stay in sync with how memberMeta is resolved into a display-ready summary.
+const buildParticipantSummaries = (
+  participants: { _id: mongoose.Types.ObjectId; userName: string; gender: string; profilePic?: string }[],
+  conversation: { createdBy?: mongoose.Types.ObjectId; groupAdmins?: mongoose.Types.ObjectId[]; memberMeta?: { userId: mongoose.Types.ObjectId; addedBy?: mongoose.Types.ObjectId; joinedAt: Date }[] }
+): ConversationParticipantSummary[] => {
+  const admins = (conversation.groupAdmins || []).map((adminId) => String(adminId));
+  const userNameById = new Map(participants.map((participant) => [String(participant._id), participant.userName]));
+
+  return participants.map((participant) => {
+    const meta = (conversation.memberMeta || []).find(
+      (entry) => String(entry.userId) === String(participant._id)
+    );
+    const addedByUserId = meta?.addedBy ? String(meta.addedBy) : undefined;
+    const isCreator = Boolean(conversation.createdBy) && String(conversation.createdBy) === String(participant._id);
+
+    return {
+      _id: String(participant._id),
+      userName: participant.userName,
+      gender: participant.gender,
+      profilePic: participant.profilePic,
+      isAdmin: admins.includes(String(participant._id)),
+      isCreator,
+      addedByUserId,
+      // Only resolvable if the adder is still a current member — if they've
+      // since left, we still show the fact someone added this member, just
+      // without a name attached.
+      addedByUserName: addedByUserId ? userNameById.get(addedByUserId) : undefined,
+      joinedViaInvite: Boolean(meta) && !meta?.addedBy && !isCreator,
+    };
+  });
 };
 
 type ConversationSummary = {
@@ -188,13 +228,7 @@ export const listConversations = async (
         type: conversation.type,
         displayName: isDirect ? otherUser?.userName || 'Unknown user' : conversation.groupName || 'Group',
         displayAvatar: isDirect ? otherUser?.profilePic : conversation.groupAvatar,
-        participants: conversation.participants.map((participant) => ({
-          _id: String(participant._id),
-          userName: participant.userName,
-          gender: participant.gender,
-          profilePic: participant.profilePic,
-          isAdmin: admins.includes(String(participant._id)),
-        })),
+        participants: buildParticipantSummaries(conversation.participants, conversation),
         groupName: conversation.groupName,
         groupAvatar: conversation.groupAvatar,
         createdBy: conversation.createdBy ? String(conversation.createdBy) : undefined,
@@ -351,12 +385,17 @@ export const createGroupConversation = async (
       return;
     }
 
+    const createdAt = new Date();
     const conversation = await Conversation.create({
       type: 'group',
       groupName,
       participants: [userId, ...validParticipantIds],
       groupAdmins: [userId],
       createdBy: userId,
+      memberMeta: [
+        { userId, joinedAt: createdAt },
+        ...validParticipantIds.map((memberId) => ({ userId: memberId, addedBy: userId, joinedAt: createdAt })),
+      ],
     });
 
     // Invited members need to learn about the new group without waiting for
@@ -422,13 +461,7 @@ export const getConversationById = async (
           groupAvatar: conversation.groupAvatar,
           createdBy: conversation.createdBy ? String(conversation.createdBy) : undefined,
           admins: conversation.type === 'group' ? admins : undefined,
-          participants: conversation.participants.map((participant) => ({
-            _id: String(participant._id),
-            userName: participant.userName,
-            gender: participant.gender,
-            profilePic: participant.profilePic,
-            isAdmin: admins.includes(String(participant._id)),
-          })),
+          participants: buildParticipantSummaries(conversation.participants, conversation),
         },
       },
     });
@@ -552,6 +585,15 @@ export const addGroupMembers = async (
     }
 
     conversation.participants.push(...newUserIds.map((newUserId) => new Types.ObjectId(newUserId)));
+    const addedAt = new Date();
+    conversation.memberMeta = [
+      ...(conversation.memberMeta || []),
+      ...newUserIds.map((newUserId) => ({
+        userId: new Types.ObjectId(newUserId),
+        addedBy: new Types.ObjectId(userId),
+        joinedAt: addedAt,
+      })),
+    ];
     await conversation.save();
 
     const payload = { conversationId: String(conversation._id), addedUserIds: newUserIds };
@@ -899,6 +941,11 @@ export const joinConversationByInviteLink = async (
       }
 
       conversation.participants.push(new Types.ObjectId(userId));
+      // No addedBy — they joined themselves via the invite link, not via an admin.
+      conversation.memberMeta = [
+        ...(conversation.memberMeta || []),
+        { userId: new Types.ObjectId(userId), joinedAt: new Date() },
+      ];
       await conversation.save();
 
       const payload = { conversationId: String(conversation._id), addedUserIds: [userId] };
