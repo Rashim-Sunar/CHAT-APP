@@ -41,7 +41,7 @@ const Messages = () => {
   }, [messages]);
 
   return (
-    <div className="px-4 flex-1 overflow-y-auto overflow-x-hidden min-w-0">
+    <div>
       {!loading &&
         visibleMessages.length > 0 &&
         visibleMessages.map((message: ChatMessage, index: number) => {
