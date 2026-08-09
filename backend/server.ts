@@ -18,6 +18,7 @@ import connectToDB from './db/connectdb.js';
 import cookieParser from 'cookie-parser';
 import { app, server } from './socket/socket.js';
 import { authLimiter, messageLimiter, apiLimiter } from './middlewares/rateLimiter.js';
+import protectRoute from './middlewares/protectRoute.js';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -52,14 +53,17 @@ app.use(cookieParser());
 
 // ----------------------------------------
 // API Routes  (rate limiters applied per tier)
+// protectRoute runs before its limiter on every fully-private router, so
+// keyGenerator can key by req.user instead of IP. authRouter keeps
+// protectRoute scoped to /me only, since login/signup are pre-auth.
 // ----------------------------------------
 app.use('/api/auth/', authLimiter, authRouter);
-app.use('/api/messages/', messageLimiter, messageRouter);
-app.use('/api/users/', apiLimiter, userRouter);
-app.use('/api/user/', apiLimiter, userRouter);
-app.use('/api/link-session/', apiLimiter, linkSessionRouter);
-app.use('/api/backup/', apiLimiter, backupRouter);
-app.use('/api/conversations/', messageLimiter, conversationRouter);
+app.use('/api/messages/', protectRoute, messageLimiter, messageRouter);
+app.use('/api/users/', protectRoute, apiLimiter, userRouter);
+app.use('/api/user/', protectRoute, apiLimiter, userRouter);
+app.use('/api/link-session/', protectRoute, apiLimiter, linkSessionRouter);
+app.use('/api/backup/', protectRoute, apiLimiter, backupRouter);
+app.use('/api/conversations/', protectRoute, apiLimiter, conversationRouter);
 
 // ----------------------------------------
 // Server Initialization

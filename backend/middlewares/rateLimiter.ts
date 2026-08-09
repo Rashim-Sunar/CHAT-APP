@@ -5,6 +5,7 @@
  
 import rateLimit, { RateLimitRequestHandler, Options } from 'express-rate-limit';
 import { Request, Response } from 'express';
+import type { AuthenticatedRequest } from '../types/express/index.js';
  
 // ----------------------------------------
 // Types
@@ -51,12 +52,18 @@ const createLimiter = ({
     legacyHeaders: false,        // Disables X-RateLimit-* legacy headers
     skipSuccessfulRequests,
     handler: buildLimitHandler(message),
- 
-    // Key by IP; swap for user ID once auth middleware attaches req.user
-    keyGenerator: (req: Request): string =>
-      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-      req.socket.remoteAddress ||
-      'unknown',
+
+    // Key by authenticated user when available; falls back to IP pre-auth.
+    keyGenerator: (req: Request): string => {
+      const userId = (req as AuthenticatedRequest).user;
+      if (userId) return `user:${userId}`;
+
+      return (
+        (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+        req.socket.remoteAddress ||
+        'unknown'
+      );
+    },
   };
  
   return rateLimit(options);
@@ -88,13 +95,14 @@ export const messageLimiter: RateLimitRequestHandler = createLimiter({
  
 // ----------------------------------------
 // Tier 3 — General API Routes (lenient)
-// Broad protection for user lookups, profile updates, etc.
+// Broad protection for conversation/message browsing, user lookups, profile
+// updates, etc.
 // ----------------------------------------
 export const apiLimiter: RateLimitRequestHandler = createLimiter({
   windowMs: 60 * 1000, // 1 minute
-  limit: 100,          // 100 requests per minute
+  limit: 300,          // 300 requests per minute per account
   message:
-    'Too many requests from this IP. Please try again in a moment.',
+    'Too many requests. Please try again in a moment.',
 });
 
 // ----------------------------------------
