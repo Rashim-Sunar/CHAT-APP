@@ -25,9 +25,11 @@ import ForwardMessageModal from "./ForwardMessageModal";
 
 interface MessageProps {
   message: ChatMessage;
+  // Last bubble in a run of consecutive same-sender messages.
+  isGroupEnd?: boolean;
 }
 
-const Message = ({ message }: MessageProps) => {
+const Message = ({ message, isGroupEnd = true }: MessageProps) => {
   const { authUser } = useAuthContext();
   const { selectedConversation, messagesByConversation, setReplyTarget } = useConversation();
   const { editMessage, deleteMessage, reactToMessage, isBusy, canEdit, canDelete, canDeleteForEveryone } =
@@ -283,8 +285,8 @@ const Message = ({ message }: MessageProps) => {
     if (message.messageType === "file" && message.fileUrl) {
       const attachmentUrl = getCloudinaryAttachmentUrl(message.fileUrl, message.fileName);
       const bubbleClass = fromMe
-        ? "bg-indigo-600 text-white rounded-br-none"
-        : "bg-white text-slate-800 rounded-bl-none";
+        ? `bg-indigo-600 text-white ${isGroupEnd ? "rounded-br-none" : ""}`
+        : `bg-white text-slate-800 ${isGroupEnd ? "rounded-bl-none" : ""}`;
 
       return (
         <div className={`px-4 py-3 rounded-2xl shadow-sm inline-flex flex-col gap-2 min-w-[220px] ${bubbleClass}`}>
@@ -342,8 +344,8 @@ const Message = ({ message }: MessageProps) => {
     }
 
     const bubbleClass = fromMe
-      ? "bg-indigo-600 text-white rounded-br-none"
-      : "bg-white text-slate-800 rounded-bl-none";
+      ? `bg-indigo-600 text-white ${isGroupEnd ? "rounded-br-none" : ""}`
+      : `bg-white text-slate-800 ${isGroupEnd ? "rounded-bl-none" : ""}`;
 
     return (
       <div className={`px-4 py-2 rounded-2xl shadow-sm ${bubbleClass}`}>
@@ -353,20 +355,27 @@ const Message = ({ message }: MessageProps) => {
   };
 
   return (
-    <div className={`group flex mb-4 ${fromMe ? "justify-end" : "justify-start"}`} onContextMenu={(event) => {
-      if (!canOpenActions || isEditing) return;
-      event.preventDefault();
-      setIsMenuOpen(true);
-    }}>
-      {!fromMe && (
-        <Avatar
-          src={messageSenderParticipant?.profilePic}
-          gender={messageSenderParticipant?.gender}
-          name={messageSenderParticipant?.userName}
-          alt="avatar"
-          className="mr-2 h-8 w-8 rounded-full"
-        />
-      )}
+    <div
+      className={`group flex ${isGroupEnd ? "mb-3" : "mb-0.5"} ${fromMe ? "justify-end" : "justify-start"}`}
+      onContextMenu={(event) => {
+        if (!canOpenActions || isEditing) return;
+        event.preventDefault();
+        setIsMenuOpen(true);
+      }}
+    >
+      {!fromMe &&
+        (isGroupEnd ? (
+          <Avatar
+            src={messageSenderParticipant?.profilePic}
+            gender={messageSenderParticipant?.gender}
+            name={messageSenderParticipant?.userName}
+            alt="avatar"
+            className="mr-2 h-8 w-8 shrink-0 rounded-full"
+          />
+        ) : (
+          // Reserves the avatar's width so bubbles stay aligned.
+          <div className="mr-2 h-8 w-8 shrink-0" aria-hidden="true" />
+        ))}
 
       <div ref={menuRef} className="relative max-w-xs md:max-w-md">
         <div className="relative">
@@ -482,10 +491,12 @@ const Message = ({ message }: MessageProps) => {
           </div>
         )}
 
-        <div className="mt-1 flex items-center justify-end gap-2 text-xs text-slate-400">
-          <span>{formattedTime}</span>
-          {isMessageEdited(message) && <span className="italic text-slate-400">(edited)</span>}
-        </div>
+        {(isGroupEnd || isMessageEdited(message)) && (
+          <div className="mt-1 flex items-center justify-end gap-2 text-xs text-slate-400">
+            {isGroupEnd && <span>{formattedTime}</span>}
+            {isMessageEdited(message) && <span className="italic text-slate-400">(edited)</span>}
+          </div>
+        )}
 
         {showSeenIndicator && (
           <div

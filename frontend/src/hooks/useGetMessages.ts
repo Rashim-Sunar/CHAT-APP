@@ -3,12 +3,11 @@
 // Depends on the authenticated user, the active conversation, the shared
 // message map, and the API for canonical message history.
 import { useEffect, useState } from "react";
-import toast from "react-hot-toast";
 import useConversation from "../zustand/useConversation";
 import { useAuthContext } from "../context/Auth-Context";
 import type { Message } from "../types";
-import { getErrorMessage } from "../Utils/getErrorMessage";
 import { apiFetch } from "../Utils/apiFetch";
+import { showFetchErrorToast } from "../Utils/apiErrorToast";
 import { decryptMessagesIfNeeded } from "../Utils/crypto";
 
 interface ConversationMessagesResponse {
@@ -62,10 +61,7 @@ const useGetMessages = () => {
           setMessagesForConversation(conversationId, normalizedMessages);
         }
       } catch (error: unknown) {
-        const message = getErrorMessage(error);
-        if (!message.includes("API Error: 401")) {
-          toast.error(message);
-        }
+        showFetchErrorToast(error, "get-messages-error");
       } finally {
         if (!ignore) {
           setLoading(false);

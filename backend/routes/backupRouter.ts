@@ -4,7 +4,6 @@
 // ----------------------------------------
 
 import express from 'express';
-import protectRoute from '../middlewares/protectRoute.js';
 import { enableEncryptedBackup, getEncryptedBackup } from '../controllers/backupController.js';
 import { backupFetchLimiter } from '../middlewares/rateLimiter.js';
 
@@ -15,13 +14,13 @@ const router = express.Router();
 // @route   POST /api/backup/enable
 // @access  Private
 // ----------------------------------------
-router.post('/enable', protectRoute, enableEncryptedBackup);
+router.post('/enable', enableEncryptedBackup);
 
 // ----------------------------------------
 // @desc    Returns encrypted backup payload for client-side restore
 // @route   GET /api/backup
 // @access  Private
 // ----------------------------------------
-router.get('/', protectRoute, backupFetchLimiter, getEncryptedBackup);
+router.get('/', backupFetchLimiter, getEncryptedBackup);
 
 export default router;

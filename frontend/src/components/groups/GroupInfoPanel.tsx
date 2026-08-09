@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { BiCheck, BiCopy, BiEdit, BiLinkAlt, BiLogOut, BiUserPlus, BiX } from "react-icons/bi";
+import { FiLock } from "react-icons/fi";
 import toast from "react-hot-toast";
 import Avatar from "../common/Avatar";
 import UserPickerModal from "../common/UserPickerModal";
@@ -217,6 +218,10 @@ const GroupInfoPanel = ({ conversation, currentUserId, variant, onClose }: Group
             )}
             <p className="text-sm text-slate-500 mt-1">
               {memberCount} {memberCount === 1 ? "member" : "members"}
+            </p>
+            <p className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-600">
+              <FiLock size={11} />
+              End-to-end encrypted
             </p>
           </div>
         </div>
