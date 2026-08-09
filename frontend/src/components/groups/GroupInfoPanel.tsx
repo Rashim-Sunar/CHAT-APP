@@ -1,10 +1,24 @@
-import { useState } from "react";
-import { BiCheck, BiCopy, BiEdit, BiLinkAlt, BiLogOut, BiUserPlus, BiX } from "react-icons/bi";
-import { FiLock } from "react-icons/fi";
+import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import {
+  BiCheck,
+  BiCopy,
+  BiCrown,
+  BiDotsVerticalRounded,
+  BiEdit,
+  BiLinkAlt,
+  BiLogOut,
+  BiMessageSquareDetail,
+  BiUserMinus,
+  BiUserPlus,
+  BiX,
+} from "react-icons/bi";
+import { FiChevronDown, FiLock } from "react-icons/fi";
 import toast from "react-hot-toast";
 import Avatar from "../common/Avatar";
 import UserPickerModal from "../common/UserPickerModal";
 import useGetConversations from "../../hooks/useGetConversations";
+import useStartConversation from "../../hooks/useStartConversation";
 import { apiFetch } from "../../Utils/apiFetch";
 import { getErrorMessage } from "../../Utils/getErrorMessage";
 import type { ApiErrorResponse, Conversation } from "../../types";
@@ -16,6 +30,67 @@ interface GroupInfoPanelProps {
   onClose?: () => void;
 }
 
+const MENU_WIDTH = 192; // w-48
+const MENU_HEIGHT_ESTIMATE = 160; // enough for up to 3 rows + padding
+const VIEWPORT_MARGIN = 8;
+
+interface MemberActionMenuProps {
+  anchorRect: DOMRect;
+  onClose: () => void;
+  children: ReactNode;
+}
+
+// Rendered into document.body via a portal and positioned from the trigger
+// button's actual viewport coordinates, so it can never be clipped by the
+// member list's own scroll container or the section's rounded-corner
+// overflow — the two ancestors that clipped it when this was a plain
+// absolutely-positioned child. Flips above the trigger when there isn't
+// room below, and closes on scroll/resize since its position is captured
+// once at open time rather than continuously tracked.
+const MemberActionMenu = ({ anchorRect, onClose, children }: MemberActionMenuProps) => {
+  useEffect(() => {
+    const close = () => onClose();
+    // capture: true so scrolling any nested scrollable ancestor (which
+    // doesn't bubble a "scroll" event to window) still closes the menu.
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [onClose]);
+
+  const spaceBelow = window.innerHeight - anchorRect.bottom;
+  const openUpward = spaceBelow < MENU_HEIGHT_ESTIMATE && anchorRect.top > MENU_HEIGHT_ESTIMATE;
+  const left = Math.min(
+    Math.max(anchorRect.right - MENU_WIDTH, VIEWPORT_MARGIN),
+    window.innerWidth - MENU_WIDTH - VIEWPORT_MARGIN
+  );
+
+  return createPortal(
+    <>
+      <button
+        type="button"
+        aria-label="Close menu"
+        className="fixed inset-0 z-40 cursor-default"
+        onClick={onClose}
+      />
+      <div
+        className="fixed z-50 w-48 rounded-xl border border-slate-200 bg-white p-1 shadow-xl"
+        style={{
+          left,
+          ...(openUpward
+            ? { bottom: window.innerHeight - anchorRect.top + 4 }
+            : { top: anchorRect.bottom + 4 }),
+        }}
+      >
+        {children}
+      </div>
+    </>,
+    document.body
+  );
+};
+
 /**
  * Group-specific right panel content: name/avatar, member list with admin
  * controls, invite link, and leave. Rendered inside UserDetailsPanel's shared
@@ -23,10 +98,13 @@ interface GroupInfoPanelProps {
  */
 const GroupInfoPanel = ({ conversation, currentUserId, variant, onClose }: GroupInfoPanelProps) => {
   const { refetch } = useGetConversations();
+  const { startDirectChat } = useStartConversation();
   const [isMutating, setIsMutating] = useState(false);
+  const [openMemberMenu, setOpenMemberMenu] = useState<{ participantId: string; anchorRect: DOMRect } | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(conversation.groupName || conversation.displayName);
   const [addMembersOpen, setAddMembersOpen] = useState(false);
+  const [isMembersOpen, setIsMembersOpen] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [inviteCopied, setInviteCopied] = useState(false);
 
@@ -83,6 +161,14 @@ const GroupInfoPanel = ({ conversation, currentUserId, variant, onClose }: Group
       if (data.error) throw new Error(data.error);
       toast.success("Member removed");
     });
+  };
+
+  const handleMessageMember = async (userId: string) => {
+    try {
+      await startDirectChat(userId);
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error));
+    }
   };
 
   const handlePromote = async (userId: string) => {
@@ -276,29 +362,49 @@ const GroupInfoPanel = ({ conversation, currentUserId, variant, onClose }: Group
         )}
 
         <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="w-full px-4 py-3 flex items-center justify-between">
-            <span className="flex items-center gap-2 text-slate-700">
-              <span className="text-sm font-semibold tracking-wide uppercase">Members</span>
-              <span className="inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
-                {memberCount}
-              </span>
+          <button
+            type="button"
+            onClick={() => setIsMembersOpen((open) => !open)}
+            aria-expanded={isMembersOpen}
+            aria-controls="group-members-list"
+            className="flex w-full items-center gap-2 px-4 py-3 text-left text-slate-700"
+          >
+            <span className="text-sm font-semibold tracking-wide uppercase">Members</span>
+            <span className="inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
+              {memberCount}
             </span>
+            <FiChevronDown
+              className={`ml-auto shrink-0 text-slate-400 transition-transform duration-200 ${isMembersOpen ? "rotate-180" : ""}`}
+              size={16}
+            />
+          </button>
 
+          {isMembersOpen && (
+          <div id="group-members-list" className="px-2 pb-2 space-y-0.5">
             {isAdmin && (
               <button
                 type="button"
                 onClick={() => setAddMembersOpen(true)}
-                aria-label="Add members"
-                className="h-7 w-7 rounded-md hover:bg-slate-100 text-indigo-600 flex items-center justify-center"
+                className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-indigo-600 hover:bg-indigo-50"
               >
-                <BiUserPlus size={17} />
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-50">
+                  <BiUserPlus size={18} />
+                </span>
+                <span className="text-sm font-medium">Add people</span>
               </button>
             )}
-          </div>
-
-          <div className="px-2 pb-2 space-y-0.5">
             {conversation.participants.map((participant) => {
               const isSelf = participant._id === currentUserId;
+              const roleLabel = participant.isCreator
+                ? "Group Creator"
+                : participant.isAdmin
+                  ? "Admin"
+                  : participant.addedByUserName
+                    ? `Added by ${participant.addedByUserName}`
+                    : participant.joinedViaInvite
+                      ? "Joined using invite link"
+                      : null;
+              const isMenuOpen = openMemberMenu?.participantId === participant._id;
 
               return (
                 <div
@@ -316,36 +422,83 @@ const GroupInfoPanel = ({ conversation, currentUserId, variant, onClose }: Group
                     <p className="truncate text-sm font-medium text-slate-800">
                       {isSelf ? "You" : participant.userName}
                     </p>
-                    {participant.isAdmin && <p className="text-xs text-indigo-600">Admin</p>}
+                    {roleLabel && (
+                      <p
+                        className={`truncate text-xs ${
+                          participant.isCreator || participant.isAdmin ? "text-indigo-600" : "text-slate-400"
+                        }`}
+                      >
+                        {roleLabel}
+                      </p>
+                    )}
                   </div>
 
                   {isAdmin && !isSelf && (
-                    <div className="flex items-center gap-1 shrink-0">
-                      {!participant.isAdmin && (
-                        <button
-                          type="button"
-                          onClick={() => void handlePromote(participant._id)}
-                          disabled={isMutating}
-                          className="rounded-md px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-50"
-                        >
-                          Make admin
-                        </button>
-                      )}
+                    <>
                       <button
                         type="button"
-                        onClick={() => void handleRemoveMember(participant._id)}
-                        disabled={isMutating}
-                        aria-label={`Remove ${participant.userName}`}
-                        className="h-6 w-6 rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600 flex items-center justify-center disabled:opacity-50"
+                        onClick={(event) =>
+                          setOpenMemberMenu(
+                            isMenuOpen
+                              ? null
+                              : { participantId: participant._id, anchorRect: event.currentTarget.getBoundingClientRect() }
+                          )
+                        }
+                        aria-label={`Options for ${participant.userName}`}
+                        aria-expanded={isMenuOpen}
+                        className="h-7 w-7 shrink-0 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 flex items-center justify-center"
                       >
-                        <BiX size={15} />
+                        <BiDotsVerticalRounded size={18} />
                       </button>
-                    </div>
+
+                      {isMenuOpen && openMemberMenu && (
+                        <MemberActionMenu anchorRect={openMemberMenu.anchorRect} onClose={() => setOpenMemberMenu(null)}>
+                          {!participant.isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenMemberMenu(null);
+                                void handlePromote(participant._id);
+                              }}
+                              disabled={isMutating}
+                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <BiCrown size={15} />
+                              Make admin
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenMemberMenu(null);
+                              void handleMessageMember(participant._id);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-100"
+                          >
+                            <BiMessageSquareDetail size={15} />
+                            Message
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenMemberMenu(null);
+                              void handleRemoveMember(participant._id);
+                            }}
+                            disabled={isMutating}
+                            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <BiUserMinus size={15} />
+                            Remove from group
+                          </button>
+                        </MemberActionMenu>
+                      )}
+                    </>
                   )}
                 </div>
               );
             })}
           </div>
+          )}
         </section>
 
         <button
