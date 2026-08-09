@@ -25,11 +25,13 @@ import ForwardMessageModal from "./ForwardMessageModal";
 
 interface MessageProps {
   message: ChatMessage;
+  // First bubble in a run of consecutive same-sender messages.
+  isGroupStart?: boolean;
   // Last bubble in a run of consecutive same-sender messages.
   isGroupEnd?: boolean;
 }
 
-const Message = ({ message, isGroupEnd = true }: MessageProps) => {
+const Message = ({ message, isGroupStart = true, isGroupEnd = true }: MessageProps) => {
   const { authUser } = useAuthContext();
   const { selectedConversation, messagesByConversation, setReplyTarget } = useConversation();
   const { editMessage, deleteMessage, reactToMessage, isBusy, canEdit, canDelete, canDeleteForEveryone } =
@@ -60,6 +62,9 @@ const Message = ({ message, isGroupEnd = true }: MessageProps) => {
   // messages) can push it off-screen — detected and flipped after mount.
   const [dropdownAlign, setDropdownAlign] = useState<"right" | "left">("right");
   const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
+
+  const showSenderName = !fromMe && isGroupStart && selectedConversation?.type === "group";
+  const senderFirstName = messageSenderParticipant?.userName?.trim().split(/\s+/)[0];
 
   const formattedTime = extractTime(message.createdAt);
   const canOpenActions = canDelete && !message.deletedForEveryone;
@@ -379,6 +384,9 @@ const Message = ({ message, isGroupEnd = true }: MessageProps) => {
 
       <div ref={menuRef} className="relative max-w-xs md:max-w-md">
         <div className="relative">
+          {showSenderName && senderFirstName && (
+            <p className="mb-0.5 px-1 text-xs font-semibold text-indigo-600">{senderFirstName}</p>
+          )}
           {message.forwarded && !message.deletedForEveryone && (
             <div className="mb-1 flex items-center gap-1 text-xs italic text-slate-400">
               <FiCornerUpRight size={12} />

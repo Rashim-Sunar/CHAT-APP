@@ -47,12 +47,13 @@ const Messages = () => {
         visibleMessages.map((message: ChatMessage, index: number) => {
           const previous = visibleMessages[index - 1];
           const showDateDivider = !isSameDay(previous?.createdAt, message.createdAt);
+          const isGroupStart = showDateDivider || !isSameCluster(previous, message);
           const isGroupEnd = !isSameCluster(message, visibleMessages[index + 1]);
 
           return (
             <div key={message._id || `${message.createdAt}-${index}`} ref={lastMessageRef}>
               {showDateDivider && <DateDivider label={formatDateDivider(message.createdAt)} />}
-              <Message message={message} isGroupEnd={isGroupEnd} />
+              <Message message={message} isGroupStart={isGroupStart} isGroupEnd={isGroupEnd} />
             </div>
           );
         })}
