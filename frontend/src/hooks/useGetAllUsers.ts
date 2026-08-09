@@ -2,11 +2,10 @@
 // create group, add members) rather than the sidebar (which is driven by
 // useGetConversations now that conversations are real documents).
 import { useEffect, useState } from "react";
-import toast from "react-hot-toast";
 import { useAuthContext } from "../context/Auth-Context";
 import type { User } from "../types";
-import { getErrorMessage } from "../Utils/getErrorMessage";
 import { apiFetch } from "../Utils/apiFetch";
+import { showFetchErrorToast } from "../Utils/apiErrorToast";
 
 interface UsersResponse {
   error?: string;
@@ -35,10 +34,7 @@ const useGetAllUsers = () => {
 
         setUsers(response?.data?.users || []);
       } catch (error: unknown) {
-        const message = getErrorMessage(error);
-        if (!message.includes("API Error: 401")) {
-          toast.error(message);
-        }
+        showFetchErrorToast(error, "get-all-users-error");
       } finally {
         setLoading(false);
       }

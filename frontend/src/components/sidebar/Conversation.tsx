@@ -3,6 +3,7 @@ import useConversation from "../../zustand/useConversation";
 import { useAuthContext } from "../../context/Auth-Context";
 import { DELETED_MESSAGE_TEXT } from "../../Utils/messageDisplay";
 import { getOtherParticipant } from "../../Utils/conversationDisplay";
+import { formatConversationTimestamp } from "../../Utils/formatDate";
 import Avatar from "../common/Avatar";
 import type { Conversation } from "../../types";
 
@@ -69,26 +70,24 @@ const ConversationItem = ({ conversation }: ConversationProps) => {
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className="font-medium text-slate-800 truncate">{conversation.displayName}</p>
-        <div className="flex items-center gap-2 min-w-0">
-          <p className="text-xs text-slate-500 truncate">
-            {sidebarPreviewText}
-          </p>
-          {unreadCount > 0 && !isSelected && (
-            <span
-              className="w-2 h-2 rounded-full bg-indigo-500 shrink-0"
-              aria-label="Unread messages"
-              title="Unread messages"
-            />
-          )}
-        </div>
+        <p className={`truncate ${unreadCount > 0 && !isSelected ? "font-semibold text-slate-900" : "font-medium text-slate-800"}`}>
+          {conversation.displayName}
+        </p>
+        <p className="text-xs text-slate-500 truncate">{sidebarPreviewText}</p>
       </div>
 
-      {unreadCount > 0 && !isSelected && (
-        <span className="min-w-5 h-5 px-1.5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center">
-          {unreadCount > 99 ? "99+" : unreadCount}
-        </span>
-      )}
+      <div className="flex flex-col items-end gap-1.5 self-start pt-0.5">
+        {conversation.lastMessageAt && (
+          <span className={`text-[11px] ${unreadCount > 0 && !isSelected ? "font-semibold text-indigo-600" : "text-slate-400"}`}>
+            {formatConversationTimestamp(conversation.lastMessageAt)}
+          </span>
+        )}
+        {unreadCount > 0 && !isSelected && (
+          <span className="min-w-5 h-5 px-1.5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center">
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        )}
+      </div>
     </div>
   );
 };
