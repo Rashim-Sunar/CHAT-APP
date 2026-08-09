@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { FiChevronDown, FiChevronUp, FiDownload, FiFileText, FiImage, FiLink2, FiX } from "react-icons/fi";
+import { FiChevronDown, FiChevronUp, FiDownload, FiFileText, FiImage, FiLink2, FiLock, FiX } from "react-icons/fi";
 import useConversation from "../../zustand/useConversation";
 import useUserDetails from "../../hooks/useUserDetails";
 import { useAuthContext } from "../../context/Auth-Context";
@@ -227,7 +227,7 @@ const UserDetailsPanel = ({ isOpen, onClose, variant = "desktop" }: UserDetailsP
   const { details, loading, error, refetch } = useUserDetails();
   const [previewItem, setPreviewItem] = useState<SharedMediaItem | null>(null);
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
-    media: true,
+    media: false,
     links: false,
     documents: false,
   });
@@ -256,7 +256,7 @@ const UserDetailsPanel = ({ isOpen, onClose, variant = "desktop" }: UserDetailsP
 
   useEffect(() => {
     setOpenSections({
-      media: true,
+      media: false,
       links: false,
       documents: false,
     });
@@ -339,6 +339,10 @@ const UserDetailsPanel = ({ isOpen, onClose, variant = "desktop" }: UserDetailsP
                 <p className="text-sm text-slate-500 mt-1 flex items-center justify-center gap-1.5">
                   <span className={`inline-block h-2.5 w-2.5 rounded-full ${isOnline ? "bg-emerald-500" : "bg-slate-300"}`} aria-hidden="true" />
                   {isOnline ? "Online" : "Offline"}
+                </p>
+                <p className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-600">
+                  <FiLock size={11} />
+                  End-to-end encrypted
                 </p>
               </div>
             </div>
