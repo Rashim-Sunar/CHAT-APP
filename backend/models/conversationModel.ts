@@ -20,6 +20,15 @@ export interface IConversation {
   groupAvatar?: string;
   groupAdmins?: Types.ObjectId[];
   createdBy?: Types.ObjectId;
+  // Per-member provenance for the group info panel ("Added by X") — kept as
+  // a separate parallel array rather than folded into `participants` itself,
+  // so every existing participants-array read/write (auth checks, $in
+  // queries, populate calls) across the codebase stays untouched.
+  memberMeta?: {
+    userId: Types.ObjectId;
+    addedBy?: Types.ObjectId;
+    joinedAt: Date;
+  }[];
   // Stores a hash of the invite token, never the plaintext — it's a bearer
   // secret meant to be shared broadly (e.g. pasted into a chat), so its
   // threat model is closer to a password-reset token than a session id.
@@ -84,6 +93,22 @@ const conversationSchema = new mongoose.Schema<IConversation>(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'user',
     },
+    memberMeta: [
+      {
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'user',
+        },
+        addedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'user',
+        },
+        joinedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     inviteTokenHash: {
       type: String,
     },
