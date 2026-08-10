@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, type KeyboardEvent } from "react";
 import { HiOutlineDotsVertical } from "react-icons/hi";
 import { FiCheck, FiEdit2, FiTrash2, FiCornerUpLeft, FiCornerUpRight } from "react-icons/fi";
 import { useAuthContext } from "../../context/Auth-Context";
@@ -18,6 +18,7 @@ import {
   shouldHideMessageForUser,
   DELETED_MESSAGE_TEXT,
 } from "../../Utils/messageDisplay";
+import { linkifyText } from "../../Utils/linkify";
 import type { Message as ChatMessage } from "../../types";
 import useMessageActions from "../../hooks/useMessageActions";
 import MessageDeleteModal from "./MessageDeleteModal";
@@ -93,6 +94,21 @@ const Message = ({ message, isGroupStart = true, isGroupEnd = true }: MessagePro
     ? currentConversationMessages.find((candidate) => candidate._id === message.replyTo) || null
     : null;
 
+  const scrollToMessage = useCallback((messageId: string) => {
+    const targetEl = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!targetEl) return;
+
+    targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    // Add highlight animation then remove it.
+    targetEl.classList.add("message-highlight");
+    const cleanup = () => {
+      targetEl.classList.remove("message-highlight");
+      targetEl.removeEventListener("animationend", cleanup);
+    };
+    targetEl.addEventListener("animationend", cleanup);
+  }, []);
+
   const renderQuotedPreview = () => {
     if (!message.replyTo) return null;
 
@@ -120,10 +136,14 @@ const Message = ({ message, isGroupStart = true, isGroupEnd = true }: MessagePro
             : getMessageBodyText(repliedMessage);
 
     return (
-      <div className="mb-1 max-w-full rounded-lg border-l-2 border-indigo-400 bg-slate-50 px-2 py-1">
+      <button
+        type="button"
+        onClick={() => repliedMessage._id && scrollToMessage(repliedMessage._id)}
+        className="mb-1 max-w-full rounded-lg border-l-2 border-indigo-400 bg-slate-50 px-2 py-1 text-left w-full cursor-pointer hover:bg-slate-100 transition-colors"
+      >
         <p className="truncate text-xs font-semibold text-indigo-600">{repliedSenderName}</p>
         <p className="truncate text-xs text-slate-500">{repliedSnippet}</p>
-      </div>
+      </button>
     );
   };
 
@@ -352,15 +372,18 @@ const Message = ({ message, isGroupStart = true, isGroupEnd = true }: MessagePro
       ? `bg-indigo-600 text-white ${isGroupEnd ? "rounded-br-none" : ""}`
       : `bg-white text-slate-800 ${isGroupEnd ? "rounded-bl-none" : ""}`;
 
+    const bodyText = getMessageBodyText(message);
+
     return (
       <div className={`px-4 py-2 rounded-2xl shadow-sm ${bubbleClass}`}>
-        {getMessageBodyText(message)}
+        {linkifyText(bodyText)}
       </div>
     );
   };
 
   return (
     <div
+      data-message-id={message._id}
       className={`group flex ${isGroupEnd ? "mb-3" : "mb-0.5"} ${fromMe ? "justify-end" : "justify-start"}`}
       onContextMenu={(event) => {
         if (!canOpenActions || isEditing) return;
