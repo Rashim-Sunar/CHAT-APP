@@ -81,3 +81,24 @@
 		transform: translate3d(4px, 0, 0);
 	}
 }
+
+/* ===== Reply Scroll Highlight ===== */
+/* Applied temporarily when the user taps a reply preview to scroll
+   to the original message — provides a brief flash to draw the eye. */
+
+@keyframes messageHighlight {
+  0% {
+    background-color: rgba(99, 102, 241, 0.25);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+    border-radius: 12px;
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 0 transparent;
+    border-radius: 12px;
+  }
+}
+
+.message-highlight {
+  animation: messageHighlight 1.5s ease-out forwards;
+}
