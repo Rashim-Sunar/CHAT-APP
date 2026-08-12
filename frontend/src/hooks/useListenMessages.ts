@@ -96,7 +96,9 @@ const useListenMessages = () => {
               ? "Sent a video"
               : hydratedMessage.messageType === "file"
                 ? "Sent a file"
-                : "New message");
+                : hydratedMessage.messageType === "call_log"
+                  ? getMessagePreviewText(hydratedMessage)
+                  : "New message");
 
         toast(
           `${senderName || "New message"}: ${preview}`,

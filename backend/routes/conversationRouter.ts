@@ -23,6 +23,7 @@ import {
   getConversationMessages,
   sendConversationMessage,
 } from '../controllers/conversationController.js';
+import { getActiveCall } from '../controllers/callController.js';
 
 const router = express.Router();
 
@@ -102,6 +103,14 @@ router.delete('/:id/invite', revokeInviteLink);
 // @access  Private
 // ----------------------------------------
 router.get('/:id/messages', getConversationMessages);
+
+// ----------------------------------------
+// @desc    Live call session sync (reload mid-call, or a call starting in
+//          a conversation that isn't currently open)
+// @route   GET /api/conversations/:id/call
+// @access  Private
+// ----------------------------------------
+router.get('/:id/call', getActiveCall);
 
 // ----------------------------------------
 // @desc    Unified send for direct + group conversations

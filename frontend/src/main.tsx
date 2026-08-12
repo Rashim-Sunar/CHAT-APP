@@ -6,6 +6,7 @@ import "./index.css";
 import { AuthContextProvider } from "./context/Auth-Context";
 import { SocketContextProvider } from "./context/SocketContext";
 import { DeviceLinkProvider } from "./context/DeviceLinkContext";
+import { CallProvider } from "./context/CallContext";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
@@ -13,7 +14,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <AuthContextProvider>
         <SocketContextProvider>
           <DeviceLinkProvider>
-            <App />
+            <CallProvider>
+              <App />
+            </CallProvider>
           </DeviceLinkProvider>
         </SocketContextProvider>
       </AuthContextProvider>

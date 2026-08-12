@@ -7,7 +7,7 @@ import type { Response } from 'express';
 import crypto from 'crypto';
 import { Types } from 'mongoose';
 import Conversation, { ConversationDocument } from '../models/conversationModel.js';
-import Message, { MessageDocument } from '../models/messageModel.js';
+import Message, { MessageDocument, CallStatus, CallType } from '../models/messageModel.js';
 import { emitToUserDevices } from '../socket/socket.js';
 import { recordConversationSeen } from '../Utils/readReceipt.js';
 import type { AuthenticatedRequest } from '../types/express/index.js';
@@ -51,7 +51,7 @@ export type RealtimeMessagePayload = {
   // participants instead (see messageController.ts).
   receiverId: string | null;
   conversationId: string;
-  messageType: 'text' | 'image' | 'video' | 'file';
+  messageType: 'text' | 'image' | 'video' | 'file' | 'call_log';
   text: string;
   message: string;
   encryptedMessage: string | null;
@@ -70,6 +70,9 @@ export type RealtimeMessagePayload = {
   reactions: RealtimeMessageReaction[];
   replyTo: string | null;
   forwarded: boolean;
+  callType: CallType | null;
+  callStatus: CallStatus | null;
+  callDurationSec: number | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -210,6 +213,9 @@ export const buildRealtimePayload = (
     reactions,
     replyTo,
     forwarded,
+    callType: messageDoc.callType || null,
+    callStatus: messageDoc.callStatus || null,
+    callDurationSec: typeof messageDoc.callDurationSec === 'number' ? messageDoc.callDurationSec : null,
     createdAt: messageDoc.createdAt,
     updatedAt: messageDoc.updatedAt,
   };

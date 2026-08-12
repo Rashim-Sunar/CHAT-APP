@@ -10,6 +10,7 @@ import JoinGroupPage from "./pages/join/JoinGroupPage";
 import Landing from "./pages/landing/Landing";
 import { useAuthContext } from "./context/Auth-Context";
 import { useDeviceLinkContext } from "./context/DeviceLinkContext";
+import CallOverlayHost from "./components/calls/CallOverlayHost";
 import useLogout from "./hooks/useLogout";
 import { getErrorMessage } from "./Utils/getErrorMessage";
 import { consumePostLoginRedirect, savePostLoginRedirect } from "./Utils/postLoginRedirect";
@@ -370,6 +371,7 @@ function App() {
   return (
     <div>
       <Toaster />
+      {authUser && deviceLinkStatus === "ready" ? <CallOverlayHost /> : null}
       {authUser && deviceLinkStatus === "ready" ? <DeviceApprovalBanner /> : null}
       {shouldShowBackupPrompt ? (
         <BackupSetupPrompt

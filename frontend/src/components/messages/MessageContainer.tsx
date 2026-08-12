@@ -9,6 +9,8 @@ import { useAuthContext } from "../../context/Auth-Context";
 import { useSocketContext } from "../../context/SocketContext";
 import UserDetailsPanel from "../details/UserDetailsPanel";
 import Avatar from "../common/Avatar";
+import CallButtons from "../calls/CallButtons";
+import GroupCallBanner from "../calls/GroupCallBanner";
 import { getOtherParticipant } from "../../Utils/conversationDisplay";
 // WebP re-encode of chatsphere-background.png (~1MB -> ~9KB, no visible loss).
 import chatWallpaper from "../../assets/chatsphere-background.webp";
@@ -99,27 +101,33 @@ const MessageContainer = ({ desktopDetailsOpen, onToggleDesktopDetails }: Messag
           </div>
         </div>
 
-        <button
-          onClick={() => setShowDetails(!showDetails)}
-          className="xl:hidden text-slate-600 h-8 w-8 rounded-lg hover:bg-slate-100 flex items-center justify-center"
-          aria-label="Open user details"
-        >
-          <HiOutlineDotsVertical size={20} />
-        </button>
+        <div className="flex items-center gap-2">
+          <CallButtons conversation={selectedConversation} />
 
-        <button
-          onClick={onToggleDesktopDetails}
-          className="hidden xl:flex text-slate-600 h-8 w-8 rounded-lg hover:bg-slate-100 items-center justify-center"
-          aria-label={desktopDetailsOpen ? "Hide user details panel" : "Show user details panel"}
-          title={desktopDetailsOpen ? "Hide details panel" : "Show details panel"}
-        >
-          {desktopDetailsOpen ? (
-            <TbLayoutSidebarRightCollapse size={20} />
-          ) : (
-            <TbLayoutSidebarRightExpand size={20} />
-          )}
-        </button>
+          <button
+            onClick={() => setShowDetails(!showDetails)}
+            className="xl:hidden text-slate-600 h-8 w-8 rounded-lg hover:bg-slate-100 flex items-center justify-center"
+            aria-label="Open user details"
+          >
+            <HiOutlineDotsVertical size={20} />
+          </button>
+
+          <button
+            onClick={onToggleDesktopDetails}
+            className="hidden xl:flex text-slate-600 h-8 w-8 rounded-lg hover:bg-slate-100 items-center justify-center"
+            aria-label={desktopDetailsOpen ? "Hide user details panel" : "Show user details panel"}
+            title={desktopDetailsOpen ? "Hide details panel" : "Show details panel"}
+          >
+            {desktopDetailsOpen ? (
+              <TbLayoutSidebarRightCollapse size={20} />
+            ) : (
+              <TbLayoutSidebarRightExpand size={20} />
+            )}
+          </button>
+        </div>
       </div>
+
+      {selectedConversation.type === "group" && <GroupCallBanner conversationId={selectedConversation._id} />}
 
       <div
         data-messages-scroll-container
