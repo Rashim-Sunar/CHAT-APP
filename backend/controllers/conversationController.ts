@@ -13,6 +13,7 @@ import Message, { MessageDocument } from '../models/messageModel.js';
 import User from '../models/userModel.js';
 import { emitToUserDevices } from '../socket/socket.js';
 import { recordConversationSeen } from '../Utils/readReceipt.js';
+import { getSnapshot } from '../Utils/callSession.js';
 import type { AuthenticatedRequest } from '../types/express/index.js';
 import type {
   AddMembersDto,
@@ -103,6 +104,7 @@ type ConversationSummary = {
   lastMessageSenderId?: string;
   unreadCount?: number;
   seenAt?: string;
+  activeCall?: { callType: 'audio' | 'video'; participantCount: number };
 };
 
 const hashInviteToken = (token: string): string =>
@@ -124,6 +126,8 @@ const getPreviewText = (message: {
   encryptedMessage?: string;
   fileName?: string;
   deletedForEveryone?: boolean;
+  callType?: string;
+  callStatus?: string;
 }): string => {
   if (message.deletedForEveryone) return MESSAGE_DELETED_TEXT;
   if (message.messageType === 'text') {
@@ -132,6 +136,12 @@ const getPreviewText = (message: {
   if (message.messageType === 'image') return 'Sent an image';
   if (message.messageType === 'video') return 'Sent a video';
   if (message.messageType === 'file') return message.fileName || 'Sent a file';
+  if (message.messageType === 'call_log') {
+    const callLabel = message.callType === 'video' ? 'Video call' : 'Voice call';
+    if (message.callStatus === 'missed') return 'Missed call';
+    if (message.callStatus === 'declined') return 'Call declined';
+    return callLabel;
+  }
   return '';
 };
 
@@ -145,6 +155,8 @@ type LastMessageAggregate = {
   lastSenderId?: mongoose.Types.ObjectId;
   lastDeletedForEveryone?: boolean;
   lastDeletedFor?: mongoose.Types.ObjectId[];
+  lastCallType?: string;
+  lastCallStatus?: string;
 };
 
 /**
@@ -196,6 +208,8 @@ export const listConversations = async (
           lastSenderId: { $first: '$senderId' },
           lastDeletedForEveryone: { $first: '$deletedForEveryone' },
           lastDeletedFor: { $first: { $ifNull: ['$deletedFor', []] } },
+          lastCallType: { $first: '$callType' },
+          lastCallStatus: { $first: '$callStatus' },
         },
       },
     ]);
@@ -222,6 +236,7 @@ export const listConversations = async (
         : false;
 
       const admins = (conversation.groupAdmins || []).map((adminId) => String(adminId));
+      const callSnapshot = getSnapshot(String(conversation._id));
 
       return {
         _id: String(conversation._id),
@@ -239,11 +254,16 @@ export const listConversations = async (
           encryptedMessage: lastMessage?.lastEncryptedMessage,
           fileName: lastMessage?.lastFileName,
           deletedForEveryone: lastMessage?.lastDeletedForEveryone,
+          callType: lastMessage?.lastCallType,
+          callStatus: lastMessage?.lastCallStatus,
         }) : undefined,
         lastMessageAt: lastMessage?.lastCreatedAt?.toISOString(),
         lastMessageSenderId: lastMessage?.lastSenderId ? String(lastMessage.lastSenderId) : undefined,
         unreadCount: 0, // computed below
         seenAt: readState?.seenAt ? new Date(readState.seenAt).toISOString() : undefined,
+        activeCall: callSnapshot
+          ? { callType: callSnapshot.callType, participantCount: callSnapshot.participantCount }
+          : undefined,
       };
     });
 

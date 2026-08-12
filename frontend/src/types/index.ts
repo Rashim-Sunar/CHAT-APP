@@ -2,8 +2,13 @@ import type { Dispatch, SetStateAction } from "react";
 import type { Socket } from "socket.io-client";
 
 export type Gender = "male" | "female" | "others";
-export type MessageType = "text" | "image" | "video" | "file";
+// "call_log" is a system message (no sender-authored content) summarizing a
+// finished call — distinct from "video", which is an uploaded video FILE
+// message. Do not conflate the two.
+export type MessageType = "text" | "image" | "video" | "file" | "call_log";
 export type ResourceType = "image" | "video" | "raw";
+export type CallType = "audio" | "video";
+export type CallStatus = "missed" | "declined" | "ended";
 
 export interface User {
   _id: string;
@@ -136,6 +141,7 @@ export interface Conversation {
   unreadCount?: number;
   seenAt?: string;
   __isPlaceholder?: boolean;
+  activeCall?: { callType: CallType; participantCount: number };
 }
 
 export interface MessageReaction {
@@ -177,6 +183,10 @@ export interface Message {
   reactions?: MessageReaction[];
   replyTo?: string | null;
   forwarded?: boolean;
+  // Only set when messageType === "call_log".
+  callType?: CallType | null;
+  callStatus?: CallStatus | null;
+  callDurationSec?: number | null;
   createdAt: string;
   updatedAt?: string;
   __isOptimistic?: boolean;
@@ -205,6 +215,32 @@ export interface FileDeliveryResponse {
   signedUrl: string;
 }
 
+// One entry per remote peer in an active call, keyed by userId — holds the
+// live MediaStream/mute state the CallVideoGrid renders. Not a wire payload;
+// assembled client-side in CallContext from roster + track events.
+export interface CallParticipantInfo {
+  userId: string;
+  userName: string;
+  profilePic?: string;
+  stream?: MediaStream;
+  audioEnabled: boolean;
+  videoEnabled: boolean;
+}
+
+export interface IncomingCallPayload {
+  conversationId: string;
+  callType: CallType;
+  fromUserId: string;
+  fromUserName: string;
+  fromUserAvatar?: string;
+}
+
+export interface CallRosterSnapshotPayload {
+  conversationId: string;
+  callType: CallType;
+  participantUserIds: string[];
+}
+
 export interface ServerToClientEvents {
   getOnlineUsers: (users: string[]) => void;
   newMessage: (message: Message) => void;
@@ -219,11 +255,46 @@ export interface ServerToClientEvents {
   link_request: (payload: LinkRequestEventPayload) => void;
   link_session_updated: (payload: LinkSessionUpdatedEventPayload) => void;
   link_secret_ready: (payload: LinkSecretReadyEventPayload) => void;
+  "call:incoming": (payload: IncomingCallPayload) => void;
+  "call:started": (payload: { conversationId: string; callType: CallType; startedByUserId: string }) => void;
+  "call:invite-resolved": (payload: { conversationId: string }) => void;
+  "call:declined": (payload: { conversationId: string; byUserId: string }) => void;
+  "call:ended": (payload: { conversationId: string; reason: "missed" | "ended" }) => void;
+  "call:join-rejected": (payload: { conversationId: string; reason: "full" }) => void;
+  "call:roster-snapshot": (payload: CallRosterSnapshotPayload) => void;
+  "call:participant-joined": (payload: { conversationId: string; userId: string }) => void;
+  "call:participant-left": (payload: { conversationId: string; userId: string }) => void;
+  "call:offer": (payload: { conversationId: string; fromUserId: string; sdp: RTCSessionDescriptionInit }) => void;
+  "call:answer": (payload: { conversationId: string; fromUserId: string; sdp: RTCSessionDescriptionInit }) => void;
+  "call:ice-candidate": (payload: {
+    conversationId: string;
+    fromUserId: string;
+    candidate: RTCIceCandidateInit;
+  }) => void;
+  "call:media-state": (payload: {
+    conversationId: string;
+    fromUserId: string;
+    audioEnabled: boolean;
+    videoEnabled: boolean;
+  }) => void;
 }
 
 export interface ClientToServerEvents {
   connect_error: (error: Error) => void;
   "conversation:seen": (payload: { conversationId: string; readerId: string }) => void;
+  "call:invite": (payload: { conversationId: string; callType: CallType }) => void;
+  "call:start": (payload: { conversationId: string; callType: CallType }) => void;
+  "call:join": (payload: { conversationId: string; callType: CallType }) => void;
+  "call:decline": (payload: { conversationId: string }) => void;
+  "call:leave": (payload: { conversationId: string }) => void;
+  "call:offer": (payload: { conversationId: string; toUserId: string; sdp: RTCSessionDescriptionInit }) => void;
+  "call:answer": (payload: { conversationId: string; toUserId: string; sdp: RTCSessionDescriptionInit }) => void;
+  "call:ice-candidate": (payload: {
+    conversationId: string;
+    toUserId: string;
+    candidate: RTCIceCandidateInit;
+  }) => void;
+  "call:media-state": (payload: { conversationId: string; audioEnabled: boolean; videoEnabled: boolean }) => void;
 }
 
 export type AppSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
