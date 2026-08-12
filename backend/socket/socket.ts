@@ -7,6 +7,7 @@ import { Server } from 'socket.io';
 import http from 'http';
 import express from 'express';
 import { recordConversationSeen } from '../Utils/readReceipt.js';
+import { registerCallSignalingHandlers, handleSocketDisconnect } from './callSignaling.js';
 
 const clientOrigins = (process.env.CLIENT_ORIGINS || process.env.CLIENT_URL || 'http://localhost:3000')
   .split(',')
@@ -77,6 +78,8 @@ io.on('connection', (socket) => {
   // Broadcast updated list of online users to all clients
   io.emit('getOnlineUsers', Object.keys(userSocketMap));
 
+  registerCallSignalingHandlers(io, socket, userId);
+
   // Handle user disconnect
   socket.on('conversation:seen', async (payload: { conversationId: string; readerId: string }) => {
     try {
@@ -96,6 +99,8 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log('User disconnected: ' + socket.id);
+
+    handleSocketDisconnect(socket.id);
 
     // Remove user from active socket map
     if (userId && userSocketMap[userId]) {

@@ -2,6 +2,12 @@ import type { Message } from "../types";
 
 export const DELETED_MESSAGE_TEXT = "This message was deleted";
 
+const getCallLogLabel = (message: Message): string => {
+  if (message.callStatus === "missed") return "Missed call";
+  if (message.callStatus === "declined") return "Call declined";
+  return message.callType === "video" ? "Video call" : "Voice call";
+};
+
 // Keep message rendering consistent across list items, previews, and deleted states.
 export const getMessageBodyText = (message: Message): string => {
   if (message.deletedForEveryone) {
@@ -11,6 +17,7 @@ export const getMessageBodyText = (message: Message): string => {
   if (message.messageType === "image") return "Photo";
   if (message.messageType === "video") return "Video";
   if (message.messageType === "file") return message.fileName || "File";
+  if (message.messageType === "call_log") return getCallLogLabel(message);
 
   return message.text || message.message || "";
 };
@@ -23,6 +30,7 @@ export const getMessagePreviewText = (message: Message): string => {
   if (message.messageType === "image") return "Photo";
   if (message.messageType === "video") return "Video";
   if (message.messageType === "file") return message.fileName || "File";
+  if (message.messageType === "call_log") return getCallLogLabel(message);
 
   return message.text || message.message || "";
 };

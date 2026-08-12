@@ -5,7 +5,12 @@
 
 import mongoose, { Document, Types } from 'mongoose';
 
-export type MessageType = 'text' | 'image' | 'video' | 'file';
+// 'call_log' is a system message (no sender-authored content) summarizing a
+// finished call — distinct from 'video', which is an uploaded video FILE
+// message. Do not conflate the two.
+export type MessageType = 'text' | 'image' | 'video' | 'file' | 'call_log';
+export type CallType = 'audio' | 'video';
+export type CallStatus = 'missed' | 'declined' | 'ended';
 
 export interface IMessageReaction {
   userId: Types.ObjectId;
@@ -56,6 +61,10 @@ export interface IMessage {
   reactions?: IMessageReaction[];
   replyTo?: Types.ObjectId;
   forwarded?: boolean;
+  // Only set when messageType === 'call_log'.
+  callType?: CallType;
+  callStatus?: CallStatus;
+  callDurationSec?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -83,7 +92,7 @@ const messageSchema = new mongoose.Schema<IMessage>(
     },
     messageType: {
       type: String,
-      enum: ['text', 'image', 'video', 'file'],
+      enum: ['text', 'image', 'video', 'file', 'call_log'],
       required: true,
     },
     text: {
@@ -174,6 +183,18 @@ const messageSchema = new mongoose.Schema<IMessage>(
     forwarded: {
       type: Boolean,
       default: false,
+    },
+    callType: {
+      type: String,
+      enum: ['audio', 'video'],
+    },
+    callStatus: {
+      type: String,
+      enum: ['missed', 'declined', 'ended'],
+    },
+    callDurationSec: {
+      type: Number,
+      min: 0,
     },
   },
   { timestamps: true } // Adds createdAt & updatedAt for message tracking

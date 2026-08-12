@@ -25,6 +25,7 @@ module.exports = {
           'useAuthContext',
           'useSocketContext',
           'useDeviceLinkContext',
+          'useCallContext',
         ],
       },
     ],
