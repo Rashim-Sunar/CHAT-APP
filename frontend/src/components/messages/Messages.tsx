@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import Message from "./Message";
+import CallLogMessage from "./CallLogMessage";
 import useGetMessages from "../../hooks/useGetMessages";
 import MessageSkeleton from "../skeleton/MessageSkeleton";
 import type { Message as ChatMessage } from "../../types";
@@ -53,7 +54,11 @@ const Messages = () => {
           return (
             <div key={message._id || `${message.createdAt}-${index}`} ref={lastMessageRef}>
               {showDateDivider && <DateDivider label={formatDateDivider(message.createdAt)} />}
-              <Message message={message} isGroupStart={isGroupStart} isGroupEnd={isGroupEnd} />
+              {message.messageType === "call_log" ? (
+                <CallLogMessage message={message} />
+              ) : (
+                <Message message={message} isGroupStart={isGroupStart} isGroupEnd={isGroupEnd} />
+              )}
             </div>
           );
         })}
