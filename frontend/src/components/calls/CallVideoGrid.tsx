@@ -17,8 +17,18 @@ const VideoTile = ({ stream, muted, isVideoActive, isAudioMuted, name, avatarSrc
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream || null;
+    const videoElement = videoRef.current;
+    if (!videoElement) return;
+
+    videoElement.srcObject = stream || null;
+
+    // A stream attached long after it was captured (e.g. the caller's own
+    // preview, unattached through the whole ring) can have autoPlay silently
+    // never kick in on some browsers — no error, it just never starts.
+    if (stream) {
+      videoElement.play().catch(() => {
+        // Best-effort; controls stay usable either way.
+      });
     }
   }, [stream]);
 
