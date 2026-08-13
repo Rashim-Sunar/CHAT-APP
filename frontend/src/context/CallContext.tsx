@@ -402,6 +402,7 @@ export const CallProvider = ({ children }: CallProviderProps) => {
       if (activeCall?.conversationId !== payload.conversationId) return;
       addRosterParticipant(payload.conversationId, payload.userId);
       void peerManagerRef.current?.addPeerAsOfferer(payload.userId);
+      setCallState((prev) => (prev === "ringing-outgoing" || prev === "connecting" ? "in-call" : prev));
     };
 
     const onParticipantLeft = (payload: { conversationId: string; userId: string }) => {
