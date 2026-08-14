@@ -16,7 +16,7 @@ const Home = () => {
   const [desktopDetailsOpen, setDesktopDetailsOpen] = useState(true);
 
   return (
-    <div className="h-screen w-full bg-slate-100 flex flex-col md:flex-row overflow-hidden">
+    <div className="h-dvh w-full bg-slate-100 flex flex-col md:flex-row overflow-hidden">
       <div className="md:hidden border-b border-slate-200 bg-white shrink-0">
         <MobileConversationBar />
       </div>
