@@ -275,24 +275,24 @@ const MessageInput = () => {
         <input
           type="text"
           placeholder="Type a message..."
-          className="flex-1 h-12 px-4 rounded-full border border-slate-300
+          className="h-12 min-w-0 flex-1 rounded-full border border-slate-300 px-4
                     focus:outline-none focus:ring-2 focus:ring-indigo-500
                     transition duration-200"
           value={message}
           onChange={(event) => setMessage(event.target.value)}
         />
 
-        <label className="cursor-pointer text-slate-600 hover:text-indigo-600">
+        <label className="shrink-0 cursor-pointer text-slate-600 hover:text-indigo-600">
           <FiImage size={20} />
           <input type="file" className="hidden" accept="image/*" multiple onChange={handleFileSelection} />
         </label>
 
-        <label className="cursor-pointer text-slate-600 hover:text-indigo-600">
+        <label className="shrink-0 cursor-pointer text-slate-600 hover:text-indigo-600">
           <FiVideo size={20} />
           <input type="file" className="hidden" accept="video/*" multiple onChange={handleFileSelection} />
         </label>
 
-        <label className="cursor-pointer text-slate-600 hover:text-indigo-600">
+        <label className="shrink-0 cursor-pointer text-slate-600 hover:text-indigo-600">
           <FiFileText size={20} />
           <input
             type="file"
@@ -306,8 +306,8 @@ const MessageInput = () => {
         <button
           type="submit"
           disabled={loading}
-          className="w-12 h-12 rounded-full bg-indigo-600 text-white
-                    flex items-center justify-center
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full
+                    bg-indigo-600 text-white
                     hover:bg-indigo-700 transition duration-200 disabled:opacity-50"
         >
           <BsFillSendFill />
