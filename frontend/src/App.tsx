@@ -108,7 +108,7 @@ const RestoreOrLinkGate = ({
   };
 
   return (
-    <div className="h-screen w-full flex items-center justify-center bg-slate-100 p-6">
+    <div className="h-dvh w-full flex items-center justify-center bg-slate-100 p-6">
       <div className="w-full max-w-lg rounded-2xl bg-white border border-slate-200 p-6 shadow-sm">
         <h1 className="text-xl font-semibold text-slate-900">Restore your messages</h1>
         <p className="text-sm text-slate-600 mt-3">
@@ -191,7 +191,7 @@ const WaitingForDeviceApproval = ({
       : error || "Please login again and retry the device linking process.";
 
   return (
-    <div className="h-screen w-full flex items-center justify-center bg-slate-100 p-6">
+    <div className="h-dvh w-full flex items-center justify-center bg-slate-100 p-6">
       <div className="w-full max-w-lg rounded-2xl bg-white border border-slate-200 p-6 shadow-sm">
         <h1 className="text-xl font-semibold text-slate-900">{heading}</h1>
         <p className="text-sm text-slate-600 mt-3">{body}</p>
@@ -327,7 +327,7 @@ function App() {
 
   if (loading) {
     return (
-      <div className="p-4 h-screen flex items-center justify-center">
+      <div className="p-4 h-dvh flex items-center justify-center">
         <Toaster />
         <div className="text-sm opacity-70">Checking your session...</div>
       </div>
@@ -364,10 +364,11 @@ function App() {
   }
 
   // Every routed page below manages its own full-height layout (Login/SignUp/
-  // JoinGroupPage each wrap in min-h-screen + centering, Home and Landing use
-  // their own h-screen/min-h-screen + scroll behavior), so this container
-  // stays unconstrained rather than forcing a shared h-screen/flex-center —
-  // that would clip Landing, which is taller than the viewport.
+  // JoinGroupPage each wrap in min-h-screen + centering, Home uses h-dvh so
+  // mobile browser chrome doesn't clip it, Landing scrolls its own content),
+  // so this container stays unconstrained rather than forcing a shared
+  // h-screen/flex-center — that would clip Landing, which is taller than the
+  // viewport.
   return (
     <div>
       <Toaster />
