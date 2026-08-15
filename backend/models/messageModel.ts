@@ -65,6 +65,9 @@ export interface IMessage {
   callType?: CallType;
   callStatus?: CallStatus;
   callDurationSec?: number;
+  pinned?: boolean;
+  pinnedAt?: Date;
+  pinnedBy?: Types.ObjectId;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -196,6 +199,17 @@ const messageSchema = new mongoose.Schema<IMessage>(
       type: Number,
       min: 0,
     },
+    pinned: {
+      type: Boolean,
+      default: false,
+    },
+    pinnedAt: {
+      type: Date,
+    },
+    pinnedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'user',
+    },
   },
   { timestamps: true } // Adds createdAt & updatedAt for message tracking
 );
@@ -211,6 +225,9 @@ messageSchema.index({ conversationId: 1, createdAt: -1 });
 
 // Supports filtering recent messages by content category for details side panel.
 messageSchema.index({ messageType: 1, createdAt: -1 });
+
+// Supports the pinned-messages panel/banner query.
+messageSchema.index({ conversationId: 1, pinned: 1, pinnedAt: -1 });
 
 // Create and export Message model
 const Message = mongoose.model('message', messageSchema);

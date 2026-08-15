@@ -5,7 +5,6 @@
 
 import express from 'express';
 import {
-  getUserDetails,
   getUsersForSidebar,
   updateUserName,
   getProfilePictureUploadSignature,
@@ -34,13 +33,6 @@ router.get('/:id/public-key', getUserPublicKey);
 // Batch variant — used when resolving a group's full membership before
 // encrypting an outgoing message.
 router.post('/public-keys', getUserPublicKeysBatch);
-
-// ----------------------------------------
-// @desc    Retrieves selected user details with shared media/links/documents
-// @route   GET /api/users/:id/details
-// @access  Private
-// ----------------------------------------
-router.get('/:id/details', getUserDetails);
 
 // ----------------------------------------
 // @desc    Updates authenticated user's display name
