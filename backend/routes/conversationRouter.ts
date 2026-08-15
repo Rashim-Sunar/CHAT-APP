@@ -22,6 +22,12 @@ import {
   joinConversationByInviteLink,
   getConversationMessages,
   sendConversationMessage,
+  muteConversation,
+  unmuteConversation,
+  blockUser,
+  unblockUser,
+  getPinnedMessages,
+  getSharedContent,
 } from '../controllers/conversationController.js';
 import { getActiveCall } from '../controllers/callController.js';
 
@@ -118,5 +124,35 @@ router.get('/:id/call', getActiveCall);
 // @access  Private
 // ----------------------------------------
 router.post('/:id/messages', messageLimiter, sendConversationMessage);
+
+// ----------------------------------------
+// @desc    Mutes/unmutes notifications for the requester — direct + group
+// @route   POST/DELETE /api/conversations/:id/mute
+// @access  Private
+// ----------------------------------------
+router.post('/:id/mute', muteConversation);
+router.delete('/:id/mute', unmuteConversation);
+
+// ----------------------------------------
+// @desc    Blocks/unblocks the other participant — direct only
+// @route   POST/DELETE /api/conversations/:id/block
+// @access  Private
+// ----------------------------------------
+router.post('/:id/block', blockUser);
+router.delete('/:id/block', unblockUser);
+
+// ----------------------------------------
+// @desc    Currently-pinned messages, newest pin first
+// @route   GET /api/conversations/:id/pinned-messages
+// @access  Private
+// ----------------------------------------
+router.get('/:id/pinned-messages', getPinnedMessages);
+
+// ----------------------------------------
+// @desc    Shared media/links/documents — direct + group
+// @route   GET /api/conversations/:id/shared-content
+// @access  Private
+// ----------------------------------------
+router.get('/:id/shared-content', getSharedContent);
 
 export default router;

@@ -13,6 +13,8 @@ import {
 	editMessage,
 	deleteMessage,
 	reactToMessage,
+	pinMessage,
+	unpinMessage,
 } from '../controllers/messageController.js';
 
 const router = express.Router();
@@ -62,5 +64,13 @@ router.delete('/:id', deleteMessage);
 // @access  Private
 // ----------------------------------------
 router.post('/:id/react', reactToMessage);
+
+// ----------------------------------------
+// @desc    Pins/unpins a message — any current conversation participant may
+// @route   POST/DELETE /api/messages/:id/pin
+// @access  Private
+// ----------------------------------------
+router.post('/:id/pin', pinMessage);
+router.delete('/:id/pin', unpinMessage);
 
 export default router;

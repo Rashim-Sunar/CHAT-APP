@@ -1,23 +1,20 @@
-import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useMemo, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { FiChevronDown, FiChevronUp, FiDownload, FiFileText, FiImage, FiLink2, FiLock, FiX } from "react-icons/fi";
+import { FiLock, FiX } from "react-icons/fi";
 import useConversation from "../../zustand/useConversation";
-import useUserDetails from "../../hooks/useUserDetails";
 import { useAuthContext } from "../../context/Auth-Context";
 import { getOtherParticipant } from "../../Utils/conversationDisplay";
 import Avatar from "../common/Avatar";
-import MediaPreviewModal from "../common/MediaPreviewModal";
 import GroupInfoPanel from "../groups/GroupInfoPanel";
+import SharedContentSection from "./SharedContentSection";
+import ConversationSettingsSection from "./ConversationSettingsSection";
 import { useSocketContext } from "../../context/SocketContext";
-import type { SharedDocumentItem, SharedLinkItem, SharedMediaItem } from "../../types";
 
 interface UserDetailsPanelProps {
   isOpen: boolean;
   onClose?: () => void;
   variant?: "desktop" | "drawer";
 }
-
-type SectionKey = "media" | "links" | "documents";
 
 const slidePanelVariants = {
   hidden: { x: "100%", opacity: 0 },
@@ -29,216 +26,16 @@ const slidePanelVariants = {
   exit: { x: "100%", opacity: 0, transition: { duration: 0.2 } },
 } as const;
 
-const formatDate = (value: string): string => {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-};
-
-const formatFileSize = (size?: number): string => {
-  if (!size || size <= 0) return "";
-
-  const units = ["B", "KB", "MB", "GB"];
-  let currentSize = size;
-  let unitIndex = 0;
-
-  while (currentSize >= 1024 && unitIndex < units.length - 1) {
-    currentSize /= 1024;
-    unitIndex += 1;
-  }
-
-  return `${currentSize.toFixed(currentSize < 10 && unitIndex > 0 ? 1 : 0)} ${units[unitIndex]}`;
-};
-
-const getDomain = (url: string): string => {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return "External link";
-  }
-};
-
-const SkeletonRows = () => (
-  <div className="space-y-3 animate-pulse">
-    <div className="h-24 rounded-xl bg-slate-200/70" />
-    <div className="h-12 rounded-xl bg-slate-200/70" />
-    <div className="h-12 rounded-xl bg-slate-200/70" />
-  </div>
-);
-
-const MediaGrid = ({ items, onPreview }: { items: SharedMediaItem[]; onPreview: (item: SharedMediaItem) => void }) => {
-  if (items.length === 0) {
-    return <p className="text-sm text-slate-500">No media shared yet.</p>;
-  }
-
-  return (
-    <div className="grid grid-cols-3 gap-2">
-      {items.map((item) => (
-        <button
-          type="button"
-          key={`${item.url}-${item.createdAt}`}
-          onClick={() => onPreview(item)}
-          className="relative aspect-square rounded-xl overflow-hidden group focus:outline-none focus:ring-2 focus:ring-slate-400"
-        >
-          {item.type === "image" ? (
-            <img
-              src={item.url}
-              alt="Shared media"
-              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
-            />
-          ) : (
-            <video className="h-full w-full object-cover" muted>
-              <source src={item.url} type="video/mp4" />
-            </video>
-          )}
-
-          <span className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-colors" />
-        </button>
-      ))}
-    </div>
-  );
-};
-
-interface AccordionSectionProps {
-  id: SectionKey;
-  title: string;
-  count: number;
-  isOpen: boolean;
-  onToggle: (section: SectionKey) => void;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}
-
-const AccordionSection = ({ id, title, count, isOpen, onToggle, icon, children }: AccordionSectionProps) => {
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <button
-        type="button"
-        onClick={() => onToggle(id)}
-        className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors text-left"
-        aria-expanded={isOpen}
-        aria-controls={`section-content-${id}`}
-      >
-        <span className="flex items-center gap-2 text-slate-700">
-          <span className="text-slate-500">{icon}</span>
-          <span className="text-sm font-semibold tracking-wide uppercase">{title}</span>
-          <span className="inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
-            {count}
-          </span>
-        </span>
-
-        <span className="text-slate-500">{isOpen ? <FiChevronUp size={17} /> : <FiChevronDown size={17} />}</span>
-      </button>
-
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div
-            id={`section-content-${id}`}
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            className="overflow-hidden"
-          >
-            <div className="px-4 pb-4">{children}</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </section>
-  );
-};
-
-const LinksList = ({ links }: { links: SharedLinkItem[] }) => {
-  if (links.length === 0) {
-    return <p className="text-sm text-slate-500">No links shared yet.</p>;
-  }
-
-  return (
-    <div className="space-y-2">
-      {links.map((link) => (
-        <a
-          key={`${link.url}-${link.createdAt}`}
-          href={link.url}
-          target="_blank"
-          rel="noreferrer"
-          className="block rounded-xl border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50 transition-colors"
-        >
-          <p className="text-sm font-medium text-slate-800 truncate">{link.title}</p>
-          <div className="flex items-center justify-between mt-1">
-            <p className="text-xs text-slate-500 truncate">{getDomain(link.url)}</p>
-            <p className="text-xs text-slate-400">{formatDate(link.createdAt)}</p>
-          </div>
-        </a>
-      ))}
-    </div>
-  );
-};
-
-const DocumentsList = ({ documents }: { documents: SharedDocumentItem[] }) => {
-  if (documents.length === 0) {
-    return <p className="text-sm text-slate-500">No documents shared yet.</p>;
-  }
-
-  return (
-    <div className="space-y-2">
-      {documents.map((document) => (
-        <div
-          key={`${document.url}-${document.createdAt}`}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 flex items-center gap-3"
-        >
-          <span className="h-9 w-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
-            <FiFileText />
-          </span>
-
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-slate-800 truncate">{document.name}</p>
-            <p className="text-xs text-slate-500">
-              {[formatFileSize(document.size), formatDate(document.createdAt)].filter(Boolean).join(" • ")}
-            </p>
-          </div>
-
-          <a
-            href={document.url}
-            target="_blank"
-            rel="noreferrer"
-            download={document.name}
-            className="h-8 w-8 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 flex items-center justify-center transition-colors"
-            aria-label={`Download ${document.name}`}
-          >
-            <FiDownload size={14} />
-          </a>
-        </div>
-      ))}
-    </div>
-  );
-};
-
 const UserDetailsPanel = ({ isOpen, onClose, variant = "desktop" }: UserDetailsPanelProps) => {
   const { selectedConversation } = useConversation();
   const { onlineUsers } = useSocketContext();
   const { authUser } = useAuthContext();
   const currentUserId = authUser?.data?.user?._id;
-  const { details, loading, error, refetch } = useUserDetails();
-  const [previewItem, setPreviewItem] = useState<SharedMediaItem | null>(null);
-  const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
-    media: false,
-    links: false,
-    documents: false,
-  });
 
   const otherParticipant = getOtherParticipant(selectedConversation, currentUserId);
-  const baseAvatar = details?.user?.profilePic || selectedConversation?.displayAvatar || "";
-  const userName = details?.user?.username || selectedConversation?.displayName || "User";
+  const baseAvatar = selectedConversation?.displayAvatar || "";
+  const userName = selectedConversation?.displayName || "User";
   const isOnline = Boolean(otherParticipant && onlineUsers.includes(otherParticipant._id));
-  const mediaItems = details?.media || [];
-  const linkItems = details?.links || [];
-  const documentItems = details?.documents || [];
 
   const showPanel = useMemo(() => {
     if (variant === "desktop") {
@@ -249,51 +46,20 @@ const UserDetailsPanel = ({ isOpen, onClose, variant = "desktop" }: UserDetailsP
   }, [isOpen, selectedConversation, variant]);
 
   useEffect(() => {
-    if (!showPanel) {
-      setPreviewItem(null);
-    }
-  }, [showPanel]);
-
-  useEffect(() => {
-    setOpenSections({
-      media: false,
-      links: false,
-      documents: false,
-    });
-  }, [selectedConversation?._id]);
-
-  useEffect(() => {
     const closeOnEscape = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
-        if (previewItem) {
-          setPreviewItem(null);
-          return;
-        }
-
         onClose?.();
       }
     };
 
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose, previewItem]);
+  }, [onClose]);
 
   const onContainerKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
-      if (previewItem) {
-        setPreviewItem(null);
-        return;
-      }
-
       onClose?.();
     }
-  };
-
-  const toggleSection = (section: SectionKey) => {
-    setOpenSections((previous) => ({
-      ...previous,
-      [section]: !previous[section],
-    }));
   };
 
   if (!showPanel) return null;
@@ -349,60 +115,9 @@ const UserDetailsPanel = ({ isOpen, onClose, variant = "desktop" }: UserDetailsP
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 md:px-5 py-4 space-y-3">
-            {loading && <SkeletonRows />}
-
-            {!loading && error && (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
-                <p className="text-sm text-rose-700">{error}</p>
-                <button
-                  type="button"
-                  onClick={refetch}
-                  className="mt-2 text-xs font-medium text-rose-700 underline underline-offset-2"
-                >
-                  Retry
-                </button>
-              </div>
-            )}
-
-            {!loading && !error && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
-                <AccordionSection
-                  id="media"
-                  title="Shared media"
-                  count={mediaItems.length}
-                  isOpen={openSections.media}
-                  onToggle={toggleSection}
-                  icon={<FiImage size={15} />}
-                >
-                  <MediaGrid items={mediaItems} onPreview={setPreviewItem} />
-                </AccordionSection>
-
-                <AccordionSection
-                  id="links"
-                  title="Shared links"
-                  count={linkItems.length}
-                  isOpen={openSections.links}
-                  onToggle={toggleSection}
-                  icon={<FiLink2 size={15} />}
-                >
-                  <LinksList links={linkItems} />
-                </AccordionSection>
-
-                <AccordionSection
-                  id="documents"
-                  title="Shared documents"
-                  count={documentItems.length}
-                  isOpen={openSections.documents}
-                  onToggle={toggleSection}
-                  icon={<FiFileText size={15} />}
-                >
-                  <DocumentsList documents={documentItems} />
-                </AccordionSection>
-              </motion.div>
-            )}
+            <SharedContentSection onNavigateToMessage={variant === "drawer" ? onClose : undefined} />
+            {selectedConversation && <ConversationSettingsSection conversation={selectedConversation} />}
           </div>
-
-          <MediaPreviewModal item={previewItem} onClose={() => setPreviewItem(null)} />
         </>
       )}
     </motion.aside>

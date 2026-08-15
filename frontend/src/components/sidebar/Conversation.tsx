@@ -1,3 +1,4 @@
+import { BiBellOff } from "react-icons/bi";
 import { useSocketContext } from "../../context/SocketContext";
 import useConversation from "../../zustand/useConversation";
 import { useAuthContext } from "../../context/Auth-Context";
@@ -70,8 +71,9 @@ const ConversationItem = ({ conversation }: ConversationProps) => {
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className={`truncate ${unreadCount > 0 && !isSelected ? "font-semibold text-slate-900" : "font-medium text-slate-800"}`}>
-          {conversation.displayName}
+        <p className={`flex items-center gap-1.5 truncate ${unreadCount > 0 && !isSelected ? "font-semibold text-slate-900" : "font-medium text-slate-800"}`}>
+          <span className="truncate">{conversation.displayName}</span>
+          {conversation.isMuted && <BiBellOff size={13} className="shrink-0 text-slate-400" />}
         </p>
         <p className="text-xs text-slate-500 truncate">{sidebarPreviewText}</p>
       </div>

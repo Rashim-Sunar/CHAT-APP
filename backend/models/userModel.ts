@@ -3,7 +3,7 @@
 // @desc   Defines user schema and authentication-related methods
 // ----------------------------------------
 
-import mongoose, { Document } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 import validator from 'validator';
 import bcrypt from 'bcryptjs';
 
@@ -21,6 +21,10 @@ export interface IUser {
   backupIv?: string;
   backupEnabled: boolean;
   backupUpdatedAt?: Date;
+  // Users this account has blocked — asymmetric and blocker-owned. Only
+  // meaningful for direct conversations; enforcement checks both sides'
+  // lists so either party blocking the other cuts contact both ways.
+  blockedUsers?: Types.ObjectId[];
 }
 
 // Extends IUser with mongoose document and custom methods
@@ -91,6 +95,12 @@ const userSchema = new mongoose.Schema<IUser>(
       type: Date,
       default: null,
     },
+    blockedUsers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'user',
+      },
+    ],
   },
   { timestamps: true } // Automatically adds createdAt & updatedAt
 );

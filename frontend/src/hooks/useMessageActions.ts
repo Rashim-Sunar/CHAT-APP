@@ -200,6 +200,42 @@ const useMessageActions = (message: Message) => {
   };
 
   /**
+   * Pins or unpins this message. Optimistic like reactions — no busyAction,
+   * should feel instant. Any current participant may pin/unpin.
+   */
+  const togglePin = async (nextPinned: boolean): Promise<boolean> => {
+    if (!messageId || !conversationKey || !currentUserId) return false;
+
+    const previousMessages = snapshotMessages();
+    updateMessageInConversation(conversationKey, messageId, {
+      pinned: nextPinned,
+      pinnedAt: nextPinned ? new Date().toISOString() : null,
+      pinnedBy: nextPinned ? currentUserId : null,
+    });
+
+    try {
+      const data = await apiFetch<ApiErrorResponse & { updatedMessage?: Message }>(
+        `/messages/${messageId}/pin`,
+        { method: nextPinned ? "POST" : "DELETE" }
+      );
+
+      if (data.error) {
+        throw new Error(data.error || "Failed to update pin");
+      }
+
+      if (data.updatedMessage) {
+        updateMessageInConversation(conversationKey, messageId, data.updatedMessage);
+      }
+
+      return true;
+    } catch (error: unknown) {
+      restoreMessages(previousMessages);
+      toast.error(getErrorMessage(error));
+      return false;
+    }
+  };
+
+  /**
    * Deletes a message for current user or all participants, with optimistic UI.
    * Falls back to snapshot rollback if server mutation fails.
    */
@@ -271,6 +307,7 @@ const useMessageActions = (message: Message) => {
     editMessage,
     deleteMessage,
     reactToMessage,
+    togglePin,
   };
 };
 

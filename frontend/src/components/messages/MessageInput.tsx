@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { BsFillSendFill } from "react-icons/bs";
 import { FiImage, FiFileText, FiVideo, FiPlay, FiX, FiAlertCircle, FiCheck, FiCornerUpLeft } from "react-icons/fi";
+import { BiBlock } from "react-icons/bi";
 import useSendMessage from "../../hooks/useSendMessage";
 import useConversation from "../../zustand/useConversation";
+import useGetConversations from "../../hooks/useGetConversations";
 import { useAuthContext } from "../../context/Auth-Context";
 import { validateFileForUpload } from "../../Utils/mediaValidation";
 import { getMessageBodyText } from "../../Utils/messageDisplay";
+import { apiFetch } from "../../Utils/apiFetch";
+import { getErrorMessage } from "../../Utils/getErrorMessage";
 import toast from "react-hot-toast";
-import type { UploadJob } from "../../types";
+import type { ApiErrorResponse, UploadJob } from "../../types";
 
 interface CircularProgressProps {
   progress: number;
@@ -44,18 +48,40 @@ const CircularProgress = ({ progress, size = 32, strokeWidth = 3 }: CircularProg
 const MessageInput = () => {
   const { loading, sendMessage, sendFiles } = useSendMessage();
   const { authUser } = useAuthContext();
+  const { refetch: refetchConversations } = useGetConversations();
   const uploadQueue = useConversation((state) => state.uploadQueue);
   const selectedConversation = useConversation((state) => state.selectedConversation);
   const replyTarget = useConversation((state) => state.replyTarget);
   const setReplyTarget = useConversation((state) => state.setReplyTarget);
   const [message, setMessage] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isUnblocking, setIsUnblocking] = useState(false);
 
   const currentUserId = authUser?.data?.user?._id;
+  const isBlocked = Boolean(selectedConversation?.isBlocked);
+  const blockedByMe = Boolean(selectedConversation?.blockedByMe);
+
+  const handleUnblock = async () => {
+    if (!selectedConversation) return;
+
+    setIsUnblocking(true);
+    try {
+      await apiFetch<ApiErrorResponse>(`/conversations/${selectedConversation._id}/block`, {
+        method: "DELETE",
+      });
+      await refetchConversations();
+      toast.success("Contact unblocked");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setIsUnblocking(false);
+    }
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    if (isBlocked) return;
     if (!message.trim() && selectedFiles.length === 0) return;
 
     const replyTo = replyTarget?._id;
@@ -141,6 +167,31 @@ const MessageInput = () => {
           (participant) => participant._id === String(replyTarget.senderId)
         )?.userName || "them"
     : "";
+
+  if (isBlocked) {
+    return (
+      <div className="flex items-center gap-3 p-4">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-500">
+          <BiBlock size={18} />
+        </span>
+        <p className="min-w-0 flex-1 text-sm text-slate-600">
+          {blockedByMe
+            ? "You blocked this contact. Unblock to send messages."
+            : "You can't message this contact right now."}
+        </p>
+        {blockedByMe && (
+          <button
+            type="button"
+            onClick={() => void handleUnblock()}
+            disabled={isUnblocking}
+            className="shrink-0 rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          >
+            Unblock
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 space-y-3">

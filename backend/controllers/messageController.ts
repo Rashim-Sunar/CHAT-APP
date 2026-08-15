@@ -73,6 +73,9 @@ export type RealtimeMessagePayload = {
   callType: CallType | null;
   callStatus: CallStatus | null;
   callDurationSec: number | null;
+  pinned: boolean;
+  pinnedAt: Date | null;
+  pinnedBy: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -216,6 +219,9 @@ export const buildRealtimePayload = (
     callType: messageDoc.callType || null,
     callStatus: messageDoc.callStatus || null,
     callDurationSec: typeof messageDoc.callDurationSec === 'number' ? messageDoc.callDurationSec : null,
+    pinned: Boolean(messageDoc.pinned),
+    pinnedAt: messageDoc.pinnedAt || null,
+    pinnedBy: messageDoc.pinnedBy ? String(messageDoc.pinnedBy) : null,
     createdAt: messageDoc.createdAt,
     updatedAt: messageDoc.updatedAt,
   };
@@ -334,7 +340,7 @@ export const getMessageConversation = async (messageId: string): Promise<Convers
 // emitToUserDevices — unlike the old getReceiverSocketId path — reaches every
 // active socket for a user, not just the first one).
 const emitMessageUpdateToParticipants = (
-  eventName: 'message:edit' | 'message:delete' | 'message:reaction',
+  eventName: 'message:edit' | 'message:delete' | 'message:reaction' | 'message:pin',
   conversation: ConversationDocument,
   payload: RealtimeMessagePayload
 ): void => {
@@ -836,6 +842,11 @@ export const deleteMessage = async (
       }
 
       message.deletedForEveryone = true;
+      // A pinned message can't keep showing deleted content in the pinned
+      // banner/list once it's gone for everyone.
+      message.pinned = false;
+      message.pinnedAt = undefined;
+      message.pinnedBy = undefined;
       await message.save();
 
       try {
@@ -953,6 +964,109 @@ export const reactToMessage = async (
       error instanceof Error ? error.message : String(error)
     );
 
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Shared load/validate step for pin and unpin — any current conversation
+// participant may pin/unpin (same openness as reactions, no admin-gating).
+const loadMessageForPinAction = async (
+  messageId: string,
+  requesterId: string
+): Promise<
+  | { ok: true; message: MessageDocument; conversation: ConversationDocument }
+  | { ok: false; status: number; error: string }
+> => {
+  const message = (await Message.findById(messageId)) as MessageDocument | null;
+  if (!message) {
+    return { ok: false, status: 404, error: 'Message not found' };
+  }
+
+  if (message.deletedForEveryone) {
+    return { ok: false, status: 400, error: 'Deleted messages cannot be pinned' };
+  }
+
+  const conversation = await getMessageConversation(messageId);
+  if (!conversation) {
+    return { ok: false, status: 404, error: 'Conversation not found' };
+  }
+
+  const isParticipant = conversation.participants.some(
+    (participantId) => String(participantId) === requesterId
+  );
+  if (!isParticipant) {
+    return { ok: false, status: 403, error: 'You are not a participant in this conversation' };
+  }
+
+  return { ok: true, message, conversation };
+};
+
+/**
+ * Pins a message within its conversation. Any current participant may pin.
+ */
+export const pinMessage = async (
+  req: AuthenticatedRequest<{ id: string }>,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id: messageId } = req.params;
+    const requesterId = String(req.user);
+
+    const result = await loadMessageForPinAction(messageId, requesterId);
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+
+    const { message, conversation } = result;
+    message.pinned = true;
+    message.pinnedAt = new Date();
+    message.pinnedBy = new Types.ObjectId(requesterId);
+    await message.save();
+
+    const messageWithTimestamps = message as MessageDocument & { createdAt: Date; updatedAt: Date };
+    const realtimeMessagePayload = buildRealtimePayload(messageWithTimestamps, String(conversation._id));
+
+    emitMessageUpdateToParticipants('message:pin', conversation, realtimeMessagePayload);
+
+    res.status(200).json({ updatedMessage: realtimeMessagePayload });
+  } catch (error: unknown) {
+    console.log('Error in pinMessage controller:', error instanceof Error ? error.message : String(error));
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Unpins a message within its conversation. Any current participant may unpin.
+ */
+export const unpinMessage = async (
+  req: AuthenticatedRequest<{ id: string }>,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id: messageId } = req.params;
+    const requesterId = String(req.user);
+
+    const result = await loadMessageForPinAction(messageId, requesterId);
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+
+    const { message, conversation } = result;
+    message.pinned = false;
+    message.pinnedAt = undefined;
+    message.pinnedBy = undefined;
+    await message.save();
+
+    const messageWithTimestamps = message as MessageDocument & { createdAt: Date; updatedAt: Date };
+    const realtimeMessagePayload = buildRealtimePayload(messageWithTimestamps, String(conversation._id));
+
+    emitMessageUpdateToParticipants('message:pin', conversation, realtimeMessagePayload);
+
+    res.status(200).json({ updatedMessage: realtimeMessagePayload });
+  } catch (error: unknown) {
+    console.log('Error in unpinMessage controller:', error instanceof Error ? error.message : String(error));
     res.status(500).json({ error: 'Internal server error' });
   }
 };
