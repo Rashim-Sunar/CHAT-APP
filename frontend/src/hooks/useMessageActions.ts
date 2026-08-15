@@ -13,7 +13,12 @@ import { DELETED_MESSAGE_TEXT } from "../Utils/messageDisplay";
 import useConversation from "../zustand/useConversation";
 import type { ApiErrorResponse, Message } from "../types";
 import { apiFetch } from "../Utils/apiFetch";
-import { encryptTextMessageForRecipients, getRecipientPublicKeys, requireUserKeyPair } from "../Utils/crypto";
+import {
+  decryptMessageIfNeeded,
+  encryptTextMessageForRecipients,
+  getRecipientPublicKeys,
+  requireUserKeyPair,
+} from "../Utils/crypto";
 
 /**
  * Exposes guarded edit/delete actions for one message instance.
@@ -56,11 +61,14 @@ const useMessageActions = (message: Message) => {
     syncConversationPreview(conversationKey, currentUserId);
   };
 
-  // Applies canonical server payload to avoid local/server divergence.
-  const applyServerMessage = (serverMessage: Message): void => {
+  // Applies canonical server payload — decrypts first, since the REST
+  // response for an E2EE text message carries text: "" (real content is
+  // only in encryptedMessage/encryptedAESKeys).
+  const applyServerMessage = async (serverMessage: Message): Promise<void> => {
     if (!conversationKey || !messageId || !currentUserId) return;
 
-    updateMessageInConversation(conversationKey, messageId, serverMessage);
+    const hydratedMessage = await decryptMessageIfNeeded(serverMessage, currentUserId);
+    updateMessageInConversation(conversationKey, messageId, hydratedMessage);
     syncConversationPreview(conversationKey, currentUserId);
   };
 
@@ -135,7 +143,7 @@ const useMessageActions = (message: Message) => {
       }
 
       if (data.updatedMessage) {
-        applyServerMessage(data.updatedMessage);
+        await applyServerMessage(data.updatedMessage);
         bumpDetailsRefreshVersion();
       }
 
@@ -188,7 +196,7 @@ const useMessageActions = (message: Message) => {
       }
 
       if (data.updatedMessage) {
-        updateMessageInConversation(conversationKey, messageId, data.updatedMessage);
+        await applyServerMessage(data.updatedMessage);
       }
 
       return true;
@@ -224,7 +232,7 @@ const useMessageActions = (message: Message) => {
       }
 
       if (data.updatedMessage) {
-        updateMessageInConversation(conversationKey, messageId, data.updatedMessage);
+        await applyServerMessage(data.updatedMessage);
       }
 
       return true;
@@ -273,15 +281,12 @@ const useMessageActions = (message: Message) => {
       }
 
       if (data.updatedMessage) {
-        // Reconcile with server truth to handle edge cases from backend policy.
-        if (data.updatedMessage.deletedForEveryone) {
-          updateMessageInConversation(conversationKey, messageId, data.updatedMessage);
-        } else if (data.updatedMessage.deletedFor?.includes(currentUserId)) {
+        if (data.updatedMessage.deletedFor?.includes(currentUserId) && !data.updatedMessage.deletedForEveryone) {
           removeMessageFromConversation(conversationKey, messageId);
+          syncConversationPreview(conversationKey, currentUserId);
         } else {
-          updateMessageInConversation(conversationKey, messageId, data.updatedMessage);
+          await applyServerMessage(data.updatedMessage);
         }
-        syncConversationPreview(conversationKey, currentUserId);
         bumpDetailsRefreshVersion();
       }
 
