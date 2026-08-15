@@ -9,6 +9,7 @@
 
 import type { Server, Socket } from 'socket.io';
 import Conversation, { ConversationDocument } from '../models/conversationModel.js';
+import User from '../models/userModel.js';
 import type { CallType } from '../models/messageModel.js';
 import { emitToUserDevices } from './socket.js';
 import { createCallLogMessage } from '../Utils/callLog.js';
@@ -39,6 +40,19 @@ const loadConversationForCall = async (conversationId: string): Promise<Populate
 const isParticipant = (conversation: PopulatedConversation, userId: string): boolean =>
   conversation.participants.some((participant) => String(participant._id) === userId);
 
+// Symmetric — either side blocking the other cuts contact both ways, same
+// enforcement as sendConversationMessage.
+const isBlockedPair = async (userIdA: string, userIdB: string): Promise<boolean> => {
+  const bothUsers = await User.find({ _id: { $in: [userIdA, userIdB] } }).select('blockedUsers');
+  const usersById = new Map(bothUsers.map((user) => [String(user._id), user]));
+  const a = usersById.get(userIdA);
+  const b = usersById.get(userIdB);
+  return (
+    (a?.blockedUsers || []).some((blockedId) => String(blockedId) === userIdB) ||
+    (b?.blockedUsers || []).some((blockedId) => String(blockedId) === userIdA)
+  );
+};
+
 export const registerCallSignalingHandlers = (io: Server, socket: Socket, userId: string): void => {
   if (!userId) return;
 
@@ -52,6 +66,13 @@ export const registerCallSignalingHandlers = (io: Server, socket: Socket, userId
         .map((participant) => String(participant._id))
         .find((participantId) => participantId !== userId);
       if (!calleeId) return;
+
+      if (await isBlockedPair(userId, calleeId)) {
+        // Deliberately vague reason — doesn't confirm which side blocked
+        // whom, same silent-block philosophy as messaging.
+        emitToUserDevices(userId, 'call:invite-rejected', { conversationId, reason: 'unavailable' });
+        return;
+      }
 
       const caller = conversation.participants.find((participant) => String(participant._id) === userId);
 

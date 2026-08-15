@@ -33,6 +33,15 @@ import {
   resolveMessageTypeFromMime,
   validateFilePayload,
 } from '../Utils/fileValidation.js';
+import {
+  buildLinkTitle,
+  isVisibleToUser,
+  MAX_ITEMS_PER_SECTION,
+  MAX_LINK_SOURCE_MESSAGES,
+  normalizeUrl,
+  URL_REGEX,
+  type SharedContentResponse,
+} from '../Utils/sharedContent.js';
 
 // Soft cap on group size — per-message RSA-wrap cost scales linearly with
 // membership, and this keeps encryption latency and payload size bounded.
@@ -105,6 +114,11 @@ type ConversationSummary = {
   unreadCount?: number;
   seenAt?: string;
   activeCall?: { callType: 'audio' | 'video'; participantCount: number };
+  isMuted: boolean;
+  // Direct conversations only. Symmetric — true if either side has blocked
+  // the other, since either direction cuts contact both ways.
+  isBlocked?: boolean;
+  blockedByMe?: boolean;
 };
 
 const hashInviteToken = (token: string): string =>
@@ -179,9 +193,15 @@ export const listConversations = async (
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
     const conversations = (await Conversation.find({ participants: userObjectId })
-      .populate('participants', 'userName gender profilePic')
+      .populate('participants', 'userName gender profilePic blockedUsers')
       .lean()) as unknown as (Omit<ConversationDocument, 'participants'> & {
-      participants: { _id: mongoose.Types.ObjectId; userName: string; gender: string; profilePic?: string }[];
+      participants: {
+        _id: mongoose.Types.ObjectId;
+        userName: string;
+        gender: string;
+        profilePic?: string;
+        blockedUsers?: mongoose.Types.ObjectId[];
+      }[];
     })[];
 
     if (conversations.length === 0) {
@@ -237,6 +257,20 @@ export const listConversations = async (
 
       const admins = (conversation.groupAdmins || []).map((adminId) => String(adminId));
       const callSnapshot = getSnapshot(String(conversation._id));
+      const isMuted = (conversation.mutedBy || []).some((mutedUserId) => String(mutedUserId) === userId);
+
+      let isBlocked: boolean | undefined;
+      let blockedByMe: boolean | undefined;
+      if (isDirect && otherUser) {
+        const me = conversation.participants.find((participant) => String(participant._id) === userId);
+        blockedByMe = (me?.blockedUsers || []).some(
+          (blockedId) => String(blockedId) === String(otherUser._id)
+        );
+        const blockedByThem = (otherUser.blockedUsers || []).some(
+          (blockedId) => String(blockedId) === userId
+        );
+        isBlocked = blockedByMe || blockedByThem;
+      }
 
       return {
         _id: String(conversation._id),
@@ -264,6 +298,9 @@ export const listConversations = async (
         activeCall: callSnapshot
           ? { callType: callSnapshot.callType, participantCount: callSnapshot.participantCount }
           : undefined,
+        isMuted,
+        isBlocked,
+        blockedByMe,
       };
     });
 
@@ -1073,6 +1110,28 @@ export const sendConversationMessage = async (
     const messageType = body.messageType || 'text';
     const participantIds = conversation.participants.map((participantId) => String(participantId));
 
+    if (conversation.type === 'direct') {
+      const otherParticipantId = participantIds.find((participantId) => participantId !== userId);
+      if (otherParticipantId) {
+        // $in result order isn't guaranteed to match the input array, so look
+        // each user up by id rather than assuming positional order.
+        const bothUsers = await User.find({
+          _id: { $in: [userId, otherParticipantId] },
+        }).select('blockedUsers');
+        const usersById = new Map(bothUsers.map((user) => [String(user._id), user]));
+        const me = usersById.get(userId);
+        const them = usersById.get(otherParticipantId);
+        const blocked =
+          (me?.blockedUsers || []).some((blockedId) => String(blockedId) === otherParticipantId) ||
+          (them?.blockedUsers || []).some((blockedId) => String(blockedId) === userId);
+
+        if (blocked) {
+          res.status(403).json({ status: 'fail', error: 'You cannot message this contact' });
+          return;
+        }
+      }
+    }
+
     if (messageType === 'text') {
       if (!body.encryptedMessage || !body.iv || !Array.isArray(body.encryptedAESKeys) || body.encryptedAESKeys.length === 0) {
         res.status(400).json({ status: 'fail', error: 'Encrypted text payload is incomplete' });
@@ -1160,6 +1219,274 @@ export const sendConversationMessage = async (
     res.status(201).json({ newMessage: realtimeMessagePayload });
   } catch (error: unknown) {
     console.log('Error in sendConversationMessage:', error instanceof Error ? error.message : String(error));
+    res.status(500).json({ status: 'fail', message: 'Internal server error' });
+  }
+};
+
+/**
+ * @desc    Mutes/unmutes a conversation's notifications for the requester.
+ *          Works for direct and group conversations, no admin gate — a
+ *          purely personal preference, silent to every other participant.
+ * @route   POST/DELETE /api/conversations/:id/mute
+ * @access  Private
+ */
+const setConversationMuted = async (
+  req: AuthenticatedRequest<{ id: string }>,
+  res: Response,
+  muted: boolean
+): Promise<void> => {
+  try {
+    const userId = String(req.user);
+    const { id } = req.params;
+
+    const conversation = (await Conversation.findById(id)) as ConversationDocument | null;
+    if (!conversation || !isParticipant(conversation, userId)) {
+      res.status(404).json({ status: 'fail', error: 'Conversation not found' });
+      return;
+    }
+
+    const currentlyMuted = (conversation.mutedBy || []).some((mutedUserId) => String(mutedUserId) === userId);
+    if (currentlyMuted !== muted) {
+      conversation.mutedBy = muted
+        ? [...(conversation.mutedBy || []), new Types.ObjectId(userId)]
+        : (conversation.mutedBy || []).filter((mutedUserId) => String(mutedUserId) !== userId);
+      await conversation.save();
+    }
+
+    // Self-sync only — mute is private, other participants never learn about it.
+    emitToUserDevices(userId, 'conversation:muted', { conversationId: String(conversation._id), muted });
+
+    res.status(200).json({ status: 'success', data: { muted } });
+  } catch (error: unknown) {
+    console.log('Error in setConversationMuted:', error instanceof Error ? error.message : String(error));
+    res.status(500).json({ status: 'fail', message: 'Internal server error' });
+  }
+};
+
+export const muteConversation = (req: AuthenticatedRequest<{ id: string }>, res: Response): Promise<void> =>
+  setConversationMuted(req, res, true);
+
+export const unmuteConversation = (req: AuthenticatedRequest<{ id: string }>, res: Response): Promise<void> =>
+  setConversationMuted(req, res, false);
+
+/**
+ * @desc    Blocks/unblocks the other participant of a direct conversation.
+ *          Asymmetric and blocker-owned; enforcement (sendConversationMessage,
+ *          call:invite) treats either side blocking as cutting contact both
+ *          ways. Silent — the other participant is never notified.
+ * @route   POST/DELETE /api/conversations/:id/block
+ * @access  Private
+ */
+const setUserBlocked = async (
+  req: AuthenticatedRequest<{ id: string }>,
+  res: Response,
+  blocked: boolean
+): Promise<void> => {
+  try {
+    const userId = String(req.user);
+    const { id } = req.params;
+
+    const conversation = (await Conversation.findById(id)) as ConversationDocument | null;
+    if (!conversation || !isParticipant(conversation, userId)) {
+      res.status(404).json({ status: 'fail', error: 'Conversation not found' });
+      return;
+    }
+
+    if (conversation.type !== 'direct') {
+      res.status(400).json({ status: 'fail', error: 'Only direct conversations support blocking' });
+      return;
+    }
+
+    const otherParticipantId = conversation.participants
+      .map((participantId) => String(participantId))
+      .find((participantId) => participantId !== userId);
+    if (!otherParticipantId) {
+      res.status(404).json({ status: 'fail', error: 'Conversation not found' });
+      return;
+    }
+
+    const user = await User.findById(userId).select('blockedUsers');
+    if (!user) {
+      res.status(404).json({ status: 'fail', error: 'User not found' });
+      return;
+    }
+
+    const currentlyBlocked = (user.blockedUsers || []).some(
+      (blockedId) => String(blockedId) === otherParticipantId
+    );
+    if (currentlyBlocked !== blocked) {
+      user.blockedUsers = blocked
+        ? [...(user.blockedUsers || []), new Types.ObjectId(otherParticipantId)]
+        : (user.blockedUsers || []).filter((blockedId) => String(blockedId) !== otherParticipantId);
+      await user.save();
+    }
+
+    emitToUserDevices(userId, 'conversation:blocked', {
+      conversationId: String(conversation._id),
+      blocked,
+      blockedByMe: true,
+    });
+
+    res.status(200).json({ status: 'success', data: { blocked } });
+  } catch (error: unknown) {
+    console.log('Error in setUserBlocked:', error instanceof Error ? error.message : String(error));
+    res.status(500).json({ status: 'fail', message: 'Internal server error' });
+  }
+};
+
+export const blockUser = (req: AuthenticatedRequest<{ id: string }>, res: Response): Promise<void> =>
+  setUserBlocked(req, res, true);
+
+export const unblockUser = (req: AuthenticatedRequest<{ id: string }>, res: Response): Promise<void> =>
+  setUserBlocked(req, res, false);
+
+/**
+ * @desc    Lists currently-pinned messages for a conversation, newest pin
+ *          first — feeds the pinned banner and the details panel section.
+ * @route   GET /api/conversations/:id/pinned-messages
+ * @access  Private — requester must be a participant
+ */
+export const getPinnedMessages = async (
+  req: AuthenticatedRequest<{ id: string }>,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = String(req.user);
+    const { id } = req.params;
+
+    const conversation = (await Conversation.findById(id)) as ConversationDocument | null;
+    if (!conversation || !isParticipant(conversation, userId)) {
+      res.status(404).json({ status: 'fail', error: 'Conversation not found' });
+      return;
+    }
+
+    const pinnedMessages = (await Message.find({ conversationId: conversation._id, pinned: true })
+      .sort({ pinnedAt: -1 })) as MessageDocument[];
+
+    const messages = pinnedMessages
+      .filter((messageDoc) => !isMessageDeletedForUser(messageDoc, userId))
+      .map((messageDoc) => {
+        const messageWithTimestamps = messageDoc as MessageDocument & { createdAt: Date; updatedAt: Date };
+        return buildRealtimePayload(messageWithTimestamps, String(conversation._id));
+      });
+
+    res.status(200).json({ status: 'success', data: { messages } });
+  } catch (error: unknown) {
+    console.log('Error in getPinnedMessages:', error instanceof Error ? error.message : String(error));
+    res.status(500).json({ status: 'fail', message: 'Internal server error' });
+  }
+};
+
+/**
+ * @desc    Shared media/links/documents for a conversation — works for
+ *          direct and group alike since it's scoped by conversationId
+ *          instead of the legacy sender/receiver user-pair query.
+ * @route   GET /api/conversations/:id/shared-content
+ * @access  Private — requester must be a participant
+ */
+export const getSharedContent = async (
+  req: AuthenticatedRequest<{ id: string }>,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = String(req.user);
+    const { id } = req.params;
+
+    const conversation = (await Conversation.findById(id)) as ConversationDocument | null;
+    if (!conversation || !isParticipant(conversation, userId)) {
+      res.status(404).json({ status: 'fail', error: 'Conversation not found' });
+      return;
+    }
+
+    const conversationFilter = { conversationId: conversation._id };
+
+    const [mediaMessages, documentMessages, textMessages] = await Promise.all([
+      Message.find({
+        ...conversationFilter,
+        messageType: { $in: ['image', 'video'] },
+        fileUrl: { $exists: true, $ne: '' },
+      })
+        .sort({ createdAt: -1 })
+        .limit(MAX_ITEMS_PER_SECTION)
+        .select('fileUrl messageType createdAt deletedForEveryone deletedFor')
+        .lean(),
+      Message.find({
+        ...conversationFilter,
+        messageType: 'file',
+        fileUrl: { $exists: true, $ne: '' },
+      })
+        .sort({ createdAt: -1 })
+        .limit(MAX_ITEMS_PER_SECTION)
+        .select('fileName fileUrl fileSize createdAt deletedForEveryone deletedFor')
+        .lean(),
+      Message.find({
+        ...conversationFilter,
+        text: { $exists: true, $ne: '' },
+      })
+        .sort({ createdAt: -1 })
+        .limit(MAX_LINK_SOURCE_MESSAGES)
+        .select('text createdAt deletedForEveryone deletedFor')
+        .lean(),
+    ]);
+
+    const media: SharedContentResponse['media'] = [];
+    mediaMessages.forEach((message) => {
+      if (!isVisibleToUser(message, userId)) return;
+
+      const fileUrl = typeof message.fileUrl === 'string' ? message.fileUrl : '';
+      const messageType = message.messageType;
+      const createdAt =
+        message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt || Date.now());
+
+      if (!fileUrl) return;
+      if (messageType !== 'image' && messageType !== 'video') return;
+
+      media.push({ url: fileUrl, type: messageType, createdAt });
+    });
+
+    const documents: SharedContentResponse['documents'] = [];
+    documentMessages.forEach((message) => {
+      if (!isVisibleToUser(message, userId)) return;
+
+      const fileUrl = typeof message.fileUrl === 'string' ? message.fileUrl : '';
+      if (!fileUrl) return;
+
+      const createdAt =
+        message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt || Date.now());
+
+      documents.push({
+        name: message.fileName || 'Shared document',
+        url: fileUrl,
+        size: typeof message.fileSize === 'number' ? message.fileSize : undefined,
+        createdAt,
+      });
+    });
+
+    const seenLinks = new Set<string>();
+    const links: SharedContentResponse['links'] = [];
+
+    textMessages.forEach((message) => {
+      if (!isVisibleToUser(message, userId)) return;
+
+      const text = typeof message.text === 'string' ? message.text : '';
+      const matches = text.match(URL_REGEX) || [];
+      const createdAt =
+        message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt || Date.now());
+
+      matches.forEach((rawMatch) => {
+        if (links.length >= MAX_ITEMS_PER_SECTION) return;
+
+        const url = normalizeUrl(rawMatch);
+        if (!url || seenLinks.has(url)) return;
+
+        seenLinks.add(url);
+        links.push({ url, title: buildLinkTitle(url), createdAt });
+      });
+    });
+
+    res.status(200).json({ media, links, documents } satisfies SharedContentResponse);
+  } catch (error: unknown) {
+    console.log('Error in getSharedContent:', error instanceof Error ? error.message : String(error));
     res.status(500).json({ status: 'fail', message: 'Internal server error' });
   }
 };

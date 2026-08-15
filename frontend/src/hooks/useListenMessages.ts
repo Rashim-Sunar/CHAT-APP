@@ -188,6 +188,27 @@ const useListenMessages = () => {
       })();
     };
 
+    // Pin/unpin carries the full message shape like reactions/edits, plus
+    // bumps detailsRefreshVersion so usePinnedMessages (and the pinned
+    // banner) refetch when it's the open conversation.
+    const onMessagePin = (updatedMessage: Message) => {
+      if (!currentUserId) return;
+
+      void (async () => {
+        const hydratedMessage = await decryptMessageIfNeeded(updatedMessage, currentUserId);
+
+        const conversationId = hydratedMessage?.conversationId;
+        if (!conversationId || !hydratedMessage?._id) return;
+
+        updateMessageInConversation(conversationId, hydratedMessage._id, hydratedMessage);
+
+        const selectedConversation = useConversation.getState().selectedConversation;
+        if (selectedConversation?._id === conversationId) {
+          bumpDetailsRefreshVersion();
+        }
+      })();
+    };
+
     const onConversationSeen = (payload: { conversationId: string; readerId: string; seenAt: string }) => {
       if (!currentUserId) return;
       markConversationSeen(payload.conversationId, payload.readerId, payload.seenAt, currentUserId);
@@ -209,10 +230,13 @@ const useListenMessages = () => {
     socket.on("message:edit", onMessageEdit);
     socket.on("message:delete", onMessageDelete);
     socket.on("message:reaction", onMessageReaction);
+    socket.on("message:pin", onMessagePin);
     socket.on("conversation:updated", onConversationRosterChanged);
     socket.on("conversation:membersAdded", onConversationRosterChanged);
     socket.on("conversation:memberRemoved", onConversationRosterChanged);
     socket.on("conversation:adminPromoted", onConversationRosterChanged);
+    socket.on("conversation:muted", onConversationRosterChanged);
+    socket.on("conversation:blocked", onConversationRosterChanged);
 
     return () => {
       socket.off("newMessage", onNewMessage);
@@ -220,10 +244,13 @@ const useListenMessages = () => {
       socket.off("message:edit", onMessageEdit);
       socket.off("message:delete", onMessageDelete);
       socket.off("message:reaction", onMessageReaction);
+      socket.off("message:pin", onMessagePin);
       socket.off("conversation:updated", onConversationRosterChanged);
       socket.off("conversation:membersAdded", onConversationRosterChanged);
       socket.off("conversation:memberRemoved", onConversationRosterChanged);
       socket.off("conversation:adminPromoted", onConversationRosterChanged);
+      socket.off("conversation:muted", onConversationRosterChanged);
+      socket.off("conversation:blocked", onConversationRosterChanged);
     };
   }, [
     socket,

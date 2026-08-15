@@ -380,6 +380,14 @@ export const CallProvider = ({ children }: CallProviderProps) => {
       }
     };
 
+    // Deliberately vague reason (doesn't say "blocked") — same silent-block
+    // philosophy as messaging.
+    const onInviteRejected = (payload: { conversationId: string; reason: "unavailable" }) => {
+      if (activeCall?.conversationId !== payload.conversationId) return;
+      toast.error("Can't reach this contact right now");
+      teardownCall();
+    };
+
     const onRosterSnapshot = (payload: CallRosterSnapshotPayload) => {
       if (activeCall?.conversationId !== payload.conversationId) return;
       setCallState("in-call");
@@ -474,6 +482,7 @@ export const CallProvider = ({ children }: CallProviderProps) => {
     socket.on("call:declined", onDeclined);
     socket.on("call:ended", onEnded);
     socket.on("call:join-rejected", onJoinRejected);
+    socket.on("call:invite-rejected", onInviteRejected);
     socket.on("call:roster-snapshot", onRosterSnapshot);
     socket.on("call:participant-joined", onParticipantJoined);
     socket.on("call:participant-left", onParticipantLeft);
@@ -489,6 +498,7 @@ export const CallProvider = ({ children }: CallProviderProps) => {
       socket.off("call:declined", onDeclined);
       socket.off("call:ended", onEnded);
       socket.off("call:join-rejected", onJoinRejected);
+      socket.off("call:invite-rejected", onInviteRejected);
       socket.off("call:roster-snapshot", onRosterSnapshot);
       socket.off("call:participant-joined", onParticipantJoined);
       socket.off("call:participant-left", onParticipantLeft);

@@ -11,6 +11,7 @@ import UserDetailsPanel from "../details/UserDetailsPanel";
 import Avatar from "../common/Avatar";
 import CallButtons from "../calls/CallButtons";
 import GroupCallBanner from "../calls/GroupCallBanner";
+import PinnedMessageBanner from "./PinnedMessageBanner";
 import { getOtherParticipant } from "../../Utils/conversationDisplay";
 // WebP re-encode of chatsphere-background.png (~1MB -> ~9KB, no visible loss).
 import chatWallpaper from "../../assets/chatsphere-background.webp";
@@ -128,6 +129,7 @@ const MessageContainer = ({ desktopDetailsOpen, onToggleDesktopDetails }: Messag
       </div>
 
       {selectedConversation.type === "group" && <GroupCallBanner conversationId={selectedConversation._id} />}
+      <PinnedMessageBanner />
 
       <div
         data-messages-scroll-container
