@@ -375,6 +375,11 @@ export const decryptMessageIfNeeded = async (
   message: Message,
   currentUserId: string
 ): Promise<Message> => {
+  // Never recover pre-deletion plaintext for a deleted-for-everyone message.
+  if (message.deletedForEveryone) {
+    return message;
+  }
+
   const hasKeyMaterial =
     (Array.isArray(message.encryptedAESKeys) && message.encryptedAESKeys.length > 0) ||
     typeof message.encryptedAESKey === "string";
