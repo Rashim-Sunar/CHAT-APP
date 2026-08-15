@@ -34,6 +34,10 @@ export interface IConversation {
   // threat model is closer to a password-reset token than a session id.
   inviteTokenHash?: string;
   inviteTokenExpiresAt?: Date | null;
+  // Per-user notification mute — works identically for direct and group,
+  // silent to every other participant (only ever synced back to the muting
+  // user's own other devices).
+  mutedBy?: Types.ObjectId[];
 }
 
 // Extends IConversation with mongoose document properties
@@ -116,6 +120,12 @@ const conversationSchema = new mongoose.Schema<IConversation>(
       type: Date,
       default: null,
     },
+    mutedBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'user',
+      },
+    ],
   },
   { timestamps: true } // Adds createdAt & updatedAt for conversation tracking
 );

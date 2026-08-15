@@ -6,6 +6,7 @@ import {
   BiCrown,
   BiDotsVerticalRounded,
   BiEdit,
+  BiGroup,
   BiLinkAlt,
   BiLogOut,
   BiMessageSquareDetail,
@@ -17,6 +18,8 @@ import { FiChevronDown, FiLock } from "react-icons/fi";
 import toast from "react-hot-toast";
 import Avatar from "../common/Avatar";
 import UserPickerModal from "../common/UserPickerModal";
+import SharedContentSection from "../details/SharedContentSection";
+import ConversationSettingsSection from "../details/ConversationSettingsSection";
 import useGetConversations from "../../hooks/useGetConversations";
 import useStartConversation from "../../hooks/useStartConversation";
 import { apiFetch } from "../../Utils/apiFetch";
@@ -314,11 +317,15 @@ const GroupInfoPanel = ({ conversation, currentUserId, variant, onClose }: Group
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 md:px-5 py-4 space-y-3">
+        <SharedContentSection onNavigateToMessage={variant === "drawer" ? onClose : undefined} />
+
         {isAdmin && (
           <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4 space-y-3">
-            <div className="flex items-center gap-2 text-slate-700">
-              <BiLinkAlt size={16} className="text-slate-500" />
-              <span className="text-sm font-semibold tracking-wide uppercase">Invite link</span>
+            <div className="flex items-center gap-2.5 text-slate-800">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+                <BiLinkAlt size={15} />
+              </span>
+              <span className="text-sm font-medium">Invite link</span>
             </div>
 
             {inviteUrl ? (
@@ -367,14 +374,15 @@ const GroupInfoPanel = ({ conversation, currentUserId, variant, onClose }: Group
             onClick={() => setIsMembersOpen((open) => !open)}
             aria-expanded={isMembersOpen}
             aria-controls="group-members-list"
-            className="flex w-full items-center gap-2 px-4 py-3 text-left text-slate-700"
+            className="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-slate-50"
           >
-            <span className="text-sm font-semibold tracking-wide uppercase">Members</span>
-            <span className="inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
-              {memberCount}
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+              <BiGroup size={16} />
             </span>
+            <span className="flex-1 text-sm font-medium text-slate-800">Members</span>
+            <span className="text-xs font-medium text-slate-400">{memberCount}</span>
             <FiChevronDown
-              className={`ml-auto shrink-0 text-slate-400 transition-transform duration-200 ${isMembersOpen ? "rotate-180" : ""}`}
+              className={`shrink-0 text-slate-400 transition-transform duration-200 ${isMembersOpen ? "rotate-180" : ""}`}
               size={16}
             />
           </button>
@@ -500,6 +508,8 @@ const GroupInfoPanel = ({ conversation, currentUserId, variant, onClose }: Group
           </div>
           )}
         </section>
+
+        <ConversationSettingsSection conversation={conversation} />
 
         <button
           type="button"

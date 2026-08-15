@@ -142,6 +142,12 @@ export interface Conversation {
   seenAt?: string;
   __isPlaceholder?: boolean;
   activeCall?: { callType: CallType; participantCount: number };
+  isMuted?: boolean;
+  // Direct conversations only — symmetric (true if either side blocked the
+  // other). blockedByMe controls whether the UI offers "Unblock" vs. just a
+  // disabled state.
+  isBlocked?: boolean;
+  blockedByMe?: boolean;
 }
 
 export interface MessageReaction {
@@ -187,6 +193,9 @@ export interface Message {
   callType?: CallType | null;
   callStatus?: CallStatus | null;
   callDurationSec?: number | null;
+  pinned?: boolean;
+  pinnedAt?: string | null;
+  pinnedBy?: string | null;
   createdAt: string;
   updatedAt?: string;
   __isOptimistic?: boolean;
@@ -248,10 +257,13 @@ export interface ServerToClientEvents {
   "message:edit": (message: Message) => void;
   "message:delete": (message: Message) => void;
   "message:reaction": (message: Message) => void;
+  "message:pin": (message: Message) => void;
   "conversation:updated": (payload: { conversationId: string; groupName?: string; groupAvatar?: string }) => void;
   "conversation:membersAdded": (payload: { conversationId: string; addedUserIds: string[] }) => void;
   "conversation:memberRemoved": (payload: { conversationId: string; removedUserId: string }) => void;
   "conversation:adminPromoted": (payload: { conversationId: string; newAdminUserId: string }) => void;
+  "conversation:muted": (payload: { conversationId: string; muted: boolean }) => void;
+  "conversation:blocked": (payload: { conversationId: string; blocked: boolean; blockedByMe: boolean }) => void;
   link_request: (payload: LinkRequestEventPayload) => void;
   link_session_updated: (payload: LinkSessionUpdatedEventPayload) => void;
   link_secret_ready: (payload: LinkSecretReadyEventPayload) => void;
@@ -261,6 +273,7 @@ export interface ServerToClientEvents {
   "call:declined": (payload: { conversationId: string; byUserId: string }) => void;
   "call:ended": (payload: { conversationId: string; reason: "missed" | "ended" }) => void;
   "call:join-rejected": (payload: { conversationId: string; reason: "full" }) => void;
+  "call:invite-rejected": (payload: { conversationId: string; reason: "unavailable" }) => void;
   "call:roster-snapshot": (payload: CallRosterSnapshotPayload) => void;
   "call:participant-joined": (payload: { conversationId: string; userId: string }) => void;
   "call:participant-left": (payload: { conversationId: string; userId: string }) => void;
@@ -411,13 +424,7 @@ export interface SharedDocumentItem {
   createdAt: string;
 }
 
-export interface UserDetails {
-  user: {
-    _id: string;
-    username: string;
-    profilePic?: string;
-    status: "online" | "offline";
-  };
+export interface SharedContentResponse {
   media: SharedMediaItem[];
   links: SharedLinkItem[];
   documents: SharedDocumentItem[];

@@ -1,6 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState, useCallback, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { HiOutlineDotsVertical } from "react-icons/hi";
 import { FiCheck, FiEdit2, FiTrash2, FiCornerUpLeft, FiCornerUpRight } from "react-icons/fi";
+import { BiPin, BiSolidPin } from "react-icons/bi";
 import { useAuthContext } from "../../context/Auth-Context";
 import useConversation from "../../zustand/useConversation";
 import { extractTime } from "../../Utils/extractTime";
@@ -19,6 +20,7 @@ import {
   DELETED_MESSAGE_TEXT,
 } from "../../Utils/messageDisplay";
 import { linkifyText } from "../../Utils/linkify";
+import { scrollToMessage } from "../../Utils/scrollToMessage";
 import type { Message as ChatMessage } from "../../types";
 import useMessageActions from "../../hooks/useMessageActions";
 import MessageDeleteModal from "./MessageDeleteModal";
@@ -35,7 +37,7 @@ interface MessageProps {
 const Message = ({ message, isGroupStart = true, isGroupEnd = true }: MessageProps) => {
   const { authUser } = useAuthContext();
   const { selectedConversation, messagesByConversation, setReplyTarget } = useConversation();
-  const { editMessage, deleteMessage, reactToMessage, isBusy, canEdit, canDelete, canDeleteForEveryone } =
+  const { editMessage, deleteMessage, reactToMessage, togglePin, isBusy, canEdit, canDelete, canDeleteForEveryone } =
     useMessageActions(message);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -93,21 +95,6 @@ const Message = ({ message, isGroupStart = true, isGroupEnd = true }: MessagePro
   const repliedMessage = message.replyTo
     ? currentConversationMessages.find((candidate) => candidate._id === message.replyTo) || null
     : null;
-
-  const scrollToMessage = useCallback((messageId: string) => {
-    const targetEl = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (!targetEl) return;
-
-    targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
-
-    // Add highlight animation then remove it.
-    targetEl.classList.add("message-highlight");
-    const cleanup = () => {
-      targetEl.classList.remove("message-highlight");
-      targetEl.removeEventListener("animationend", cleanup);
-    };
-    targetEl.addEventListener("animationend", cleanup);
-  }, []);
 
   const renderQuotedPreview = () => {
     if (!message.replyTo) return null;
@@ -470,6 +457,19 @@ const Message = ({ message, isGroupStart = true, isGroupEnd = true }: MessagePro
                 Forward
               </button>
 
+              <button
+                type="button"
+                onClick={() => {
+                  closeActionMenu();
+                  void togglePin(!message.pinned);
+                }}
+                disabled={isBusy}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <BiPin size={14} />
+                {message.pinned ? "Unpin" : "Pin"}
+              </button>
+
               {canEditText && (
                 <button
                   type="button"
@@ -522,8 +522,9 @@ const Message = ({ message, isGroupStart = true, isGroupEnd = true }: MessagePro
           </div>
         )}
 
-        {(isGroupEnd || isMessageEdited(message)) && (
+        {(isGroupEnd || isMessageEdited(message) || message.pinned) && (
           <div className="mt-1 flex items-center justify-end gap-2 text-xs text-slate-400">
+            {message.pinned && <BiSolidPin size={12} className="text-indigo-500" title="Pinned" />}
             {isGroupEnd && <span>{formattedTime}</span>}
             {isMessageEdited(message) && <span className="italic text-slate-400">(edited)</span>}
           </div>
