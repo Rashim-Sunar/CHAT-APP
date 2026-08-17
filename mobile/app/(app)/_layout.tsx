@@ -12,9 +12,9 @@ export default function AppLayout() {
         headerBackButtonDisplayMode: "minimal",
       }}
     >
-      <Stack.Screen name="index" options={{ title: "Chats" }} />
-      <Stack.Screen name="new-chat" options={{ title: "New chat", presentation: "modal" }} />
-      <Stack.Screen name="chat/[conversationId]" options={{ title: "" }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="chat/[conversationId]/index" options={{ title: "" }} />
+      <Stack.Screen name="chat/[conversationId]/details" options={{ title: "Details" }} />
     </Stack>
   );
 }

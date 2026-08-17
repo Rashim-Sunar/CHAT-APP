@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { useLocalSearchParams, useNavigation } from "expo-router";
+import { router, useLocalSearchParams, useNavigation } from "expo-router";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  ImageBackground,
   Keyboard,
   Platform,
   StyleSheet,
@@ -13,25 +15,29 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { getConversationById, getConversationMessages, sendTextMessage } from "../../../src/api/conversations";
-import { ApiFetchError } from "../../../src/api/client";
+import { getConversationById, getConversationMessages, sendTextMessage } from "../../../../src/api/conversations";
+import { ApiFetchError } from "../../../../src/api/client";
 import {
   decryptMessageIfNeeded,
   decryptMessagesIfNeeded,
   encryptTextMessageForRecipients,
   getRecipientPublicKeys,
-} from "../../../src/crypto/crypto";
-import { useAuthContext } from "../../../src/context/AuthContext";
-import { useSocketContext } from "../../../src/context/SocketContext";
-import useConversationStore from "../../../src/store/useConversationStore";
-import Avatar from "../../../src/components/Avatar";
-import { colors } from "../../../src/constants/theme";
-import { formatClockTime, formatDateSeparator } from "../../../src/utils/formatTime";
-import type { ConversationParticipant, Message } from "../../../src/types";
+} from "../../../../src/crypto/crypto";
+import { useAuthContext } from "../../../../src/context/AuthContext";
+import { useSocketContext } from "../../../../src/context/SocketContext";
+import useConversationStore from "../../../../src/store/useConversationStore";
+import Avatar from "../../../../src/components/Avatar";
+import { colors } from "../../../../src/constants/theme";
+import { formatClockTime, formatDateSeparator } from "../../../../src/utils/formatTime";
+import type { ConversationParticipant, Message } from "../../../../src/types";
 
 // Must be a stable reference — `|| []` inline would create a new array on
 // every store read, which useSyncExternalStore treats as a change and loops.
 const EMPTY_MESSAGES: Message[] = [];
+
+// Same tiled wallpaper as the web app's chat pane; see
+// frontend/src/components/messages/MessageContainer.tsx.
+const CHAT_WALLPAPER = require("../../../../assets/chat-wallpaper.webp");
 
 type ChatListItem =
   | { type: "message"; key: string; message: Message }
@@ -113,8 +119,8 @@ export default function ChatScreen() {
       return;
     }
 
-    // Not in the store yet — e.g. a conversation just created via
-    // new-chat.tsx, which navigates here directly without refreshing the list.
+    // Not in the store yet — e.g. a conversation just created from the
+    // People tab, which navigates here directly without refreshing the list.
     void getConversationById(conversationId).then((conversation) => {
       setParticipants(conversation.participants);
     });
@@ -122,16 +128,28 @@ export default function ChatScreen() {
 
   const isOtherParticipantOnline = Boolean(otherParticipant && onlineUsers.includes(otherParticipant._id));
 
+  const handleCallPlaceholder = (kind: "audio" | "video") => {
+    Alert.alert(
+      kind === "audio" ? "Audio calling" : "Video calling",
+      "Calling isn't available on mobile yet — it's coming in a future update."
+    );
+  };
+
   useLayoutEffect(() => {
     if (!otherParticipant) return;
 
     navigation.setOptions({
       headerTitle: () => (
-        <View style={styles.headerTitleRow}>
+        <TouchableOpacity
+          style={styles.headerTitleRow}
+          activeOpacity={0.7}
+          onPress={() => router.push({ pathname: "/chat/[conversationId]/details", params: { conversationId } })}
+        >
           <Avatar
             id={otherParticipant._id}
             name={otherParticipant.userName}
             uri={otherParticipant.profilePic}
+            gender={otherParticipant.gender}
             size={34}
             online={isOtherParticipantOnline}
           />
@@ -141,10 +159,20 @@ export default function ChatScreen() {
             </Text>
             {isOtherParticipantOnline && <Text style={styles.headerSubtitleText}>Online</Text>}
           </View>
+        </TouchableOpacity>
+      ),
+      headerRight: () => (
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => handleCallPlaceholder("audio")} hitSlop={8} style={styles.headerButton}>
+            <Ionicons name="call-outline" size={21} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => handleCallPlaceholder("video")} hitSlop={8} style={styles.headerButton}>
+            <Ionicons name="videocam-outline" size={22} color={colors.primary} />
+          </TouchableOpacity>
         </View>
       ),
     });
-  }, [navigation, otherParticipant, isOtherParticipantOnline]);
+  }, [navigation, otherParticipant, isOtherParticipantOnline, conversationId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -166,9 +194,12 @@ export default function ChatScreen() {
 
   const items = useMemo(() => buildChatItems(messages), [messages]);
 
+  const isBlocked = Boolean(storedConversation?.isBlocked);
+  const blockedByMe = Boolean(storedConversation?.blockedByMe);
+
   const handleSend = async () => {
     const text = draft.trim();
-    if (!text || participants.length === 0 || sending) return;
+    if (isBlocked || !text || participants.length === 0 || sending) return;
 
     setDraft("");
     setSendError(null);
@@ -198,12 +229,14 @@ export default function ChatScreen() {
 
   return (
     <View style={[styles.flex, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + insets.bottom : 0 }]}>
-      {items.length === 0 ? (
-        <View style={styles.emptyChat}>
-          <Ionicons name="chatbubble-ellipses-outline" size={44} color={colors.textFaint} />
-          <Text style={styles.emptyChatText}>No messages yet — say hi</Text>
-        </View>
-      ) : (
+      <ImageBackground source={CHAT_WALLPAPER} resizeMode="repeat" style={styles.flex}>
+        <View style={styles.wallpaperOverlay} pointerEvents="none" />
+        {items.length === 0 ? (
+          <View style={styles.emptyChat}>
+            <Ionicons name="chatbubble-ellipses-outline" size={44} color={colors.textFaint} />
+            <Text style={styles.emptyChatText}>No messages yet — say hi</Text>
+          </View>
+        ) : (
         <FlatList
           style={styles.flex}
           data={items}
@@ -241,7 +274,8 @@ export default function ChatScreen() {
             );
           }}
         />
-      )}
+        )}
+      </ImageBackground>
 
       {sendError && (
         <View style={styles.errorBanner}>
@@ -249,35 +283,48 @@ export default function ChatScreen() {
         </View>
       )}
 
-      <View
-        style={[
-          styles.composer,
-          { paddingBottom: keyboardHeight > 0 ? 8 : Math.max(insets.bottom, 10) + 8 },
-        ]}
-      >
-        <TextInput
-          style={styles.input}
-          placeholder="Message"
-          placeholderTextColor={colors.textFaint}
-          value={draft}
-          onChangeText={setDraft}
-          multiline
-        />
-        <TouchableOpacity
+      {isBlocked ? (
+        <View style={[styles.blockBanner, { paddingBottom: Math.max(insets.bottom, 10) + 8 }]}>
+          <View style={styles.blockIcon}>
+            <Ionicons name="ban" size={18} color={colors.danger} />
+          </View>
+          <Text style={styles.blockBannerText}>
+            {blockedByMe
+              ? "You blocked this contact. Unblock to send messages."
+              : "You can't message this contact right now."}
+          </Text>
+        </View>
+      ) : (
+        <View
           style={[
-            styles.sendButton,
-            (sending || !draft.trim() || participants.length === 0) && styles.sendButtonDisabled,
+            styles.composer,
+            { paddingBottom: keyboardHeight > 0 ? 8 : Math.max(insets.bottom, 10) + 8 },
           ]}
-          onPress={() => void handleSend()}
-          disabled={sending || !draft.trim() || participants.length === 0}
         >
-          {sending ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Ionicons name="send" size={17} color="#fff" />
-          )}
-        </TouchableOpacity>
-      </View>
+          <TextInput
+            style={styles.input}
+            placeholder="Message"
+            placeholderTextColor={colors.textFaint}
+            value={draft}
+            onChangeText={setDraft}
+            multiline
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              (sending || !draft.trim() || participants.length === 0) && styles.sendButtonDisabled,
+            ]}
+            onPress={() => void handleSend()}
+            disabled={sending || !draft.trim() || participants.length === 0}
+          >
+            {sending ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Ionicons name="send" size={17} color="#fff" />
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -287,8 +334,20 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
   headerTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   headerTitleTextGroup: { maxWidth: 180 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 16, marginRight: 4 },
+  headerButton: { padding: 2 },
   headerTitleText: { fontSize: 16, fontWeight: "700", color: colors.text },
   headerSubtitleText: { fontSize: 12, color: colors.online, marginTop: 1 },
+  // Flat tint approximating the web app's subtle gradient wash over the
+  // tiled wallpaper — a true gradient would need an extra native dependency.
+  wallpaperOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(238, 242, 255, 0.55)",
+  },
   list: { paddingHorizontal: 12, paddingVertical: 12 },
   emptyChat: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8, paddingBottom: 60 },
   emptyChatText: { color: colors.textMuted, fontSize: 14 },
@@ -324,6 +383,25 @@ const styles = StyleSheet.create({
   bubbleTimeTheirs: { color: colors.textFaint },
   errorBanner: { backgroundColor: colors.dangerBackground, paddingVertical: 6, paddingHorizontal: 14 },
   errorBannerText: { color: colors.danger, fontSize: 12.5, textAlign: "center" },
+  blockBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  blockIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.dangerBackground,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  blockBannerText: { flex: 1, fontSize: 13.5, color: colors.textMuted },
   composer: {
     flexDirection: "row",
     alignItems: "flex-end",

@@ -1,5 +1,5 @@
 import { apiFetch } from "./client";
-import type { Conversation, ConversationParticipant, ConversationType, Message } from "../types";
+import type { Conversation, ConversationParticipant, ConversationType, Message, SharedContentResponse } from "../types";
 
 export const listConversations = async (): Promise<Conversation[]> => {
   const response = await apiFetch<{ status: string; data?: { conversations: Conversation[] } }>("/conversations");
@@ -13,7 +13,7 @@ export interface ConversationDetail {
 }
 
 // listConversations already returns participants for conversations the user
-// has open, but a freshly-created direct conversation (see new-chat.tsx)
+// has open, but a freshly-created direct conversation (see the People tab)
 // isn't in that list yet — this covers that gap without a full re-fetch.
 export const getConversationById = async (conversationId: string): Promise<ConversationDetail> => {
   const response = await apiFetch<{ status: string; data?: { conversation: ConversationDetail } }>(
@@ -70,3 +70,19 @@ export const sendTextMessage = async (
 
   return response.newMessage;
 };
+
+export const getSharedContent = (conversationId: string): Promise<SharedContentResponse> =>
+  apiFetch<SharedContentResponse>(`/conversations/${conversationId}/shared-content`);
+
+export const getPinnedMessages = async (conversationId: string): Promise<Message[]> => {
+  const response = await apiFetch<{ status: string; data?: { messages: Message[] } }>(
+    `/conversations/${conversationId}/pinned-messages`
+  );
+  return response.data?.messages || [];
+};
+
+export const setConversationMuted = (conversationId: string, muted: boolean): Promise<void> =>
+  apiFetch(`/conversations/${conversationId}/mute`, { method: muted ? "POST" : "DELETE" });
+
+export const setUserBlocked = (conversationId: string, blocked: boolean): Promise<void> =>
+  apiFetch(`/conversations/${conversationId}/block`, { method: blocked ? "POST" : "DELETE" });

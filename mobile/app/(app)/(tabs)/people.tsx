@@ -1,16 +1,15 @@
-import { useEffect, useLayoutEffect, useState } from "react";
-import { router, useNavigation } from "expo-router";
+import { useEffect, useState } from "react";
+import { router } from "expo-router";
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { listUsers } from "../../src/api/users";
-import { findOrCreateDirectConversation } from "../../src/api/conversations";
-import { useAuthContext } from "../../src/context/AuthContext";
-import Avatar from "../../src/components/Avatar";
-import { colors } from "../../src/constants/theme";
-import type { User } from "../../src/types";
+import { listUsers } from "../../../src/api/users";
+import { findOrCreateDirectConversation } from "../../../src/api/conversations";
+import { useAuthContext } from "../../../src/context/AuthContext";
+import Avatar from "../../../src/components/Avatar";
+import { colors } from "../../../src/constants/theme";
+import type { User } from "../../../src/types";
 
-export default function NewChatScreen() {
-  const navigation = useNavigation();
+export default function PeopleScreen() {
   const { authUser } = useAuthContext();
   const currentUserId = authUser?.data?.user?._id;
   const [users, setUsers] = useState<User[]>([]);
@@ -23,21 +22,11 @@ export default function NewChatScreen() {
       .finally(() => setLoading(false));
   }, [currentUserId]);
 
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerLeft: () => (
-        <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={styles.headerButton}>
-          <Ionicons name="close" size={24} color={colors.text} />
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation]);
-
   const handleSelect = async (userId: string) => {
     setStartingWith(userId);
     try {
       const conversationId = await findOrCreateDirectConversation(userId);
-      router.replace({ pathname: "/chat/[conversationId]", params: { conversationId } });
+      router.push({ pathname: "/chat/[conversationId]", params: { conversationId } });
     } finally {
       setStartingWith(null);
     }
@@ -70,7 +59,7 @@ export default function NewChatScreen() {
           onPress={() => void handleSelect(item._id)}
           disabled={startingWith === item._id}
         >
-          <Avatar id={item._id} name={item.userName} uri={item.profilePic} size={46} />
+          <Avatar id={item._id} name={item.userName} uri={item.profilePic} gender={item.gender} size={46} />
           <Text style={styles.rowName}>{item.userName}</Text>
           {startingWith === item._id && <ActivityIndicator color={colors.primary} style={styles.rowSpinner} />}
         </TouchableOpacity>
@@ -81,7 +70,6 @@ export default function NewChatScreen() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 8 },
-  headerButton: { padding: 2 },
   emptyText: { color: colors.textMuted, fontSize: 14 },
   emptyContainer: { flexGrow: 1, backgroundColor: colors.surface },
   list: { flexGrow: 1, backgroundColor: colors.surface },

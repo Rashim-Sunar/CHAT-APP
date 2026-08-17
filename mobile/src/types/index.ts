@@ -49,6 +49,7 @@ export interface Conversation {
   lastMessageSenderId?: string;
   unreadCount?: number;
   seenAt?: string;
+  isMuted?: boolean;
   isBlocked?: boolean;
   blockedByMe?: boolean;
 }
@@ -74,15 +75,25 @@ export interface Message {
   decryptionFailed?: boolean;
   deletedForEveryone?: boolean;
   deletedFor?: string[];
+  pinned?: boolean;
+  pinnedAt?: string;
   createdAt: string;
   updatedAt?: string;
   __isOptimistic?: boolean;
+}
+
+export interface SharedContentResponse {
+  media: { url: string; type: "image" | "video"; createdAt: string }[];
+  links: { url: string; title: string; createdAt: string }[];
+  documents: { name: string; url: string; size?: number; createdAt: string }[];
 }
 
 export interface ServerToClientEvents {
   getOnlineUsers: (users: string[]) => void;
   newMessage: (message: Message) => void;
   "conversation:seen": (payload: { conversationId: string; readerId: string; seenAt: string }) => void;
+  "conversation:muted": (payload: { conversationId: string; muted: boolean }) => void;
+  "conversation:blocked": (payload: { conversationId: string; blocked: boolean; blockedByMe: boolean }) => void;
 }
 
 export interface ClientToServerEvents {
