@@ -1,12 +1,16 @@
-import { useEffect, useState } from "react";
-import { router } from "expo-router";
+import { useEffect, useLayoutEffect, useState } from "react";
+import { router, useNavigation } from "expo-router";
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { listUsers } from "../../src/api/users";
 import { findOrCreateDirectConversation } from "../../src/api/conversations";
 import { useAuthContext } from "../../src/context/AuthContext";
+import Avatar from "../../src/components/Avatar";
+import { colors } from "../../src/constants/theme";
 import type { User } from "../../src/types";
 
 export default function NewChatScreen() {
+  const navigation = useNavigation();
   const { authUser } = useAuthContext();
   const currentUserId = authUser?.data?.user?._id;
   const [users, setUsers] = useState<User[]>([]);
@@ -18,6 +22,16 @@ export default function NewChatScreen() {
       .then((all) => setUsers(all.filter((user) => user._id !== currentUserId)))
       .finally(() => setLoading(false));
   }, [currentUserId]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={styles.headerButton}>
+          <Ionicons name="close" size={24} color={colors.text} />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]);
 
   const handleSelect = async (userId: string) => {
     setStartingWith(userId);
@@ -32,7 +46,7 @@ export default function NewChatScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator />
+        <ActivityIndicator color={colors.primary} />
       </View>
     );
   }
@@ -41,23 +55,24 @@ export default function NewChatScreen() {
     <FlatList
       data={users}
       keyExtractor={(item) => item._id}
-      contentContainerStyle={styles.list}
+      contentContainerStyle={users.length === 0 ? styles.emptyContainer : styles.list}
+      ItemSeparatorComponent={() => <View style={styles.separator} />}
       ListEmptyComponent={
         <View style={styles.center}>
+          <Ionicons name="people-outline" size={44} color={colors.textFaint} />
           <Text style={styles.emptyText}>No other users yet.</Text>
         </View>
       }
       renderItem={({ item }) => (
         <TouchableOpacity
           style={styles.row}
+          activeOpacity={0.6}
           onPress={() => void handleSelect(item._id)}
           disabled={startingWith === item._id}
         >
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{item.userName.charAt(0).toUpperCase()}</Text>
-          </View>
+          <Avatar id={item._id} name={item.userName} uri={item.profilePic} size={46} />
           <Text style={styles.rowName}>{item.userName}</Text>
-          {startingWith === item._id && <ActivityIndicator style={styles.rowSpinner} />}
+          {startingWith === item._id && <ActivityIndicator color={colors.primary} style={styles.rowSpinner} />}
         </TouchableOpacity>
       )}
     />
@@ -65,27 +80,13 @@ export default function NewChatScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32 },
-  emptyText: { color: "#6b7280" },
-  list: { flexGrow: 1 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#f3f4f6",
-  },
-  avatar: {
-    height: 40,
-    width: 40,
-    borderRadius: 20,
-    backgroundColor: "#eef2ff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: { color: "#4338ca", fontWeight: "700" },
-  rowName: { flex: 1, fontSize: 15, fontWeight: "500" },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 8 },
+  headerButton: { padding: 2 },
+  emptyText: { color: colors.textMuted, fontSize: 14 },
+  emptyContainer: { flexGrow: 1, backgroundColor: colors.surface },
+  list: { flexGrow: 1, backgroundColor: colors.surface },
+  separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: 78 },
+  row: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 16, paddingVertical: 12 },
+  rowName: { flex: 1, fontSize: 16, fontWeight: "500", color: colors.text },
   rowSpinner: { marginLeft: "auto" },
 });
