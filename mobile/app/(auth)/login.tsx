@@ -1,18 +1,12 @@
 import { useState } from "react";
 import { Link } from "expo-router";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { login } from "../../src/api/auth";
 import { ApiFetchError } from "../../src/api/client";
 import { ensureUserKeyPair } from "../../src/crypto/crypto";
 import { useAuthContext } from "../../src/context/AuthContext";
+import { colors } from "../../src/constants/theme";
 
 export default function LoginScreen() {
   const { setAuthUser } = useAuthContext();
@@ -48,64 +42,97 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <Text style={styles.title}>Log in</Text>
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <View style={styles.container}>
+        <View style={styles.brandMark}>
+          <Ionicons name="chatbubbles" size={30} color={colors.primary} />
+        </View>
+        <Text style={styles.title}>Welcome back</Text>
+        <Text style={styles.subtitle}>Log in to keep your conversations end-to-end encrypted.</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
+        <View style={styles.form}>
+          <View style={styles.inputWrapper}>
+            <Ionicons name="mail-outline" size={18} color={colors.textFaint} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              placeholderTextColor={colors.textFaint}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
+            />
+          </View>
+          <View style={styles.inputWrapper}>
+            <Ionicons name="lock-closed-outline" size={18} color={colors.textFaint} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              placeholderTextColor={colors.textFaint}
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+            />
+          </View>
 
-      {error && <Text style={styles.error}>{error}</Text>}
+          {error && <Text style={styles.error}>{error}</Text>}
 
-      <TouchableOpacity
-        style={styles.button}
-        onPress={handleSubmit}
-        disabled={submitting || !email || !password}
-      >
-        <Text style={styles.buttonText}>{submitting ? "Logging in..." : "Log in"}</Text>
-      </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.button, (submitting || !email || !password) && styles.buttonDisabled]}
+            onPress={() => void handleSubmit()}
+            disabled={submitting || !email || !password}
+          >
+            <Text style={styles.buttonText}>{submitting ? "Logging in..." : "Log in"}</Text>
+          </TouchableOpacity>
+        </View>
 
-      <Link href="/(auth)/signup" style={styles.link}>
-        <Text style={styles.linkText}>Don&apos;t have an account? Sign up</Text>
-      </Link>
+        <Link href="/(auth)/signup" style={styles.link}>
+          <Text style={styles.linkText}>
+            Don&apos;t have an account? <Text style={styles.linkTextStrong}>Sign up</Text>
+          </Text>
+        </Link>
+      </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: 24, gap: 12 },
-  title: { fontSize: 26, fontWeight: "700", marginBottom: 12 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  button: {
-    backgroundColor: "#4f46e5",
-    borderRadius: 10,
-    paddingVertical: 14,
+  flex: { flex: 1, backgroundColor: colors.surface },
+  container: { flex: 1, justifyContent: "center", padding: 28 },
+  brandMark: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: colors.primaryLight,
     alignItems: "center",
-    marginTop: 8,
+    justifyContent: "center",
+    marginBottom: 20,
   },
+  title: { fontSize: 26, fontWeight: "700", color: colors.text },
+  subtitle: { fontSize: 14, color: colors.textMuted, marginTop: 6, marginBottom: 28, lineHeight: 20 },
+  form: { gap: 12 },
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+  },
+  inputIcon: { marginRight: 8 },
+  input: { flex: 1, paddingVertical: 13, fontSize: 15, color: colors.text },
+  button: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 15,
+    alignItems: "center",
+    marginTop: 6,
+  },
+  buttonDisabled: { backgroundColor: colors.borderStrong },
   buttonText: { color: "#fff", fontWeight: "600", fontSize: 16 },
-  error: { color: "#dc2626", fontSize: 13 },
-  link: { alignItems: "center", marginTop: 16 },
-  linkText: { color: "#4f46e5", fontWeight: "500" },
+  error: { color: colors.danger, fontSize: 13 },
+  link: { alignItems: "center", marginTop: 24 },
+  linkText: { color: colors.textMuted, fontSize: 14 },
+  linkTextStrong: { color: colors.primary, fontWeight: "600" },
 });
