@@ -10,10 +10,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { signup } from "../../src/api/auth";
 import { ApiFetchError } from "../../src/api/client";
 import { ensureUserKeyPair } from "../../src/crypto/crypto";
 import { useAuthContext } from "../../src/context/AuthContext";
+import { colors } from "../../src/constants/theme";
 import type { Gender } from "../../src/types";
 
 const GENDER_OPTIONS: { value: Gender; label: string }[] = [
@@ -78,55 +80,88 @@ export default function SignupScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>Sign up</Text>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <View style={styles.brandMark}>
+          <Ionicons name="chatbubbles" size={30} color={colors.primary} />
+        </View>
+        <Text style={styles.title}>Create your account</Text>
+        <Text style={styles.subtitle}>Your messages stay encrypted end-to-end, always.</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <TextInput style={styles.input} placeholder="Username" value={userName} onChangeText={setUserName} />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Confirm password"
-          secureTextEntry
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-        />
+        <View style={styles.form}>
+          <View style={styles.inputWrapper}>
+            <Ionicons name="mail-outline" size={18} color={colors.textFaint} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              placeholderTextColor={colors.textFaint}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
+            />
+          </View>
+          <View style={styles.inputWrapper}>
+            <Ionicons name="person-outline" size={18} color={colors.textFaint} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="Username"
+              placeholderTextColor={colors.textFaint}
+              value={userName}
+              onChangeText={setUserName}
+            />
+          </View>
+          <View style={styles.inputWrapper}>
+            <Ionicons name="lock-closed-outline" size={18} color={colors.textFaint} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              placeholderTextColor={colors.textFaint}
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+            />
+          </View>
+          <View style={styles.inputWrapper}>
+            <Ionicons name="lock-closed-outline" size={18} color={colors.textFaint} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="Confirm password"
+              placeholderTextColor={colors.textFaint}
+              secureTextEntry
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+            />
+          </View>
 
-        <View style={styles.genderRow}>
-          {GENDER_OPTIONS.map((option) => (
-            <TouchableOpacity
-              key={option.value}
-              style={[styles.genderChip, gender === option.value && styles.genderChipSelected]}
-              onPress={() => setGender(option.value)}
-            >
-              <Text style={[styles.genderChipText, gender === option.value && styles.genderChipTextSelected]}>
-                {option.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          <View style={styles.genderRow}>
+            {GENDER_OPTIONS.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[styles.genderChip, gender === option.value && styles.genderChipSelected]}
+                onPress={() => setGender(option.value)}
+              >
+                <Text style={[styles.genderChipText, gender === option.value && styles.genderChipTextSelected]}>
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {error && <Text style={styles.error}>{error}</Text>}
+
+          <TouchableOpacity
+            style={[styles.button, submitting && styles.buttonDisabled]}
+            onPress={() => void handleSubmit()}
+            disabled={submitting}
+          >
+            <Text style={styles.buttonText}>{submitting ? "Creating account..." : "Sign up"}</Text>
+          </TouchableOpacity>
         </View>
 
-        {error && <Text style={styles.error}>{error}</Text>}
-
-        <TouchableOpacity style={styles.button} onPress={handleSubmit} disabled={submitting}>
-          <Text style={styles.buttonText}>{submitting ? "Creating account..." : "Sign up"}</Text>
-        </TouchableOpacity>
-
         <Link href="/(auth)/login" style={styles.link}>
-          <Text style={styles.linkText}>Already have an account? Log in</Text>
+          <Text style={styles.linkText}>
+            Already have an account? <Text style={styles.linkTextStrong}>Log in</Text>
+          </Text>
         </Link>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -134,37 +169,54 @@ export default function SignupScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  container: { flexGrow: 1, justifyContent: "center", padding: 24, gap: 12 },
-  title: { fontSize: 26, fontWeight: "700", marginBottom: 12 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+  flex: { flex: 1, backgroundColor: colors.surface },
+  container: { flexGrow: 1, justifyContent: "center", padding: 28, paddingVertical: 40 },
+  brandMark: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: colors.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
   },
-  genderRow: { flexDirection: "row", gap: 8 },
+  title: { fontSize: 26, fontWeight: "700", color: colors.text },
+  subtitle: { fontSize: 14, color: colors.textMuted, marginTop: 6, marginBottom: 28, lineHeight: 20 },
+  form: { gap: 12 },
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+  },
+  inputIcon: { marginRight: 8 },
+  input: { flex: 1, paddingVertical: 13, fontSize: 15, color: colors.text },
+  genderRow: { flexDirection: "row", gap: 8, marginTop: 2 },
   genderChip: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 10,
-    paddingVertical: 10,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingVertical: 11,
     alignItems: "center",
   },
-  genderChipSelected: { backgroundColor: "#4f46e5", borderColor: "#4f46e5" },
-  genderChipText: { color: "#374151", fontWeight: "500" },
+  genderChipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+  genderChipText: { color: colors.textMuted, fontWeight: "500", fontSize: 13.5 },
   genderChipTextSelected: { color: "#fff" },
   button: {
-    backgroundColor: "#4f46e5",
-    borderRadius: 10,
-    paddingVertical: 14,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 15,
     alignItems: "center",
-    marginTop: 8,
+    marginTop: 6,
   },
+  buttonDisabled: { opacity: 0.7 },
   buttonText: { color: "#fff", fontWeight: "600", fontSize: 16 },
-  error: { color: "#dc2626", fontSize: 13 },
-  link: { alignItems: "center", marginTop: 16 },
-  linkText: { color: "#4f46e5", fontWeight: "500" },
+  error: { color: colors.danger, fontSize: 13 },
+  link: { alignItems: "center", marginTop: 24 },
+  linkText: { color: colors.textMuted, fontSize: 14 },
+  linkTextStrong: { color: colors.primary, fontWeight: "600" },
 });
