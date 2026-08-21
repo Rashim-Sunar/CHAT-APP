@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { router, useFocusEffect, useNavigation } from "expo-router";
 import {
-  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -16,7 +15,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { listConversations } from "../../../src/api/conversations";
 import { useAuthContext } from "../../../src/context/AuthContext";
 import { useSocketContext } from "../../../src/context/SocketContext";
-import useListenMessages from "../../../src/hooks/useListenMessages";
 import useConversationStore from "../../../src/store/useConversationStore";
 import Avatar from "../../../src/components/Avatar";
 import { colors } from "../../../src/constants/theme";
@@ -35,22 +33,14 @@ export default function ConversationListScreen() {
   const [composeMenuOpen, setComposeMenuOpen] = useState(false);
 
   const loadConversations = useCallback(async () => {
-    const all = await listConversations();
-    // Phase 1 is direct-messaging only; group conversations may still come
-    // back from the API (group creation isn't gated by client version) but
-    // aren't rendered here. Kept in the shared store (not local state) so
-    // the chat screen can resolve participant info without re-fetching.
-    setConversations(all.filter((conversation) => conversation.type === "direct"));
+    // Kept in the shared store rather than local state so the chat and
+    // details screens can resolve participant info without re-fetching.
+    setConversations(await listConversations());
   }, [setConversations]);
 
   useEffect(() => {
     void loadConversations().finally(() => setLoading(false));
   }, [loadConversations]);
-
-  // Socket newMessage events update the message store; re-pull the
-  // conversation list (for preview/ordering) whenever one arrives — simpler
-  // than porting the web app's optimistic in-place reordering for phase 1.
-  useListenMessages(loadConversations);
 
   useFocusEffect(
     useCallback(() => {
@@ -71,7 +61,12 @@ export default function ConversationListScreen() {
 
   const handleNewGroup = () => {
     setComposeMenuOpen(false);
-    Alert.alert("Group chats", "Group chats aren't available on mobile yet — it's coming in a future update.");
+    router.push("/new-group");
+  };
+
+  const handleJoinGroup = () => {
+    setComposeMenuOpen(false);
+    router.push("/join-group");
   };
 
   useLayoutEffect(() => {
@@ -98,6 +93,11 @@ export default function ConversationListScreen() {
               <Ionicons name="people-outline" size={18} color={colors.text} />
               <Text style={styles.menuItemText}>New group</Text>
             </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} activeOpacity={0.6} onPress={handleJoinGroup}>
+              <Ionicons name="link-outline" size={18} color={colors.text} />
+              <Text style={styles.menuItemText}>Join with link</Text>
+            </TouchableOpacity>
           </View>
         </Pressable>
       </Modal>
@@ -119,7 +119,10 @@ export default function ConversationListScreen() {
           ) : null
         }
         renderItem={({ item }) => {
-          const otherParticipant = item.participants.find((participant) => participant._id !== currentUserId);
+          const isGroup = item.type === "group";
+          const otherParticipant = isGroup
+            ? undefined
+            : item.participants.find((participant) => participant._id !== currentUserId);
           const isOnline = Boolean(otherParticipant && onlineUsers.includes(otherParticipant._id));
 
           return (
@@ -133,6 +136,7 @@ export default function ConversationListScreen() {
                 name={item.displayName}
                 uri={item.displayAvatar}
                 gender={otherParticipant?.gender}
+                isGroup={isGroup}
                 online={isOnline}
               />
               <View style={styles.rowText}>

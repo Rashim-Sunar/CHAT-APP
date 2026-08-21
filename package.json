@@ -7,6 +7,12 @@
     "@commitlint/cli": "^21.2.0",
     "@commitlint/config-conventional": "^21.2.0",
     "husky": "^9.1.7",
-    "lint-staged": "^15.5.2"
+    "lint-staged": "^15.5.2",
+    "typescript": "~5.9.0"
+  },
+  "dependencies": {
+    "expo-clipboard": "^57.0.1",
+    "expo-document-picker": "^57.0.1",
+    "expo-image-picker": "^57.0.11"
   }
 }

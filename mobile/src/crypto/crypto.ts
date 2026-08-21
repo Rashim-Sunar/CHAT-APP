@@ -33,6 +33,12 @@ export interface UserKeyJwkPair {
   privateKey: JsonWebKey;
 }
 
+export interface EncryptedLinkedSecret {
+  encryptedPayload: string;
+  encryptedAesKey: string;
+  iv: string;
+}
+
 const RSA_ALGORITHM: RsaHashedKeyGenParams = {
   name: "RSA-OAEP",
   modulusLength: 2048,
@@ -256,9 +262,9 @@ export const getRecipientPublicKeys = async (userIds: string[]): Promise<Recipie
     .map((userId) => ({ userId, publicKeyJwk: recipientPublicKeyCache.get(userId) as JsonWebKey }));
 };
 
-// Phase 1 always generates-or-reuses a keypair for THIS device — no
-// device-linking "restore from another device" branch (that's a later
-// phase; the web app's version has one, this deliberately doesn't).
+// Generates a keypair only when this device has none. Callers must gate on
+// whether the account already has a server-side public key — regenerating for
+// an account that has one overwrites it and strands every existing message.
 export const ensureUserKeyPair = async (userId: string): Promise<UserKeyJwkPair> => {
   const existing = await getUserKeyMaterial(userId);
 
@@ -279,4 +285,67 @@ export const ensureUserKeyPair = async (userId: string): Promise<UserKeyJwkPair>
   await savePublicKey(nextPair.publicKey);
 
   return nextPair;
+};
+
+export const createTemporaryLinkKeyPair = (): Promise<UserKeyJwkPair> => generateKeyPair();
+
+export const encryptLinkedSecretForDevice = async (
+  plaintextSecret: string,
+  targetTempPublicKeyJwk: JsonWebKey
+): Promise<EncryptedLinkedSecret> => {
+  const tempPublicKey = await importPublicKey(targetTempPublicKeyJwk);
+  const aesKey = await crypto.subtle.generateKey({ name: AES_ALGORITHM, length: AES_KEY_LENGTH }, true, [
+    "encrypt",
+    "decrypt",
+  ]);
+  const rawAesKey = await crypto.subtle.exportKey("raw", aesKey);
+  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH_BYTES));
+
+  const encryptedPayload = await crypto.subtle.encrypt(
+    { name: AES_ALGORITHM, iv },
+    aesKey,
+    TEXT_ENCODING.encode(plaintextSecret)
+  );
+  const encryptedAesKey = await crypto.subtle.encrypt(RSA_ENCRYPTION_ALGORITHM, tempPublicKey, rawAesKey);
+
+  return {
+    encryptedPayload: toBase64(encryptedPayload),
+    encryptedAesKey: toBase64(encryptedAesKey),
+    iv: toBase64(iv),
+  };
+};
+
+export const decryptLinkedSecretFromDevice = async (
+  encryptedSecret: EncryptedLinkedSecret,
+  tempPrivateKeyJwk: JsonWebKey
+): Promise<string> => {
+  const tempPrivateKey = await importPrivateKey(tempPrivateKeyJwk);
+  const rawAesKey = await crypto.subtle.decrypt(
+    RSA_ENCRYPTION_ALGORITHM,
+    tempPrivateKey,
+    fromBase64(encryptedSecret.encryptedAesKey)
+  );
+
+  const aesKey = await importAesKey(rawAesKey);
+  const decryptedPayload = await crypto.subtle.decrypt(
+    { name: AES_ALGORITHM, iv: new Uint8Array(fromBase64(encryptedSecret.iv)) },
+    aesKey,
+    fromBase64(encryptedSecret.encryptedPayload)
+  );
+
+  return TEXT_DECODING.decode(decryptedPayload);
+};
+
+export const assertPrivateKeyJwk = async (privateKeyJwk: JsonWebKey): Promise<void> => {
+  await crypto.subtle.importKey("jwk", privateKeyJwk, RSA_IMPORT_ALGORITHM, true, ["decrypt"]);
+};
+
+export const storeLinkedKeyMaterial = async (userId: string, pair: UserKeyJwkPair): Promise<void> => {
+  await saveUserKeyMaterial({
+    userId,
+    publicKeyJwk: pair.publicKey,
+    privateKeyJwk: pair.privateKey,
+    updatedAt: Date.now(),
+  });
+  await savePublicKey(pair.publicKey);
 };

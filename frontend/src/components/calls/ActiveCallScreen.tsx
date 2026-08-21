@@ -43,7 +43,7 @@ const ActiveCallScreen = () => {
         {callState === "connecting" && <span className="text-xs text-white/60">Connecting...</span>}
       </div>
 
-      <div className="flex flex-1 items-center justify-center py-6">
+      <div className="flex w-full max-w-5xl flex-1 items-center justify-center py-6">
         <CallVideoGrid
           localStream={localStream}
           localUserName={localUserName}

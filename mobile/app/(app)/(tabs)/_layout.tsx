@@ -1,9 +1,12 @@
 import { Pressable, StyleSheet } from "react-native";
 import { Tabs } from "expo-router/tabs";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../../src/constants/theme";
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tabs
       screenOptions={{
@@ -18,7 +21,12 @@ export default function TabsLayout() {
         tabBarButton: ({ ref: _ref, ...rest }) => (
           <Pressable {...rest} android_ripple={{ color: "transparent" }} />
         ),
-        tabBarStyle: styles.tabBar,
+        // Lifts the bar clear of the system navigation gesture area / buttons,
+        // matching how the chat composer offsets itself.
+        tabBarStyle: [
+          styles.tabBar,
+          { height: 58 + insets.bottom, paddingBottom: Math.max(insets.bottom, 8) },
+        ],
         tabBarLabelStyle: styles.tabBarLabel,
         tabBarItemStyle: styles.tabBarItem,
         // No cross-fade/shift between tabs — iOS switches are instant.

@@ -1,6 +1,3 @@
-// Trimmed phase-1 port of frontend/src/zustand/useConversation.ts — direct
-// conversations + messages only, no upload queue/reply-target/unread
-// bookkeeping yet.
 import { create } from "zustand";
 import type { Conversation, Message } from "../types";
 
@@ -12,6 +9,8 @@ interface ConversationStoreState {
   selectConversation: (conversationId: string | null) => void;
   setMessagesForConversation: (conversationId: string, messages: Message[]) => void;
   appendMessageToConversation: (conversationId: string, message: Message) => void;
+  updateMessageInConversation: (conversationId: string, messageId: string, patch: Partial<Message>) => void;
+  removeMessageFromConversation: (conversationId: string, messageId: string) => void;
   resetConversationState: () => void;
 }
 
@@ -53,6 +52,34 @@ const useConversationStore = create<ConversationStoreState>()((set) => ({
         messagesByConversation: {
           ...state.messagesByConversation,
           [conversationId]: [...existing, message],
+        },
+      };
+    }),
+
+  updateMessageInConversation: (conversationId, messageId, patch) =>
+    set((state) => {
+      const existing = state.messagesByConversation[conversationId];
+      if (!existing) return state;
+
+      return {
+        messagesByConversation: {
+          ...state.messagesByConversation,
+          [conversationId]: existing.map((message) =>
+            message._id === messageId ? { ...message, ...patch } : message
+          ),
+        },
+      };
+    }),
+
+  removeMessageFromConversation: (conversationId, messageId) =>
+    set((state) => {
+      const existing = state.messagesByConversation[conversationId];
+      if (!existing) return state;
+
+      return {
+        messagesByConversation: {
+          ...state.messagesByConversation,
+          [conversationId]: existing.filter((message) => message._id !== messageId),
         },
       };
     }),
