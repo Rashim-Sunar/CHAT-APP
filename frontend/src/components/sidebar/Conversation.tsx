@@ -48,7 +48,14 @@ const ConversationItem = ({ conversation }: ConversationProps) => {
 
   return (
     <div
-      onClick={() => setSelectedConversation(conversation, currentUserId)}
+      onClick={() => {
+        if (isSelected) {
+          setSelectedConversation(null, currentUserId);
+          return;
+        }
+
+        setSelectedConversation(conversation, currentUserId);
+      }}
       className={`flex items-center gap-3 px-6 py-3 cursor-pointer
                   transition-all duration-200
                   ${isSelected ? "bg-indigo-50" : "hover:bg-slate-100"}`}

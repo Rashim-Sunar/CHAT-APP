@@ -17,6 +17,7 @@ import ProfileModal from "../sidebar/ProfileModal";
 import NewConversationMenu from "../sidebar/NewConversationMenu";
 import Avatar from "../common/Avatar";
 import { getOtherParticipant } from "../../Utils/conversationDisplay";
+import StoriesSection from "../stories/StoriesSection";
 
 const MobileConversationBar = () => {
   const { conversations } = useGetConversations();
@@ -104,6 +105,10 @@ const MobileConversationBar = () => {
           />
           <IoSearchSharp className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
         </div>
+      </div>
+
+      <div className="border-t border-slate-100">
+        <StoriesSection />
       </div>
 
       <div className="flex overflow-x-auto px-4 pb-4 gap-4 no-scrollbar">

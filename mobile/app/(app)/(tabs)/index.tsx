@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { router, useFocusEffect, useNavigation } from "expo-router";
 import {
   Alert,
@@ -8,6 +8,7 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -21,6 +22,7 @@ import useConversationStore from "../../../src/store/useConversationStore";
 import Avatar from "../../../src/components/Avatar";
 import { colors } from "../../../src/constants/theme";
 import { formatRelativeTime } from "../../../src/utils/formatTime";
+import StoriesSection from "../../../src/components/stories/StoriesSection";
 
 export default function ConversationListScreen() {
   const navigation = useNavigation();
@@ -33,6 +35,7 @@ export default function ConversationListScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [composeMenuOpen, setComposeMenuOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
   const loadConversations = useCallback(async () => {
     const all = await listConversations();
@@ -74,6 +77,14 @@ export default function ConversationListScreen() {
     Alert.alert("Group chats", "Group chats aren't available on mobile yet — it's coming in a future update.");
   };
 
+  const filteredConversations = useMemo(
+    () =>
+      conversations.filter((conversation) =>
+        conversation.displayName.toLowerCase().includes(search.trim().toLowerCase())
+      ),
+    [conversations, search]
+  );
+
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -101,10 +112,26 @@ export default function ConversationListScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      <View style={styles.searchWrap}>
+        <View style={styles.searchBox}>
+          <Text style={styles.searchIcon}>⌕</Text>
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search chats"
+            placeholderTextColor={colors.textFaint}
+            style={styles.searchInput}
+          />
+        </View>
+      </View>
+
+      <StoriesSection />
+
       <FlatList
-        data={conversations}
+        data={filteredConversations}
         keyExtractor={(item) => item._id}
-        contentContainerStyle={conversations.length === 0 ? styles.emptyContainer : styles.list}
+        contentContainerStyle={filteredConversations.length === 0 ? styles.emptyContainer : styles.list}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} tintColor={colors.primary} />
         }
@@ -113,8 +140,8 @@ export default function ConversationListScreen() {
           !loading ? (
             <View style={styles.empty}>
               <Ionicons name="chatbubble-ellipses-outline" size={44} color={colors.textFaint} />
-              <Text style={styles.emptyTitle}>No conversations yet</Text>
-              <Text style={styles.emptyText}>Head to the People tab to start chatting.</Text>
+              <Text style={styles.emptyTitle}>{search.trim() ? "No chats found" : "No conversations yet"}</Text>
+              <Text style={styles.emptyText}>{search.trim() ? "Try a different search term." : "Head to the People tab to start chatting."}</Text>
             </View>
           ) : null
         }
@@ -169,6 +196,18 @@ export default function ConversationListScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   headerButton: { padding: 2, marginRight: 4 },
+  searchWrap: { paddingHorizontal: 16, paddingTop: 12 },
+  searchBox: {
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#f1f5f9",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    gap: 10,
+  },
+  searchIcon: { color: colors.textFaint, fontSize: 18, marginTop: -1 },
+  searchInput: { flex: 1, color: colors.text, fontSize: 14, paddingVertical: 0 },
   backdrop: { flex: 1, alignItems: "flex-end" },
   menuCard: {
     marginRight: 12,

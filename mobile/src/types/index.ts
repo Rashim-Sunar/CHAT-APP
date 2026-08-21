@@ -3,6 +3,8 @@
 
 export type Gender = "male" | "female" | "others";
 export type MessageType = "text";
+export type StoryType = "image" | "video" | "text";
+export type StoryPrivacy = "everyone" | "close_friends";
 
 export interface User {
   _id: string;
@@ -88,15 +90,87 @@ export interface SharedContentResponse {
   documents: { name: string; url: string; size?: number; createdAt: string }[];
 }
 
+export interface StoryUser {
+  _id: string;
+  userName: string;
+  gender: Gender;
+  profilePic?: string;
+}
+
+export interface StoryItem {
+  _id: string;
+  userId: string;
+  user: StoryUser;
+  type: StoryType;
+  mediaUrl?: string | null;
+  publicId?: string | null;
+  fileName?: string | null;
+  fileSize?: number | null;
+  mimeType?: string | null;
+  caption?: string;
+  text?: string;
+  textAlign?: "left" | "center" | "right";
+  background?: string;
+  privacy: StoryPrivacy;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+  viewedByMe: boolean;
+  isOwn: boolean;
+}
+
+export interface StoryGroup {
+  user: StoryUser;
+  stories: StoryItem[];
+  hasUnseenStory: boolean;
+  latestStoryAt: string;
+}
+
+export interface StoriesResponse {
+  status: string;
+  data?: {
+    stories: StoryGroup[];
+  };
+}
+
+export interface StoryCreatePayload {
+  type: StoryType;
+  caption?: string;
+  text?: string;
+  textAlign?: "left" | "center" | "right";
+  background?: string;
+  privacy?: StoryPrivacy;
+  mediaUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  publicId?: string;
+}
+
+export interface StoryUploadSignatureResponse {
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  publicId: string;
+  resourceType: "image" | "video";
+  accessMode?: string;
+  maxFileSizeBytes?: number;
+}
+
 export interface ServerToClientEvents {
   getOnlineUsers: (users: string[]) => void;
   newMessage: (message: Message) => void;
   "conversation:seen": (payload: { conversationId: string; readerId: string; seenAt: string }) => void;
   "conversation:muted": (payload: { conversationId: string; muted: boolean }) => void;
   "conversation:blocked": (payload: { conversationId: string; blocked: boolean; blockedByMe: boolean }) => void;
+  "story:created": (payload: { storyId: string; userId: string }) => void;
+  "story:viewed": (payload: { storyId: string; viewerId: string }) => void;
+  "story:deleted": (payload: { storyId: string; userId: string }) => void;
 }
 
 export interface ClientToServerEvents {
   connect_error: (error: Error) => void;
   "conversation:seen": (payload: { conversationId: string; readerId: string }) => void;
+  "story:viewed": (payload: { storyId: string }) => void;
 }
