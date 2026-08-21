@@ -13,7 +13,6 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { signup } from "../../src/api/auth";
 import { ApiFetchError } from "../../src/api/client";
-import { ensureUserKeyPair } from "../../src/crypto/crypto";
 import { useAuthContext } from "../../src/context/AuthContext";
 import { colors } from "../../src/constants/theme";
 import type { Gender } from "../../src/types";
@@ -64,12 +63,10 @@ export default function SignupScreen() {
         confirmPassword,
         gender,
       });
-      const userId = response.data?.user?._id;
-      if (!userId) {
+      if (!response.data?.user?._id) {
         throw new Error("Signup response was missing user data");
       }
 
-      await ensureUserKeyPair(userId);
       setAuthUser(response);
     } catch (submitError: unknown) {
       setError(submitError instanceof ApiFetchError ? submitError.message : "Something went wrong. Try again.");

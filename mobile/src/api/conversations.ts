@@ -10,6 +10,10 @@ export interface ConversationDetail {
   _id: string;
   type: ConversationType;
   participants: ConversationParticipant[];
+  groupName?: string;
+  groupAvatar?: string;
+  createdBy?: string;
+  admins?: string[];
 }
 
 // listConversations already returns participants for conversations the user
@@ -57,6 +61,7 @@ export interface SendTextMessagePayload {
   encryptedAESKeys: { userId: string; wrappedKey: string }[];
   iv: string;
   replyTo?: string;
+  forwarded?: boolean;
 }
 
 export const sendTextMessage = async (
@@ -66,6 +71,29 @@ export const sendTextMessage = async (
   const response = await apiFetch<{ newMessage: Message }>(`/conversations/${conversationId}/messages`, {
     method: "POST",
     body: JSON.stringify({ messageType: "text", ...payload }),
+  });
+
+  return response.newMessage;
+};
+
+export interface SendMediaMessagePayload {
+  messageType: "image" | "video" | "file";
+  fileUrl: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  publicId?: string;
+  replyTo?: string;
+  forwarded?: boolean;
+}
+
+export const sendMediaMessage = async (
+  conversationId: string,
+  payload: SendMediaMessagePayload
+): Promise<Message> => {
+  const response = await apiFetch<{ newMessage: Message }>(`/conversations/${conversationId}/messages`, {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 
   return response.newMessage;

@@ -16,16 +16,26 @@ interface AvatarProps {
   gender?: Gender | string | null;
   size?: number;
   online?: boolean;
+  isGroup?: boolean;
 }
 
-export default function Avatar({ id, name, uri, gender, size = 44, online = false }: AvatarProps) {
+export default function Avatar({
+  id,
+  name,
+  uri,
+  gender,
+  size = 44,
+  online = false,
+  isGroup = false,
+}: AvatarProps) {
   const [photoFailed, setPhotoFailed] = useState(false);
   const [genderAvatarFailed, setGenderAvatarFailed] = useState(false);
   const dimensionStyle = { width: size, height: size, borderRadius: size / 2 };
   const dotSize = Math.max(10, Math.round(size * 0.28));
 
   const showPhoto = Boolean(uri) && !photoFailed;
-  const showGenderAvatar = !showPhoto && Boolean(gender) && !genderAvatarFailed;
+  // Groups have no gender to fall back on, so they go straight to initials.
+  const showGenderAvatar = !showPhoto && !isGroup && Boolean(gender) && !genderAvatarFailed;
   const normalizedGender = gender ? String(gender).toLowerCase() : "";
   const genderAvatarSource = normalizedGender === "female" || normalizedGender === "f" ? FEMALE_AVATAR : MALE_AVATAR;
 

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
 import {
   ActivityIndicator,
@@ -14,8 +14,18 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Clipboard from "expo-clipboard";
+import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 import { Ionicons } from "@expo/vector-icons";
-import { getConversationById, getConversationMessages, sendTextMessage } from "../../../../src/api/conversations";
+import {
+  getConversationById,
+  getConversationMessages,
+  sendMediaMessage,
+  sendTextMessage,
+} from "../../../../src/api/conversations";
+import { getActiveCall } from "../../../../src/api/calls";
+import { uploadAsset, type LocalAsset } from "../../../../src/api/upload";
 import { ApiFetchError } from "../../../../src/api/client";
 import {
   decryptMessageIfNeeded,
@@ -25,18 +35,28 @@ import {
 } from "../../../../src/crypto/crypto";
 import { useAuthContext } from "../../../../src/context/AuthContext";
 import { useSocketContext } from "../../../../src/context/SocketContext";
+import { useCallContext } from "../../../../src/context/CallContext";
 import useConversationStore from "../../../../src/store/useConversationStore";
+import useMessageActions from "../../../../src/hooks/useMessageActions";
 import Avatar from "../../../../src/components/Avatar";
+import MessageBubble from "../../../../src/components/messages/MessageBubble";
+import CallLogMessage from "../../../../src/components/messages/CallLogMessage";
+import MessageActionSheet, { type MessageAction } from "../../../../src/components/messages/MessageActionSheet";
+import ConversationDetailsDrawer from "../../../../src/components/details/ConversationDetailsDrawer";
 import { colors } from "../../../../src/constants/theme";
-import { formatClockTime, formatDateSeparator } from "../../../../src/utils/formatTime";
-import type { ConversationParticipant, Message } from "../../../../src/types";
+import { formatDateSeparator } from "../../../../src/utils/formatTime";
+import type {
+  CallType,
+  ConversationParticipant,
+  ConversationType,
+  Message,
+} from "../../../../src/types";
 
 // Must be a stable reference — `|| []` inline would create a new array on
 // every store read, which useSyncExternalStore treats as a change and loops.
 const EMPTY_MESSAGES: Message[] = [];
 
-// Same tiled wallpaper as the web app's chat pane; see
-// frontend/src/components/messages/MessageContainer.tsx.
+// Same tiled wallpaper as the web app's chat pane.
 const CHAT_WALLPAPER = require("../../../../assets/chat-wallpaper.webp");
 
 type ChatListItem =
@@ -67,7 +87,8 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const { authUser } = useAuthContext();
   const currentUserId = authUser?.data?.user?._id as string;
-  const { onlineUsers } = useSocketContext();
+  const { socket, onlineUsers } = useSocketContext();
+  const { startCall, startGroupCall, joinCall, callBanners, seedCallBanner } = useCallContext();
 
   const storedConversation = useConversationStore((state) =>
     state.conversations.find((conversation) => conversation._id === conversationId)
@@ -79,18 +100,31 @@ export default function ChatScreen() {
   const [participants, setParticipants] = useState<ConversationParticipant[]>(
     storedConversation?.participants || []
   );
+  const [conversationType, setConversationType] = useState<ConversationType>(
+    storedConversation?.type || "direct"
+  );
+  const [groupName, setGroupName] = useState<string>(storedConversation?.displayName || "");
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [actionTarget, setActionTarget] = useState<Message | null>(null);
+  const [replyTarget, setReplyTarget] = useState<Message | null>(null);
+  const [editTarget, setEditTarget] = useState<Message | null>(null);
+
+  const participantIds = useMemo(() => participants.map((participant) => participant._id), [participants]);
+  const { editMessage, reactToMessage, togglePin, deleteMessage } = useMessageActions({
+    conversationId,
+    currentUserId,
+    participantIds,
+  });
 
   // Driven directly off Keyboard events instead of KeyboardAvoidingView —
-  // on Android, its "height"/"padding" behaviors fight with the native
-  // windowSoftInputMode=adjustResize also active on this Activity, and
-  // react-native-screens' native screen hosting doesn't reliably propagate
-  // that resize down to our content either way. Measuring the keyboard
-  // ourselves sidesteps both.
+  // on Android its behaviors fight with the Activity's adjustResize, and
+  // react-native-screens doesn't reliably propagate that resize to content.
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
@@ -98,9 +132,7 @@ export default function ChatScreen() {
     const showSubscription = Keyboard.addListener(showEvent, (event) => {
       setKeyboardHeight(event.endCoordinates.height);
     });
-    const hideSubscription = Keyboard.addListener(hideEvent, () => {
-      setKeyboardHeight(0);
-    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
 
     return () => {
       showSubscription.remove();
@@ -116,63 +148,115 @@ export default function ChatScreen() {
   useEffect(() => {
     if (storedConversation) {
       setParticipants(storedConversation.participants);
+      setConversationType(storedConversation.type);
+      setGroupName(storedConversation.displayName);
       return;
     }
 
-    // Not in the store yet — e.g. a conversation just created from the
-    // People tab, which navigates here directly without refreshing the list.
     void getConversationById(conversationId).then((conversation) => {
       setParticipants(conversation.participants);
+      setConversationType(conversation.type);
+      if (conversation.groupName) setGroupName(conversation.groupName);
     });
   }, [conversationId, storedConversation]);
 
+  const isGroup = conversationType === "group";
   const isOtherParticipantOnline = Boolean(otherParticipant && onlineUsers.includes(otherParticipant._id));
+  const isBlocked = Boolean(storedConversation?.isBlocked);
+  const blockedByMe = Boolean(storedConversation?.blockedByMe);
+  const activeBanner = callBanners[conversationId];
 
-  const handleCallPlaceholder = (kind: "audio" | "video") => {
-    Alert.alert(
-      kind === "audio" ? "Audio calling" : "Video calling",
-      "Calling isn't available on mobile yet — it's coming in a future update."
-    );
-  };
+  useEffect(() => {
+    if (!isGroup) return;
+
+    void getActiveCall(conversationId)
+      .then((snapshot) => {
+        seedCallBanner(
+          conversationId,
+          snapshot ? { callType: snapshot.callType, participantCount: snapshot.participantCount } : null
+        );
+      })
+      .catch(() => undefined);
+  }, [conversationId, isGroup, seedCallBanner]);
+
+  const handleStartCall = useCallback(
+    (callType: CallType) => {
+      if (isBlocked) {
+        Alert.alert("Can't call", "You can't call this contact right now.");
+        return;
+      }
+
+      if (isGroup) {
+        void startGroupCall(conversationId, callType);
+        return;
+      }
+
+      void startCall(conversationId, callType);
+    },
+    [isBlocked, isGroup, conversationId, startCall, startGroupCall]
+  );
+
+  const headerTitle = isGroup ? groupName : otherParticipant?.userName || "";
+  const headerSubtitle = isGroup
+    ? `${participants.length} members`
+    : isOtherParticipantOnline
+      ? "Online"
+      : "";
 
   useLayoutEffect(() => {
-    if (!otherParticipant) return;
-
     navigation.setOptions({
       headerTitle: () => (
         <TouchableOpacity
           style={styles.headerTitleRow}
           activeOpacity={0.7}
-          onPress={() => router.push({ pathname: "/chat/[conversationId]/details", params: { conversationId } })}
+          onPress={() => setDetailsOpen(true)}
         >
           <Avatar
-            id={otherParticipant._id}
-            name={otherParticipant.userName}
-            uri={otherParticipant.profilePic}
-            gender={otherParticipant.gender}
+            id={isGroup ? conversationId : otherParticipant?._id || conversationId}
+            name={headerTitle}
+            uri={isGroup ? storedConversation?.displayAvatar : otherParticipant?.profilePic}
+            gender={isGroup ? undefined : otherParticipant?.gender}
+            isGroup={isGroup}
             size={34}
-            online={isOtherParticipantOnline}
+            online={!isGroup && isOtherParticipantOnline}
           />
           <View style={styles.headerTitleTextGroup}>
             <Text style={styles.headerTitleText} numberOfLines={1}>
-              {otherParticipant.userName}
+              {headerTitle}
             </Text>
-            {isOtherParticipantOnline && <Text style={styles.headerSubtitleText}>Online</Text>}
+            {Boolean(headerSubtitle) && (
+              <Text style={[styles.headerSubtitleText, isGroup && styles.headerSubtitleMuted]}>
+                {headerSubtitle}
+              </Text>
+            )}
           </View>
         </TouchableOpacity>
       ),
       headerRight: () => (
         <View style={styles.headerActions}>
-          <TouchableOpacity onPress={() => handleCallPlaceholder("audio")} hitSlop={8} style={styles.headerButton}>
+          <TouchableOpacity onPress={() => handleStartCall("audio")} hitSlop={8} style={styles.headerButton}>
             <Ionicons name="call-outline" size={21} color={colors.primary} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleCallPlaceholder("video")} hitSlop={8} style={styles.headerButton}>
+          <TouchableOpacity onPress={() => handleStartCall("video")} hitSlop={8} style={styles.headerButton}>
             <Ionicons name="videocam-outline" size={22} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setDetailsOpen(true)} hitSlop={8} style={styles.headerButton}>
+            <Ionicons name="information-circle-outline" size={23} color={colors.primary} />
           </TouchableOpacity>
         </View>
       ),
     });
-  }, [navigation, otherParticipant, isOtherParticipantOnline, conversationId]);
+  }, [
+    navigation,
+    conversationId,
+    isGroup,
+    otherParticipant,
+    headerTitle,
+    headerSubtitle,
+    isOtherParticipantOnline,
+    storedConversation?.displayAvatar,
+    handleStartCall,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -192,23 +276,73 @@ export default function ChatScreen() {
     };
   }, [conversationId, currentUserId, setMessagesForConversation]);
 
+  // Marks the thread read once its history is on screen, and again whenever a
+  // new message lands while it stays open.
+  const messageCount = messages.length;
+  const seenSyncedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!socket || !currentUserId || loadingHistory) return;
+
+    const signature = `${conversationId}:${messageCount}`;
+    if (seenSyncedRef.current === signature) return;
+
+    seenSyncedRef.current = signature;
+    socket.emit("conversation:seen", { conversationId, readerId: currentUserId });
+  }, [socket, conversationId, currentUserId, messageCount, loadingHistory]);
+
   const items = useMemo(() => buildChatItems(messages), [messages]);
 
-  const isBlocked = Boolean(storedConversation?.isBlocked);
-  const blockedByMe = Boolean(storedConversation?.blockedByMe);
+  const messagesById = useMemo(() => {
+    const map = new Map<string, Message>();
+    messages.forEach((message) => {
+      if (message._id) map.set(message._id, message);
+    });
+    return map;
+  }, [messages]);
+
+  const participantNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    participants.forEach((participant) => map.set(participant._id, participant.userName));
+    return map;
+  }, [participants]);
+
+  const resetComposerContext = () => {
+    setReplyTarget(null);
+    setEditTarget(null);
+  };
 
   const handleSend = async () => {
     const text = draft.trim();
     if (isBlocked || !text || participants.length === 0 || sending) return;
 
+    if (editTarget) {
+      const target = editTarget;
+      setDraft("");
+      resetComposerContext();
+      setSending(true);
+
+      const ok = await editMessage(target, text);
+      if (!ok) {
+        setDraft(text);
+        setEditTarget(target);
+        setSendError("Failed to edit message");
+      }
+
+      setSending(false);
+      return;
+    }
+
+    const replyToId = replyTarget?._id;
     setDraft("");
+    resetComposerContext();
     setSendError(null);
     setSending(true);
 
     try {
-      const recipients = await getRecipientPublicKeys(participants.map((participant) => participant._id));
+      const recipients = await getRecipientPublicKeys(participantIds);
       const payload = await encryptTextMessageForRecipients(text, recipients);
-      const sentMessage = await sendTextMessage(conversationId, payload);
+      const sentMessage = await sendTextMessage(conversationId, { ...payload, replyTo: replyToId });
       const hydrated = await decryptMessageIfNeeded(sentMessage, currentUserId);
       appendMessageToConversation(conversationId, hydrated);
     } catch (error: unknown) {
@@ -219,6 +353,119 @@ export default function ChatScreen() {
     }
   };
 
+  const sendAsset = async (asset: LocalAsset) => {
+    setUploading(true);
+    setSendError(null);
+
+    try {
+      const uploaded = await uploadAsset(asset);
+      const sentMessage = await sendMediaMessage(conversationId, {
+        ...uploaded,
+        replyTo: replyTarget?._id,
+      });
+      appendMessageToConversation(conversationId, sentMessage);
+      resetComposerContext();
+    } catch (error: unknown) {
+      setSendError(error instanceof ApiFetchError ? error.message : "Failed to send attachment");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handlePickMedia = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Allow photo access to share media.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images", "videos"],
+      quality: 0.8,
+    });
+
+    const asset = result.canceled ? undefined : result.assets[0];
+    if (!asset) return;
+
+    await sendAsset({
+      uri: asset.uri,
+      name: asset.fileName || `upload-${Date.now()}.${asset.uri.split(".").pop() || "jpg"}`,
+      mimeType: asset.mimeType || (asset.type === "video" ? "video/mp4" : "image/jpeg"),
+      size: asset.fileSize,
+    });
+  };
+
+  const handlePickDocument = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
+    const asset = result.canceled ? undefined : result.assets[0];
+    if (!asset) return;
+
+    await sendAsset({
+      uri: asset.uri,
+      name: asset.name,
+      mimeType: asset.mimeType || "application/octet-stream",
+      size: asset.size,
+    });
+  };
+
+  const handleAttach = () => {
+    Alert.alert("Share attachment", undefined, [
+      { text: "Photo or video", onPress: () => void handlePickMedia() },
+      { text: "Document", onPress: () => void handlePickDocument() },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  const handleAction = async (action: MessageAction) => {
+    const target = actionTarget;
+    setActionTarget(null);
+    if (!target) return;
+
+    switch (action) {
+      case "reply":
+        setEditTarget(null);
+        setReplyTarget(target);
+        break;
+      case "copy":
+        await Clipboard.setStringAsync(target.text || target.message || "");
+        break;
+      case "edit":
+        setReplyTarget(null);
+        setEditTarget(target);
+        setDraft(target.text || target.message || "");
+        break;
+      case "pin":
+        await togglePin(target);
+        break;
+      case "forward":
+        router.push({
+          pathname: "/forward",
+          params: { conversationId, messageId: target._id as string },
+        });
+        break;
+      case "delete":
+        Alert.alert("Delete message", undefined, [
+          { text: "Delete for me", onPress: () => void deleteMessage(target, "me") },
+          ...(target.senderId === currentUserId
+            ? [
+                {
+                  text: "Delete for everyone",
+                  style: "destructive" as const,
+                  onPress: () => void deleteMessage(target, "everyone"),
+                },
+              ]
+            : []),
+          { text: "Cancel", style: "cancel" as const },
+        ]);
+        break;
+    }
+  };
+
+  const pinnedMessage = useMemo(
+    () => [...messages].reverse().find((message) => message.pinned),
+    [messages]
+  );
+
   if (loadingHistory && messages.length === 0) {
     return (
       <View style={styles.center}>
@@ -227,8 +474,41 @@ export default function ChatScreen() {
     );
   }
 
+  const composerContext = editTarget || replyTarget;
+
   return (
     <View style={[styles.flex, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + insets.bottom : 0 }]}>
+      {isGroup && activeBanner && (
+        <View style={styles.callBanner}>
+          <Ionicons
+            name={activeBanner.callType === "video" ? "videocam" : "call"}
+            size={18}
+            color={colors.primaryDark}
+          />
+          <Text style={styles.callBannerText}>
+            Ongoing {activeBanner.callType} call · {activeBanner.participantCount}
+          </Text>
+          <TouchableOpacity
+            style={styles.callBannerButton}
+            onPress={() => void joinCall(conversationId, activeBanner.callType)}
+          >
+            <Text style={styles.callBannerButtonText}>Join</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {pinnedMessage && (
+        <View style={styles.pinnedBanner}>
+          <Ionicons name="pin" size={15} color={colors.primary} />
+          <Text style={styles.pinnedBannerText} numberOfLines={1}>
+            {pinnedMessage.text || pinnedMessage.message || pinnedMessage.fileName || "Pinned message"}
+          </Text>
+          <TouchableOpacity onPress={() => void togglePin(pinnedMessage)} hitSlop={8}>
+            <Ionicons name="close" size={17} color={colors.textFaint} />
+          </TouchableOpacity>
+        </View>
+      )}
+
       <ImageBackground source={CHAT_WALLPAPER} resizeMode="repeat" style={styles.flex}>
         <View style={styles.wallpaperOverlay} pointerEvents="none" />
         {items.length === 0 ? (
@@ -237,43 +517,49 @@ export default function ChatScreen() {
             <Text style={styles.emptyChatText}>No messages yet — say hi</Text>
           </View>
         ) : (
-        <FlatList
-          style={styles.flex}
-          data={items}
-          keyExtractor={(item) => item.key}
-          inverted
-          contentContainerStyle={styles.list}
-          renderItem={({ item }) => {
-            if (item.type === "separator") {
+          <FlatList
+            style={styles.flex}
+            data={items}
+            keyExtractor={(item) => item.key}
+            inverted
+            contentContainerStyle={styles.list}
+            renderItem={({ item }) => {
+              if (item.type === "separator") {
+                return (
+                  <View style={styles.dateSeparator}>
+                    <Text style={styles.dateSeparatorText}>{item.label}</Text>
+                  </View>
+                );
+              }
+
+              const isMine = item.message.senderId === currentUserId;
+
+              // Calls are shared events rather than authored content, so they
+              // render as a centered system row instead of a side bubble.
+              if (item.message.messageType === "call_log") {
+                return (
+                  <CallLogMessage
+                    message={item.message}
+                    currentUserId={currentUserId}
+                    otherUserName={otherParticipant?.userName}
+                    canCallBack={!isGroup && !isBlocked && item.message.callStatus === "missed" && !isMine}
+                    onCallBack={handleStartCall}
+                  />
+                );
+              }
+
               return (
-                <View style={styles.dateSeparator}>
-                  <Text style={styles.dateSeparatorText}>{item.label}</Text>
-                </View>
+                <MessageBubble
+                  message={item.message}
+                  isMine={isMine}
+                  senderName={participantNameById.get(item.message.senderId)}
+                  showSenderName={isGroup && !isMine}
+                  replyTarget={item.message.replyTo ? messagesById.get(item.message.replyTo) : undefined}
+                  onLongPress={setActionTarget}
+                />
               );
-            }
-
-            const isMine = item.message.senderId === currentUserId;
-
-            return (
-              <View style={[styles.bubbleRow, isMine ? styles.bubbleRowMine : styles.bubbleRowTheirs]}>
-                <View
-                  style={[
-                    styles.bubble,
-                    isMine ? styles.bubbleMine : styles.bubbleTheirs,
-                    isMine ? styles.bubbleTailMine : styles.bubbleTailTheirs,
-                  ]}
-                >
-                  <Text style={isMine ? styles.bubbleTextMine : styles.bubbleTextTheirs}>
-                    {item.message.text ?? item.message.message ?? ""}
-                  </Text>
-                  <Text style={[styles.bubbleTime, isMine ? styles.bubbleTimeMine : styles.bubbleTimeTheirs]}>
-                    {formatClockTime(item.message.createdAt)}
-                  </Text>
-                </View>
-              </View>
-            );
-          }}
-        />
+            }}
+          />
         )}
       </ImageBackground>
 
@@ -295,36 +581,95 @@ export default function ChatScreen() {
           </Text>
         </View>
       ) : (
-        <View
-          style={[
-            styles.composer,
-            { paddingBottom: keyboardHeight > 0 ? 8 : Math.max(insets.bottom, 10) + 8 },
-          ]}
-        >
-          <TextInput
-            style={styles.input}
-            placeholder="Message"
-            placeholderTextColor={colors.textFaint}
-            value={draft}
-            onChangeText={setDraft}
-            multiline
-          />
-          <TouchableOpacity
+        <View style={styles.composerWrapper}>
+          {composerContext && (
+            <View style={styles.composerContext}>
+              <Ionicons
+                name={editTarget ? "create-outline" : "arrow-undo-outline"}
+                size={15}
+                color={colors.primary}
+              />
+              <View style={styles.composerContextText}>
+                <Text style={styles.composerContextTitle}>{editTarget ? "Editing" : "Replying"}</Text>
+                <Text style={styles.composerContextBody} numberOfLines={1}>
+                  {composerContext.text || composerContext.message || composerContext.fileName || "Attachment"}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  resetComposerContext();
+                  if (editTarget) setDraft("");
+                }}
+                hitSlop={8}
+              >
+                <Ionicons name="close" size={17} color={colors.textFaint} />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <View
             style={[
-              styles.sendButton,
-              (sending || !draft.trim() || participants.length === 0) && styles.sendButtonDisabled,
+              styles.composer,
+              { paddingBottom: keyboardHeight > 0 ? 8 : Math.max(insets.bottom, 10) + 8 },
             ]}
-            onPress={() => void handleSend()}
-            disabled={sending || !draft.trim() || participants.length === 0}
           >
-            {sending ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Ionicons name="send" size={17} color="#fff" />
-            )}
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.attachButton}
+              onPress={handleAttach}
+              disabled={uploading || Boolean(editTarget)}
+            >
+              {uploading ? (
+                <ActivityIndicator color={colors.primary} size="small" />
+              ) : (
+                <Ionicons name="add-circle-outline" size={26} color={colors.primary} />
+              )}
+            </TouchableOpacity>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Message"
+              placeholderTextColor={colors.textFaint}
+              value={draft}
+              onChangeText={setDraft}
+              multiline
+            />
+
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                (sending || !draft.trim() || participants.length === 0) && styles.sendButtonDisabled,
+              ]}
+              onPress={() => void handleSend()}
+              disabled={sending || !draft.trim() || participants.length === 0}
+            >
+              {sending ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Ionicons name={editTarget ? "checkmark" : "send"} size={17} color="#fff" />
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       )}
+
+      <ConversationDetailsDrawer
+        conversationId={conversationId}
+        visible={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+      />
+
+      <MessageActionSheet
+        message={actionTarget}
+        isMine={actionTarget?.senderId === currentUserId}
+        currentUserId={currentUserId}
+        onClose={() => setActionTarget(null)}
+        onReact={(emoji) => {
+          const target = actionTarget;
+          setActionTarget(null);
+          if (target) void reactToMessage(target, emoji);
+        }}
+        onAction={(action) => void handleAction(action)}
+      />
     </View>
   );
 }
@@ -334,12 +679,33 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
   headerTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   headerTitleTextGroup: { maxWidth: 180 },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: 16, marginRight: 4 },
-  headerButton: { padding: 2 },
   headerTitleText: { fontSize: 16, fontWeight: "700", color: colors.text },
   headerSubtitleText: { fontSize: 12, color: colors.online, marginTop: 1 },
-  // Flat tint approximating the web app's subtle gradient wash over the
-  // tiled wallpaper — a true gradient would need an extra native dependency.
+  headerSubtitleMuted: { color: colors.textMuted },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 16, marginRight: 4 },
+  headerButton: { padding: 2 },
+  callBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: colors.primaryLight,
+  },
+  callBannerText: { flex: 1, fontSize: 13.5, color: colors.primaryDark, fontWeight: "500" },
+  callBannerButton: { backgroundColor: colors.primary, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 7 },
+  callBannerButtonText: { color: "#fff", fontWeight: "600", fontSize: 13 },
+  pinnedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    backgroundColor: colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  pinnedBannerText: { flex: 1, fontSize: 13, color: colors.textMuted },
   wallpaperOverlay: {
     position: "absolute",
     top: 0,
@@ -362,25 +728,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
   },
-  bubbleRow: { marginVertical: 2 },
-  bubbleRowMine: { alignItems: "flex-end" },
-  bubbleRowTheirs: { alignItems: "flex-start" },
-  bubble: {
-    maxWidth: "78%",
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingTop: 9,
-    paddingBottom: 6,
-  },
-  bubbleMine: { backgroundColor: colors.bubbleMine },
-  bubbleTheirs: { backgroundColor: colors.bubbleTheirs, borderWidth: 1, borderColor: colors.border },
-  bubbleTailMine: { borderBottomRightRadius: 4 },
-  bubbleTailTheirs: { borderBottomLeftRadius: 4 },
-  bubbleTextMine: { color: colors.bubbleTextMine, fontSize: 15.5, lineHeight: 20 },
-  bubbleTextTheirs: { color: colors.bubbleTextTheirs, fontSize: 15.5, lineHeight: 20 },
-  bubbleTime: { fontSize: 10.5, marginTop: 3, alignSelf: "flex-end" },
-  bubbleTimeMine: { color: "rgba(255,255,255,0.75)" },
-  bubbleTimeTheirs: { color: colors.textFaint },
   errorBanner: { backgroundColor: colors.dangerBackground, paddingVertical: 6, paddingHorizontal: 14 },
   errorBannerText: { color: colors.danger, fontSize: 12.5, textAlign: "center" },
   blockBanner: {
@@ -402,16 +749,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   blockBannerText: { flex: 1, fontSize: 13.5, color: colors.textMuted },
-  composer: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingTop: 8,
+  composerWrapper: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
     backgroundColor: colors.surface,
   },
+  composerContext: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
+  composerContextText: { flex: 1 },
+  composerContextTitle: { fontSize: 12, fontWeight: "700", color: colors.primary },
+  composerContextBody: { fontSize: 13, color: colors.textMuted, marginTop: 1 },
+  composer: { flexDirection: "row", alignItems: "flex-end", gap: 8, paddingHorizontal: 10, paddingTop: 8 },
+  attachButton: { paddingBottom: 9, paddingHorizontal: 2 },
   input: {
     flex: 1,
     borderWidth: 1,
