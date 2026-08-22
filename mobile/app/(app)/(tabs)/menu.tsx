@@ -1,21 +1,39 @@
 import { useState } from "react";
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { logout } from "../../../src/api/auth";
-import { updateUserName } from "../../../src/api/users";
+import { updateUserName, uploadProfilePicture } from "../../../src/api/users";
 import { ApiFetchError } from "../../../src/api/client";
 import { useAuthContext } from "../../../src/context/AuthContext";
+import { useDeviceLinkContext } from "../../../src/context/DeviceLinkContext";
 import Avatar from "../../../src/components/Avatar";
 import { colors } from "../../../src/constants/theme";
 
 export default function MenuScreen() {
   const { authUser, setAuthUser } = useAuthContext();
+  const { backupEnabled, enableBackup } = useDeviceLinkContext();
   const user = authUser?.data?.user;
 
   const [editing, setEditing] = useState(false);
   const [draftName, setDraftName] = useState(user?.userName || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [backupOpen, setBackupOpen] = useState(false);
+  const [backupPassword, setBackupPassword] = useState("");
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupError, setBackupError] = useState<string | null>(null);
 
   if (!user) return null;
 
@@ -57,10 +75,83 @@ export default function MenuScreen() {
     setAuthUser(null);
   };
 
+  const handleChangePhoto = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Allow photo access to change your picture.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+
+    const asset = result.canceled ? undefined : result.assets[0];
+    if (!asset) return;
+
+    setPhotoUploading(true);
+
+    try {
+      const updated = await uploadProfilePicture({
+        uri: asset.uri,
+        name: asset.fileName || `avatar-${Date.now()}.jpg`,
+        mimeType: asset.mimeType || "image/jpeg",
+      });
+      setAuthUser({ status: "success", data: { user: updated } });
+    } catch (uploadError: unknown) {
+      Alert.alert(
+        "Upload failed",
+        uploadError instanceof Error ? uploadError.message : "Couldn't update your picture."
+      );
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
+
+  const handleEnableBackup = async () => {
+    if (backupPassword.length < 8) {
+      setBackupError("Use at least 8 characters");
+      return;
+    }
+
+    setBackupBusy(true);
+    setBackupError(null);
+
+    try {
+      await enableBackup(backupPassword);
+      setBackupOpen(false);
+      setBackupPassword("");
+      Alert.alert(
+        "Backup enabled",
+        "Keep this password safe — it's the only way to recover your messages if you lose access to all your devices."
+      );
+    } catch (enableError: unknown) {
+      setBackupError(enableError instanceof ApiFetchError ? enableError.message : "Couldn't enable backup");
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.profileCard}>
-        <Avatar id={user._id} name={user.userName} uri={user.profilePic} gender={user.gender} size={84} />
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => void handleChangePhoto()}
+          disabled={photoUploading}
+        >
+          <Avatar id={user._id} name={user.userName} uri={user.profilePic} gender={user.gender} size={84} />
+          <View style={styles.photoBadge}>
+            {photoUploading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Ionicons name="camera" size={14} color="#fff" />
+            )}
+          </View>
+        </TouchableOpacity>
 
         {editing ? (
           <View style={styles.editRow}>
@@ -94,11 +185,70 @@ export default function MenuScreen() {
       </View>
 
       <View style={styles.menuList}>
+        <TouchableOpacity
+          style={styles.menuRow}
+          activeOpacity={0.6}
+          disabled={backupEnabled}
+          onPress={() => setBackupOpen(true)}
+        >
+          <Ionicons
+            name={backupEnabled ? "shield-checkmark" : "shield-outline"}
+            size={22}
+            color={backupEnabled ? colors.online : colors.text}
+          />
+          <View style={styles.menuRowTextGroup}>
+            <Text style={styles.menuRowText}>Encrypted key backup</Text>
+            <Text style={styles.menuRowHint}>
+              {backupEnabled
+                ? "Enabled — you can recover with your password"
+                : "Recover your messages if you lose every device"}
+            </Text>
+          </View>
+          {!backupEnabled && <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />}
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.menuRow} activeOpacity={0.6} onPress={() => void handleLogout()}>
           <Ionicons name="log-out-outline" size={22} color={colors.danger} />
           <Text style={styles.menuRowTextDanger}>Log out</Text>
         </TouchableOpacity>
       </View>
+
+      <Modal visible={backupOpen} transparent animationType="fade" onRequestClose={() => setBackupOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Set a backup password</Text>
+            <Text style={styles.modalBody}>
+              Your private key is encrypted with this password before it&apos;s stored. We never see the password
+              or your key — if you forget it, the backup can&apos;t be recovered.
+            </Text>
+
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Backup password"
+              placeholderTextColor={colors.textFaint}
+              secureTextEntry
+              value={backupPassword}
+              onChangeText={setBackupPassword}
+              autoFocus
+            />
+
+            {backupError && <Text style={styles.error}>{backupError}</Text>}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalButton} onPress={() => setBackupOpen(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={() => void handleEnableBackup()}
+                disabled={backupBusy}
+              >
+                <Text style={styles.modalSaveText}>{backupBusy ? "Saving…" : "Enable"}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -149,4 +299,44 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   menuRowTextDanger: { fontSize: 15.5, fontWeight: "500", color: colors.danger },
+  photoBadge: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: colors.surface,
+  },
+  menuRowTextGroup: { flex: 1 },
+  menuRowText: { fontSize: 15.5, fontWeight: "500", color: colors.text },
+  menuRowHint: { fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 30,
+  },
+  modalCard: { width: "100%", backgroundColor: colors.surface, borderRadius: 18, padding: 22 },
+  modalTitle: { fontSize: 17, fontWeight: "700", color: colors.text },
+  modalBody: { fontSize: 13.5, color: colors.textMuted, lineHeight: 19, marginTop: 8 },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    fontSize: 15.5,
+    color: colors.text,
+    marginTop: 16,
+  },
+  modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 18 },
+  modalButton: { paddingHorizontal: 16, paddingVertical: 9 },
+  modalCancelText: { fontSize: 15, color: colors.textMuted, fontWeight: "500" },
+  modalSaveText: { fontSize: 15, color: colors.primary, fontWeight: "600" },
 });

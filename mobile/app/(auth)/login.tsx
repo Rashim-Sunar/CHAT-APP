@@ -4,7 +4,6 @@ import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableO
 import { Ionicons } from "@expo/vector-icons";
 import { login } from "../../src/api/auth";
 import { ApiFetchError } from "../../src/api/client";
-import { ensureUserKeyPair } from "../../src/crypto/crypto";
 import { useAuthContext } from "../../src/context/AuthContext";
 import { colors } from "../../src/constants/theme";
 
@@ -21,18 +20,13 @@ export default function LoginScreen() {
 
     try {
       const response = await login({ email: email.trim(), password });
-      const userId = response.data?.user?._id;
-      if (!userId) {
+      if (!response.data?.user?._id) {
         throw new Error("Login response was missing user data");
       }
 
-      // Generates a local keypair on first login from this device, or
-      // re-syncs the public key if one already exists — no device-linking
-      // gate in phase 1, always fresh-local-key.
-      await ensureUserKeyPair(userId);
-
-      // Once this updates, the root layout's Stack.Protected guard switches
-      // to the (app) group automatically — no manual navigation needed.
+      // Key setup is owned by DeviceLinkProvider — it decides between
+      // generating a keypair and gating into device linking based on whether
+      // the account already has a server-side public key.
       setAuthUser(response);
     } catch (submitError: unknown) {
       setError(submitError instanceof ApiFetchError ? submitError.message : "Something went wrong. Try again.");
