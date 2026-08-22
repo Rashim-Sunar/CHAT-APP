@@ -22,6 +22,8 @@ export interface IStory {
   background?: string;
   privacy: StoryPrivacy;
   expiresAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export type StoryDocument = IStory & Document;

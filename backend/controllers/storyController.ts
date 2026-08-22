@@ -235,7 +235,7 @@ export const createStory = async (
       expiresAt,
     });
 
-    const populatedStory = (await Story.findById(story._id).populate('user', 'userName gender profilePic')) as StoryLean | null;
+    const populatedStory = (await Story.findById(story._id).populate('user', 'userName gender profilePic')) as unknown as StoryLean | null;
     if (!populatedStory) {
       res.status(500).json({ error: 'Failed to create story' });
       return;
@@ -275,7 +275,7 @@ export const getStories = async (
     const activeStories = (await Story.find({ expiresAt: { $gt: now } })
       .populate('user', 'userName gender profilePic')
       .sort({ createdAt: 1 })
-      .lean()) as StoryLean[];
+      .lean()) as unknown as StoryLean[];
 
     const storyIds = activeStories.map((story) => story._id);
     const viewDocs = await StoryView.find({
@@ -345,7 +345,7 @@ export const getStory = async (
 
     const story = (await Story.findOne({ _id: storyId, expiresAt: { $gt: new Date() } })
       .populate('user', 'userName gender profilePic')
-      .lean()) as StoryLean | null;
+      .lean()) as unknown as StoryLean | null;
 
     if (!story) {
       res.status(404).json({ error: 'Story not found' });
