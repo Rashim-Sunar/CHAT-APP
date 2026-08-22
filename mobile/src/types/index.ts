@@ -4,6 +4,8 @@
 export type Gender = "male" | "female" | "others";
 export type MessageType = "text" | "image" | "video" | "file" | "call_log";
 export type CallType = "audio" | "video";
+export type StoryType = "image" | "video" | "text";
+export type StoryPrivacy = "everyone" | "close_friends";
 
 export interface User {
   _id: string;
@@ -119,6 +121,74 @@ export interface SharedContentResponse {
   documents: { name: string; url: string; size?: number; createdAt: string }[];
 }
 
+export interface StoryUser {
+  _id: string;
+  userName: string;
+  gender: Gender;
+  profilePic?: string;
+}
+
+export interface StoryItem {
+  _id: string;
+  userId: string;
+  user: StoryUser;
+  type: StoryType;
+  mediaUrl?: string | null;
+  publicId?: string | null;
+  fileName?: string | null;
+  fileSize?: number | null;
+  mimeType?: string | null;
+  caption?: string;
+  text?: string;
+  textAlign?: "left" | "center" | "right";
+  background?: string;
+  privacy: StoryPrivacy;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+  viewedByMe: boolean;
+  isOwn: boolean;
+}
+
+export interface StoryGroup {
+  user: StoryUser;
+  stories: StoryItem[];
+  hasUnseenStory: boolean;
+  latestStoryAt: string;
+}
+
+export interface StoriesResponse {
+  status: string;
+  data?: {
+    stories: StoryGroup[];
+  };
+}
+
+export interface StoryCreatePayload {
+  type: StoryType;
+  caption?: string;
+  text?: string;
+  textAlign?: "left" | "center" | "right";
+  background?: string;
+  privacy?: StoryPrivacy;
+  mediaUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  publicId?: string;
+}
+
+export interface StoryUploadSignatureResponse {
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  publicId: string;
+  resourceType: "image" | "video";
+  accessMode?: string;
+  maxFileSizeBytes?: number;
+}
+
 export interface EncryptedLinkedSecret {
   encryptedPayload: string;
   encryptedAesKey: string;
@@ -194,6 +264,9 @@ export interface ServerToClientEvents {
   "conversation:membersAdded": (payload: { conversationId: string; addedUserIds: string[] }) => void;
   "conversation:memberRemoved": (payload: { conversationId: string; userId: string }) => void;
   "conversation:updated": (payload: { conversationId: string }) => void;
+  "story:created": (payload: { storyId: string; userId: string }) => void;
+  "story:viewed": (payload: { storyId: string; viewerId: string }) => void;
+  "story:deleted": (payload: { storyId: string; userId: string }) => void;
   link_request: (payload: LinkRequestEventPayload) => void;
   link_session_updated: (payload: LinkSessionUpdatedEventPayload) => void;
   link_secret_ready: (payload: LinkSecretReadyEventPayload) => void;
@@ -225,6 +298,7 @@ export interface ServerToClientEvents {
 export interface ClientToServerEvents {
   connect_error: (error: Error) => void;
   "conversation:seen": (payload: { conversationId: string; readerId: string }) => void;
+  "story:viewed": (payload: { storyId: string }) => void;
   "call:invite": (payload: { conversationId: string; callType: CallType }) => void;
   "call:start": (payload: { conversationId: string; callType: CallType }) => void;
   "call:join": (payload: { conversationId: string; callType: CallType }) => void;

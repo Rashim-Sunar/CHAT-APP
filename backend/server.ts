@@ -14,6 +14,7 @@ import userRouter from './routes/userRouter.js';
 import linkSessionRouter from './routes/linkSessionRouter.js';
 import backupRouter from './routes/backupRouter.js';
 import conversationRouter from './routes/conversationRouter.js';
+import storiesRouter from './routes/storiesRouter.js';
 import connectToDB from './db/connectdb.js';
 import cookieParser from 'cookie-parser';
 import { app, server } from './socket/socket.js';
@@ -64,6 +65,7 @@ app.use('/api/user/', protectRoute, apiLimiter, userRouter);
 app.use('/api/link-session/', protectRoute, apiLimiter, linkSessionRouter);
 app.use('/api/backup/', protectRoute, apiLimiter, backupRouter);
 app.use('/api/conversations/', protectRoute, apiLimiter, conversationRouter);
+app.use('/api/stories/', protectRoute, apiLimiter, storiesRouter);
 
 // ----------------------------------------
 // Server Initialization

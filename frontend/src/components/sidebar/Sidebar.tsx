@@ -33,9 +33,12 @@ import UserProfileControl from "./UserProfileControl";
 import NewConversationMenu from "./NewConversationMenu";
 import ConversationFilterTabs, { type ConversationFilterKey } from "./ConversationFilterTabs";
 import Avatar from "../common/Avatar";
+import useConversation from "../../zustand/useConversation";
+import StoriesSection from "../stories/StoriesSection";
 
 const Sidebar = () => {
   const { authUser } = useAuthContext();
+  const { setSelectedConversation } = useConversation();
   const { logout } = useLogout();
   const { updateName, updateProfilePicture, deleteProfilePicture } = useUserProfile();
   const [desktopProfileOpen, setDesktopProfileOpen] = useState(false);
@@ -56,7 +59,14 @@ const Sidebar = () => {
       {!desktopProfileOpen ? (
         <>
           <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-slate-800">Chats</h2>
+            <button
+              type="button"
+              onClick={() => setSelectedConversation(null, user?._id)}
+              className="text-xl font-semibold text-slate-800 text-left"
+              aria-label="Return to chats landing page"
+            >
+              Chats
+            </button>
             <NewConversationMenu />
           </div>
 
@@ -64,6 +74,8 @@ const Sidebar = () => {
             <SearchInput />
             <ConversationFilterTabs active={conversationFilter} onChange={setConversationFilter} />
           </div>
+
+          <StoriesSection />
 
           <div className="flex-1 overflow-y-auto sidebar-scroll">
             <Conversations filter={conversationFilter} />
