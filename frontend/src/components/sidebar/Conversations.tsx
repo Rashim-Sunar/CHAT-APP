@@ -6,6 +6,7 @@ import type { ConversationFilterKey } from "./ConversationFilterTabs";
 
 interface ConversationsProps {
   filter: ConversationFilterKey;
+  search?: string;
 }
 
 const EMPTY_STATE_TEXT: Record<ConversationFilterKey, string> = {
@@ -15,22 +16,30 @@ const EMPTY_STATE_TEXT: Record<ConversationFilterKey, string> = {
   groups: "No groups yet",
 };
 
-const Conversations = ({ filter }: ConversationsProps) => {
+const Conversations = ({ filter, search = "" }: ConversationsProps) => {
   const { loading, conversations } = useGetConversations();
   const unreadByConversation = useConversation((state) => state.unreadByConversation);
 
   const filteredConversations = useMemo(() => {
+    let result = conversations;
+
+    if (search.trim()) {
+      result = result.filter((c) =>
+        c.displayName.toLowerCase().includes(search.toLowerCase())
+      );
+    }
+
     switch (filter) {
       case "people":
-        return conversations.filter((conversation) => conversation.type === "direct");
+        return result.filter((conversation) => conversation.type === "direct");
       case "groups":
-        return conversations.filter((conversation) => conversation.type === "group");
+        return result.filter((conversation) => conversation.type === "group");
       case "unread":
-        return conversations.filter((conversation) => (unreadByConversation[conversation._id] || 0) > 0);
+        return result.filter((conversation) => (unreadByConversation[conversation._id] || 0) > 0);
       default:
-        return conversations;
+        return result;
     }
-  }, [conversations, filter, unreadByConversation]);
+  }, [conversations, filter, search, unreadByConversation]);
 
   return (
     <div className="divide-y divide-slate-100">

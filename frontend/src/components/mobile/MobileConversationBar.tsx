@@ -9,34 +9,29 @@ import {
   BiX,
 } from "react-icons/bi";
 import useConversation from "../../zustand/useConversation";
-import useGetConversations from "../../hooks/useGetConversations";
 import { useAuthContext } from "../../context/Auth-Context";
 import useLogout from "../../hooks/useLogout";
 import useUserProfile from "../../hooks/useUserProfile";
 import ProfileModal from "../sidebar/ProfileModal";
 import NewConversationMenu from "../sidebar/NewConversationMenu";
 import Avatar from "../common/Avatar";
-import { getOtherParticipant } from "../../Utils/conversationDisplay";
 import StoriesSection from "../stories/StoriesSection";
+import ConversationFilterTabs, { type ConversationFilterKey } from "../sidebar/ConversationFilterTabs";
+import Conversations from "../sidebar/Conversations";
 
 const MobileConversationBar = () => {
-  const { conversations } = useGetConversations();
-  const { selectedConversation, setSelectedConversation } = useConversation();
+  const { selectedConversation } = useConversation();
   const { authUser } = useAuthContext();
   const { logout } = useLogout();
   const currentUser = authUser?.data?.user;
-  const currentUserId = authUser?.data?.user?._id;
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"view" | "edit-name" | "upload">("view");
   const { updateName, updateProfilePicture, deleteProfilePicture } = useUserProfile();
 
   const [search, setSearch] = useState("");
-  const activeConversationId = selectedConversation?._id;
-
-  const filteredConversations = conversations.filter((conversation) =>
-    conversation.displayName.toLowerCase().includes(search.toLowerCase())
-  );
+  const [conversationFilter, setConversationFilter] = useState<ConversationFilterKey>("all");
 
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
     setSearch(event.target.value);
@@ -64,7 +59,7 @@ const MobileConversationBar = () => {
   if (selectedConversation) return null;
 
   return (
-    <div className="bg-white">
+    <div className="bg-white flex flex-col h-full">
       <div className="px-4 pt-4 pb-2">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-sm font-bold tracking-[0.08em] text-slate-800 uppercase">
@@ -105,42 +100,18 @@ const MobileConversationBar = () => {
           />
           <IoSearchSharp className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
         </div>
+
+        <div className="mt-2">
+          <ConversationFilterTabs active={conversationFilter} onChange={setConversationFilter} />
+        </div>
       </div>
 
       <div className="border-t border-slate-100">
         <StoriesSection />
       </div>
 
-      <div className="flex overflow-x-auto px-4 pb-4 gap-4 no-scrollbar">
-        {filteredConversations.map((conversation) => {
-          const isSelected = activeConversationId === conversation._id;
-
-          return (
-            <div
-              key={conversation._id}
-              onClick={() => setSelectedConversation(conversation, currentUserId)}
-              className="flex flex-col items-center cursor-pointer min-w-[65px]"
-            >
-              <div
-                className={`w-14 h-14 rounded-full overflow-hidden border-2
-                  ${isSelected ? "border-indigo-600" : "border-transparent"}`}
-              >
-                <Avatar
-                  src={conversation.displayAvatar}
-                  gender={getOtherParticipant(conversation, currentUserId)?.gender}
-                  name={conversation.displayName}
-                  alt="avatar"
-                  className="w-full h-full object-cover"
-                  kind={conversation.type === "group" ? "group" : "user"}
-                />
-              </div>
-
-              <span className="text-xs mt-1 truncate w-full text-center text-slate-600">
-                {conversation.displayName}
-              </span>
-            </div>
-          );
-        })}
+      <div className="flex-1 overflow-y-auto">
+        <Conversations filter={conversationFilter} search={search} />
       </div>
 
       {menuOpen ? (

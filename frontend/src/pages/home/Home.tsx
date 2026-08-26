@@ -17,7 +17,7 @@ const Home = () => {
 
   return (
     <div className="h-dvh w-full bg-slate-100 flex flex-col md:flex-row overflow-hidden">
-      <div className="md:hidden border-b border-slate-200 bg-white shrink-0">
+      <div className="md:hidden flex-1 overflow-hidden bg-white">
         <MobileConversationBar />
       </div>
 
