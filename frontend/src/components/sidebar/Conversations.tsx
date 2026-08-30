@@ -17,7 +17,7 @@ const EMPTY_STATE_TEXT: Record<ConversationFilterKey, string> = {
 };
 
 const Conversations = ({ filter, search = "" }: ConversationsProps) => {
-  const { loading, conversations } = useGetConversations();
+  const { loading, conversations } = useGetConversations({ autoFetch: true });
   const unreadByConversation = useConversation((state) => state.unreadByConversation);
 
   const filteredConversations = useMemo(() => {

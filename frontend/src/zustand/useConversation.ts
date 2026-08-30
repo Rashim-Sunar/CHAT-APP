@@ -104,6 +104,7 @@ const useConversation = create<ConversationState>()((set, get) => ({
   conversations: [],
   messagesByConversation: {},
   unreadByConversation: {},
+  hasMoreByConversation: {},
   uploadQueue: [],
   detailsRefreshVersion: 0,
   replyTarget: null,
@@ -189,6 +190,28 @@ const useConversation = create<ConversationState>()((set, get) => ({
       messagesByConversation: {
         ...state.messagesByConversation,
         [conversationKey]: dedupeMessages(messages),
+      },
+    })),
+
+  // Older pages land at the front of the list. Dedup keeps a socket-delivered
+  // message that also appears in the fetched page from rendering twice.
+  prependMessagesToConversation: (conversationKey, messages) =>
+    set((state) => {
+      const currentMessages = state.messagesByConversation[conversationKey] || [];
+
+      return {
+        messagesByConversation: {
+          ...state.messagesByConversation,
+          [conversationKey]: dedupeMessages([...messages, ...currentMessages]),
+        },
+      };
+    }),
+
+  setHasMore: (conversationKey, hasMore) =>
+    set((state) => ({
+      hasMoreByConversation: {
+        ...state.hasMoreByConversation,
+        [conversationKey]: hasMore,
       },
     })),
 
@@ -310,6 +333,7 @@ const useConversation = create<ConversationState>()((set, get) => ({
       conversations: [],
       messagesByConversation: {},
       unreadByConversation: {},
+      hasMoreByConversation: {},
       uploadQueue: [],
       detailsRefreshVersion: 0,
       replyTarget: null,

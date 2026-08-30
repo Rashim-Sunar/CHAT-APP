@@ -17,51 +17,69 @@ interface ConversationsResponse {
   };
 }
 
+interface UseGetConversationsOptions {
+  // Only the sidebar list should load on mount. Other callers (message
+  // input, details panel, socket listener) only need refetch — auto-fetching
+  // in each of those remounts a GET /conversations storm when opening a chat.
+  autoFetch?: boolean;
+}
+
+// Shared across every hook instance so two consumers in the same tick
+// (desktop sidebar + hidden mobile list) don't fire duplicate requests.
+let inFlightFetch: Promise<void> | null = null;
+
 /**
  * Load the sidebar conversation list once and expose a local loading flag.
  * Side effects: performs a GET request, updates the shared conversation store,
  * and surfaces failures through toast notifications.
  *
- * @returns {{ loading: boolean; conversations: Conversation[] }} Current fetch state and cached conversations.
+ * @returns {{ loading: boolean; conversations: Conversation[]; refetch: () => Promise<void> }}
  */
-const useGetConversations = () => {
+const useGetConversations = ({ autoFetch = false }: UseGetConversationsOptions = {}) => {
   const [loading, setLoading] = useState(false);
   const { authUser } = useAuthContext();
-  const { conversations, setConversations, hydrateUnreadFromConversations } = useConversation();
+  const conversations = useConversation((state) => state.conversations);
   const currentUserId = authUser?.data?.user?._id;
 
   const fetchConversations = useCallback(async () => {
     if (!currentUserId) return;
+    if (inFlightFetch) return inFlightFetch;
 
-    setLoading(true);
-    try {
-      const response = await apiFetch<ConversationsResponse>("/conversations", {
-        method: "GET",
-      });
-      if (response.error) {
-        throw new Error(response.error);
+    inFlightFetch = (async () => {
+      setLoading(true);
+      try {
+        const response = await apiFetch<ConversationsResponse>("/conversations", {
+          method: "GET",
+        });
+        if (response.error) {
+          throw new Error(response.error);
+        }
+
+        const conversationsArray = response?.data?.conversations || [];
+        // E2EE keeps the backend blind, so encrypted text often arrives as a
+        // generic sidebar preview. Merge local cache to restore sender-side text.
+        const hydratedConversations = mergeConversationPreviewsFromCache(
+          conversationsArray,
+          currentUserId
+        );
+        const { setConversations, hydrateUnreadFromConversations } = useConversation.getState();
+        setConversations(hydratedConversations);
+        hydrateUnreadFromConversations(hydratedConversations, currentUserId);
+      } catch (error: unknown) {
+        showFetchErrorToast(error, "get-conversations-error");
+      } finally {
+        setLoading(false);
+        inFlightFetch = null;
       }
+    })();
 
-      const conversationsArray = response?.data?.conversations || [];
-      // E2EE keeps the backend blind, so encrypted text often arrives as a
-      // generic sidebar preview. Merge local cache to restore sender-side text.
-      const hydratedConversations = mergeConversationPreviewsFromCache(
-        conversationsArray,
-        currentUserId
-      );
-      setConversations(hydratedConversations);
-      hydrateUnreadFromConversations(hydratedConversations, currentUserId);
-    } catch (error: unknown) {
-      showFetchErrorToast(error, "get-conversations-error");
-    } finally {
-      setLoading(false);
-    }
-  }, [currentUserId, setConversations, hydrateUnreadFromConversations]);
+    return inFlightFetch;
+  }, [currentUserId]);
 
   useEffect(() => {
-    // Re-fetch on authenticated user changes so offline messages appear after login.
+    if (!autoFetch) return;
     void fetchConversations();
-  }, [fetchConversations]);
+  }, [autoFetch, fetchConversations]);
 
   return { loading, conversations, refetch: fetchConversations };
 };
