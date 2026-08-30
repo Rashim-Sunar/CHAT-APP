@@ -94,6 +94,8 @@ const useListenMessages = () => {
             ? "Sent an image"
             : hydratedMessage.messageType === "video"
               ? "Sent a video"
+              : hydratedMessage.messageType === "audio"
+                ? "Sent a voice message"
               : hydratedMessage.messageType === "file"
                 ? "Sent a file"
                 : hydratedMessage.messageType === "call_log"

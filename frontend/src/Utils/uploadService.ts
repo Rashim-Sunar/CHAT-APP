@@ -122,7 +122,13 @@ export const uploadFilesToCloudinary = async ({
     return {
       file,
       messageType: (
-        resourceType === "image" ? "image" : resourceType === "video" ? "video" : "file"
+        resourceType === "image"
+          ? "image"
+          : file.type.startsWith("audio/")
+            ? "audio"
+            : resourceType === "video"
+              ? "video"
+              : "file"
       ) as SendMessagePayload["messageType"],
       fileUrl: cloudinaryResult.secure_url,
       publicId: cloudinaryResult.public_id,

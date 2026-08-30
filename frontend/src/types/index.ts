@@ -5,7 +5,7 @@ export type Gender = "male" | "female" | "others";
 // "call_log" is a system message (no sender-authored content) summarizing a
 // finished call — distinct from "video", which is an uploaded video FILE
 // message. Do not conflate the two.
-export type MessageType = "text" | "image" | "video" | "file" | "call_log";
+export type MessageType = "text" | "image" | "video" | "audio" | "file" | "call_log";
 export type ResourceType = "image" | "video" | "raw";
 export type CallType = "audio" | "video";
 export type CallStatus = "missed" | "declined" | "ended";

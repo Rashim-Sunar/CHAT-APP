@@ -16,6 +16,7 @@ export const getMessageBodyText = (message: Message): string => {
 
   if (message.messageType === "image") return "Photo";
   if (message.messageType === "video") return "Video";
+  if (message.messageType === "audio") return "Voice message";
   if (message.messageType === "file") return message.fileName || "File";
   if (message.messageType === "call_log") return getCallLogLabel(message);
 
@@ -29,6 +30,7 @@ export const getMessagePreviewText = (message: Message): string => {
 
   if (message.messageType === "image") return "Photo";
   if (message.messageType === "video") return "Video";
+  if (message.messageType === "audio") return "Voice message";
   if (message.messageType === "file") return message.fileName || "File";
   if (message.messageType === "call_log") return getCallLogLabel(message);
 

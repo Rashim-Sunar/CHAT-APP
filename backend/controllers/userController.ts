@@ -15,7 +15,7 @@ import { getCloudinary } from '../Utils/cloudinary.js';
 
 type SidebarMessageAggregate = {
   _id: mongoose.Types.ObjectId;
-  lastMessageType?: 'text' | 'image' | 'video' | 'file';
+  lastMessageType?: 'text' | 'image' | 'video' | 'audio' | 'file';
   lastText?: string;
   lastEncryptedMessage?: string;
   lastFileName?: string;
@@ -31,7 +31,7 @@ type SidebarConversationRecord = {
   messages: Array<{
     senderId: mongoose.Types.ObjectId | string;
     receiverId: mongoose.Types.ObjectId | string;
-    messageType: 'text' | 'image' | 'video' | 'file';
+    messageType: 'text' | 'image' | 'video' | 'audio' | 'file';
     text?: string;
     encryptedMessage?: string;
     fileName?: string;
@@ -76,6 +76,7 @@ const getSidebarMessagePreview = (
 
   if (summary.lastMessageType === 'image') return 'Sent an image';
   if (summary.lastMessageType === 'video') return 'Sent a video';
+  if (summary.lastMessageType === 'audio') return 'Sent a voice message';
   if (summary.lastMessageType === 'file') return summary.lastFileName || 'Sent a file';
 
   return '';
@@ -114,6 +115,7 @@ const getSidebarPreviewText = (
 
   if (message.messageType === 'image') return 'Sent an image';
   if (message.messageType === 'video') return 'Sent a video';
+  if (message.messageType === 'audio') return 'Sent a voice message';
   if (message.messageType === 'file') return message.fileName || 'Sent a file';
 
   return '';

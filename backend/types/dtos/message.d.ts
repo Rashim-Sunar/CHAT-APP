@@ -3,7 +3,7 @@
 // @desc   Defines DTOs for message-related operations
 // ----------------------------------------
 
-export type MessageType = 'text' | 'image' | 'video' | 'file';
+export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'file';
 
 /**
  * @desc    Data required to send either a text or media message

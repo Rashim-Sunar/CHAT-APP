@@ -51,7 +51,7 @@ export type RealtimeMessagePayload = {
   // participants instead (see messageController.ts).
   receiverId: string | null;
   conversationId: string;
-  messageType: 'text' | 'image' | 'video' | 'file' | 'call_log';
+  messageType: 'text' | 'image' | 'video' | 'audio' | 'file' | 'call_log';
   text: string;
   message: string;
   encryptedMessage: string | null;
@@ -92,9 +92,10 @@ export const isCloudinaryUrl = (url: string): boolean => {
 };
 
 // Resource path fragments expected for each media type in Cloudinary delivery URLs.
-const cloudinaryPathByType: Record<'image' | 'video' | 'file', string> = {
+const cloudinaryPathByType: Record<'image' | 'video' | 'audio' | 'file', string> = {
   image: '/image/upload/',
   video: '/video/upload/',
+  audio: '/video/upload/',
   file: '/raw/upload/',
 };
 
@@ -102,7 +103,7 @@ const cloudinaryPathByType: Record<'image' | 'video' | 'file', string> = {
 // Example: a "video" message must resolve to /video/upload/.
 export const isCloudinaryPathValidForType = (
   url: string,
-  messageType: 'image' | 'video' | 'file'
+  messageType: 'image' | 'video' | 'audio' | 'file'
 ): boolean => {
   try {
     const parsed = new URL(url);
@@ -358,10 +359,8 @@ const deleteCloudinaryAsset = async (message: MessageDocument): Promise<void> =>
   if (!publicId) return;
 
   const cloudinary = getCloudinary();
-  const resourceType =
-    message.messageType === 'image' || message.messageType === 'video'
-      ? message.messageType
-      : 'raw';
+  const resourceType = message.messageType === 'image' ? 'image' :
+    message.messageType === 'video' || message.messageType === 'audio' ? 'video' : 'raw';
 
   await cloudinary.uploader.destroy(publicId, {
     resource_type: resourceType,
@@ -461,7 +460,7 @@ export const createFileDeliveryUrl = async (
     // Raw files are the common case for PDFs and office documents, but this
     // helper also supports other restricted assets when the upload or delivery
     // policy requires a signed URL instead of a public CDN path.
-    const resourceType = messageType === 'image' || messageType === 'video' ? messageType : 'raw';
+    const resourceType = messageType === 'image' ? 'image' : messageType === 'video' || messageType === 'audio' ? 'video' : 'raw';
 
     const signedUrl = cloudinary.utils.private_download_url(publicId, format, {
       resource_type: resourceType,

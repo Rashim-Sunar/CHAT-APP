@@ -118,6 +118,8 @@ const Message = ({ message, isGroupStart = true, isGroupEnd = true }: MessagePro
         ? "Photo"
         : repliedMessage.messageType === "video"
           ? "Video"
+          : repliedMessage.messageType === "audio"
+            ? "Voice message"
           : repliedMessage.messageType === "file"
             ? repliedMessage.fileName || "File"
             : getMessageBodyText(repliedMessage);
@@ -291,6 +293,21 @@ const Message = ({ message, isGroupStart = true, isGroupEnd = true }: MessagePro
         <video controls className="max-h-72 rounded-xl">
           <source src={message.fileUrl} type={message.mimeType || "video/mp4"} />
         </video>
+      );
+    }
+
+    if (message.messageType === "audio" && message.fileUrl) {
+      const bubbleClass = fromMe
+        ? `bg-indigo-600 text-white ${isGroupEnd ? "rounded-br-none" : ""}`
+        : `bg-white text-slate-800 ${isGroupEnd ? "rounded-bl-none" : ""}`;
+
+      return (
+        <div className={`min-w-[220px] rounded-2xl px-3 py-2 shadow-sm ${bubbleClass}`}>
+          <p className={`mb-1 text-xs font-medium ${fromMe ? "text-indigo-100" : "text-slate-500"}`}>Voice message</p>
+          <audio controls preload="metadata" className="h-9 w-full max-w-[300px]" aria-label="Voice message">
+            <source src={message.fileUrl} type={message.mimeType || "audio/webm"} />
+          </audio>
+        </div>
       );
     }
 
