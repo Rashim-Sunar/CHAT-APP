@@ -149,6 +149,7 @@ const getPreviewText = (message: {
   }
   if (message.messageType === 'image') return 'Sent an image';
   if (message.messageType === 'video') return 'Sent a video';
+  if (message.messageType === 'audio') return 'Sent a voice message';
   if (message.messageType === 'file') return message.fileName || 'Sent a file';
   if (message.messageType === 'call_log') {
     const callLabel = message.callType === 'video' ? 'Video call' : 'Voice call';

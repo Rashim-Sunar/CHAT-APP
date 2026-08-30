@@ -19,6 +19,15 @@ const VIDEO_MIME_TYPES = new Set([
   'video/x-matroska',
 ]);
 
+const AUDIO_MIME_TYPES = new Set([
+  'audio/webm',
+  'audio/ogg',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/wav',
+  'audio/x-wav',
+]);
+
 const FILE_MIME_TYPES = new Set([
   'application/pdf',
   'application/msword',
@@ -31,7 +40,7 @@ const FILE_MIME_TYPES = new Set([
   'application/zip',
 ]);
 
-export type MessageType = 'text' | 'image' | 'video' | 'file';
+export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'file';
 export type CloudinaryResourceType = 'image' | 'video' | 'raw';
 
 // Extension allow-list complements MIME checks and blocks disguised payloads.
@@ -46,6 +55,10 @@ const ALLOWED_EXTENSIONS = new Set([
   '.webm',
   '.mov',
   '.mkv',
+  '.mp3',
+  '.m4a',
+  '.ogg',
+  '.wav',
   '.pdf',
   '.doc',
   '.docx',
@@ -85,9 +98,11 @@ const isAllowedExtension = (fileName: string): boolean => {
 
 // Maps MIME type to application-level message type used by chat rendering logic.
 export const resolveMessageTypeFromMime = (mimeType: string): MessageType | null => {
-  if (IMAGE_MIME_TYPES.has(mimeType)) return 'image';
-  if (VIDEO_MIME_TYPES.has(mimeType)) return 'video';
-  if (FILE_MIME_TYPES.has(mimeType)) return 'file';
+  const normalizedMimeType = mimeType.split(';', 1)[0].trim().toLowerCase();
+  if (IMAGE_MIME_TYPES.has(normalizedMimeType)) return 'image';
+  if (VIDEO_MIME_TYPES.has(normalizedMimeType)) return 'video';
+  if (AUDIO_MIME_TYPES.has(normalizedMimeType)) return 'audio';
+  if (FILE_MIME_TYPES.has(normalizedMimeType)) return 'file';
   return null;
 };
 
@@ -97,6 +112,8 @@ export const resolveCloudinaryResourceType = (mimeType: string): CloudinaryResou
 
   if (messageType === 'image') return 'image';
   if (messageType === 'video') return 'video';
+  // Cloudinary handles audio through its video resource type.
+  if (messageType === 'audio') return 'video';
   if (messageType === 'file') return 'raw';
 
   return null;

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { BsFillSendFill } from "react-icons/bs";
-import { FiImage, FiFileText, FiVideo, FiPlay, FiX, FiAlertCircle, FiCheck, FiCornerUpLeft } from "react-icons/fi";
+import { FiPaperclip, FiImage, FiFilm, FiFileText, FiPlay, FiX, FiAlertCircle, FiCheck, FiCornerUpLeft, FiMic, FiSquare } from "react-icons/fi";
 import { BiBlock } from "react-icons/bi";
 import useSendMessage from "../../hooks/useSendMessage";
 import useConversation from "../../zustand/useConversation";
@@ -56,6 +56,41 @@ const MessageInput = () => {
   const [message, setMessage] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUnblocking, setIsUnblocking] = useState(false);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const attachMenuRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const discardRecordingRef = useRef(false);
+  const recordingReplyToRef = useRef<string | undefined>();
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+
+  // Close the attach dropdown when the user clicks outside it
+  useEffect(() => {
+    if (!attachMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (attachMenuRef.current && !attachMenuRef.current.contains(e.target as Node)) {
+        setAttachMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [attachMenuOpen]);
+
+  useEffect(() => {
+    if (!isRecording) return;
+    const timer = window.setInterval(() => setRecordingSeconds((seconds) => seconds + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [isRecording]);
+
+  useEffect(() => () => {
+    // Releasing the stream is important: otherwise an unmounted composer can
+    // leave the browser microphone indicator on.
+    discardRecordingRef.current = true;
+    if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
 
   const currentUserId = authUser?.data?.user?._id;
   const isBlocked = Boolean(selectedConversation?.isBlocked);
@@ -124,6 +159,63 @@ const MessageInput = () => {
     setSelectedFiles((current) => current.filter((file) => file.name !== targetName));
   };
 
+  const formatRecordingDuration = (seconds: number) =>
+    `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+
+  const stopRecording = (discard = false) => {
+    discardRecordingRef.current = discard;
+    const recorder = mediaRecorderRef.current;
+    if (recorder?.state === "recording") recorder.stop();
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+  };
+
+  const startRecording = async () => {
+    if (isBlocked || isRecording || loading) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      toast.error("Voice messages aren't supported in this browser");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferredMimeType = "audio/webm;codecs=opus";
+      const mimeType = MediaRecorder.isTypeSupported(preferredMimeType) ? preferredMimeType : "";
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+
+      recordingChunksRef.current = [];
+      discardRecordingRef.current = false;
+      recordingReplyToRef.current = replyTarget?._id;
+      recordingStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordingChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const actualMimeType = recorder.mimeType || "audio/webm";
+        const chunks = recordingChunksRef.current;
+        const shouldDiscard = discardRecordingRef.current || chunks.length === 0;
+        recordingChunksRef.current = [];
+        mediaRecorderRef.current = null;
+        recordingStreamRef.current = null;
+        setIsRecording(false);
+
+        if (shouldDiscard) return;
+
+        const extension = actualMimeType.includes("ogg") ? "ogg" : actualMimeType.includes("mp4") ? "m4a" : "webm";
+        const audioFile = new File([new Blob(chunks, { type: actualMimeType })], `voice-message-${Date.now()}.${extension}`, {
+          type: actualMimeType,
+        });
+        void sendFiles([audioFile], recordingReplyToRef.current);
+        setReplyTarget(null);
+      };
+      recorder.start();
+      setRecordingSeconds(0);
+      setIsRecording(true);
+    } catch (error: unknown) {
+      toast.error(error instanceof DOMException && error.name === "NotAllowedError" ? "Microphone permission was denied" : "Couldn't start recording");
+    }
+  };
+
   // Local object URLs for instant image/video thumbnails, revoked whenever the
   // selection changes so we don't leak memory while the user is composing.
   const filePreviews = useMemo(
@@ -156,6 +248,8 @@ const MessageInput = () => {
         ? "Photo"
         : replyTarget.messageType === "video"
           ? "Video"
+          : replyTarget.messageType === "audio"
+            ? "Voice message"
           : replyTarget.messageType === "file"
             ? replyTarget.fileName || "File"
             : getMessageBodyText(replyTarget)
@@ -323,6 +417,19 @@ const MessageInput = () => {
       )}
 
       <form onSubmit={handleSubmit} className="flex items-center gap-3">
+        {isRecording ? (
+          <div className="flex h-12 min-w-0 flex-1 items-center gap-3 rounded-full border border-rose-200 bg-rose-50 px-4 text-sm text-rose-700">
+            <span className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-rose-500" aria-hidden="true" />
+            <span className="font-medium">Recording {formatRecordingDuration(recordingSeconds)}</span>
+            <button
+              type="button"
+              onClick={() => stopRecording(true)}
+              className="ml-auto text-xs font-semibold text-slate-500 hover:text-rose-700"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
         <input
           type="text"
           placeholder="Type a message..."
@@ -332,27 +439,104 @@ const MessageInput = () => {
           value={message}
           onChange={(event) => setMessage(event.target.value)}
         />
+        )}
 
-        <label className="shrink-0 cursor-pointer text-slate-600 hover:text-indigo-600">
-          <FiImage size={20} />
-          <input type="file" className="hidden" accept="image/*" multiple onChange={handleFileSelection} />
-        </label>
+        {/* ── Attach button + upward dropdown ─────────────────────── */}
+        <div ref={attachMenuRef} className="relative shrink-0">
+          <button
+            id="attach-menu-btn"
+            type="button"
+            aria-label="Attach file"
+            aria-expanded={attachMenuOpen}
+            aria-haspopup="true"
+            onClick={() => setAttachMenuOpen((prev) => !prev)}
+            className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors duration-200 ${
+              attachMenuOpen
+                ? "bg-indigo-100 text-indigo-600"
+                : "text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
+            }`}
+          >
+            <FiPaperclip size={20} />
+          </button>
 
-        <label className="shrink-0 cursor-pointer text-slate-600 hover:text-indigo-600">
-          <FiVideo size={20} />
-          <input type="file" className="hidden" accept="video/*" multiple onChange={handleFileSelection} />
-        </label>
+          {attachMenuOpen && (
+            <div
+              role="menu"
+              aria-labelledby="attach-menu-btn"
+              className="absolute bottom-full right-0 mb-2 w-52 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl ring-1 ring-black/5"
+            >
+              {/* Photo */}
+              <label
+                role="menuitem"
+                className="flex cursor-pointer items-center gap-3 px-4 py-3 text-sm text-slate-700 transition-colors hover:bg-indigo-50 hover:text-indigo-700"
+                onClick={() => setAttachMenuOpen(false)}
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-500">
+                  <FiImage size={16} />
+                </span>
+                <span className="font-medium">Photo</span>
+                <input
+                  type="file"
+                  className="hidden"
+                  accept="image/*"
+                  multiple
+                  onChange={handleFileSelection}
+                />
+              </label>
 
-        <label className="shrink-0 cursor-pointer text-slate-600 hover:text-indigo-600">
-          <FiFileText size={20} />
-          <input
-            type="file"
-            className="hidden"
-            accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.zip"
-            multiple
-            onChange={handleFileSelection}
-          />
-        </label>
+              {/* Video */}
+              <label
+                role="menuitem"
+                className="flex cursor-pointer items-center gap-3 px-4 py-3 text-sm text-slate-700 transition-colors hover:bg-indigo-50 hover:text-indigo-700"
+                onClick={() => setAttachMenuOpen(false)}
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-500">
+                  <FiFilm size={16} />
+                </span>
+                <span className="font-medium">Video</span>
+                <input
+                  type="file"
+                  className="hidden"
+                  accept="video/*"
+                  multiple
+                  onChange={handleFileSelection}
+                />
+              </label>
+
+              {/* Document */}
+              <label
+                role="menuitem"
+                className="flex cursor-pointer items-center gap-3 px-4 py-3 text-sm text-slate-700 transition-colors hover:bg-indigo-50 hover:text-indigo-700"
+                onClick={() => setAttachMenuOpen(false)}
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-500">
+                  <FiFileText size={16} />
+                </span>
+                <span className="font-medium">Document</span>
+                <input
+                  type="file"
+                  className="hidden"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.zip"
+                  multiple
+                  onChange={handleFileSelection}
+                />
+              </label>
+            </div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={isRecording ? () => stopRecording() : () => void startRecording()}
+          disabled={loading}
+          aria-label={isRecording ? "Stop and send voice message" : "Record voice message"}
+          title={isRecording ? "Stop and send" : "Record voice message"}
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+            isRecording ? "bg-rose-500 text-white hover:bg-rose-600" : "text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
+          }`}
+        >
+          {isRecording ? <FiSquare size={16} /> : <FiMic size={20} />}
+        </button>
 
         <button
           type="submit"

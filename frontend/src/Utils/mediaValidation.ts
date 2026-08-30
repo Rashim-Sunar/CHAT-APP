@@ -18,6 +18,15 @@ const VIDEO_MIME_TYPES = new Set([
   "video/x-matroska",
 ]);
 
+const AUDIO_MIME_TYPES = new Set([
+  "audio/webm",
+  "audio/ogg",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/wav",
+  "audio/x-wav",
+]);
+
 const FILE_MIME_TYPES = new Set([
   "application/pdf",
   "application/msword",
@@ -33,9 +42,11 @@ const FILE_MIME_TYPES = new Set([
 // Map MIME types to the application-level message type used by the chat UI.
 export const resolveMessageTypeFromMime = (mimeType?: string | null): MessageType | null => {
   if (!mimeType) return null;
-  if (IMAGE_MIME_TYPES.has(mimeType)) return "image";
-  if (VIDEO_MIME_TYPES.has(mimeType)) return "video";
-  if (FILE_MIME_TYPES.has(mimeType)) return "file";
+  const normalizedMimeType = mimeType.split(";", 1)[0].trim().toLowerCase();
+  if (IMAGE_MIME_TYPES.has(normalizedMimeType)) return "image";
+  if (VIDEO_MIME_TYPES.has(normalizedMimeType)) return "video";
+  if (AUDIO_MIME_TYPES.has(normalizedMimeType)) return "audio";
+  if (FILE_MIME_TYPES.has(normalizedMimeType)) return "file";
   return null;
 };
 
@@ -45,6 +56,8 @@ export const resolveCloudinaryResourceType = (mimeType?: string | null): Resourc
 
   if (messageType === "image") return "image";
   if (messageType === "video") return "video";
+  // Cloudinary delivers audio assets through its video resource endpoint.
+  if (messageType === "audio") return "video";
   if (messageType === "file") return "raw";
 
   return null;

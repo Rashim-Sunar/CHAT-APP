@@ -8,7 +8,7 @@ import mongoose, { Document, Types } from 'mongoose';
 // 'call_log' is a system message (no sender-authored content) summarizing a
 // finished call — distinct from 'video', which is an uploaded video FILE
 // message. Do not conflate the two.
-export type MessageType = 'text' | 'image' | 'video' | 'file' | 'call_log';
+export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'file' | 'call_log';
 export type CallType = 'audio' | 'video';
 export type CallStatus = 'missed' | 'declined' | 'ended';
 
@@ -95,7 +95,7 @@ const messageSchema = new mongoose.Schema<IMessage>(
     },
     messageType: {
       type: String,
-      enum: ['text', 'image', 'video', 'file', 'call_log'],
+      enum: ['text', 'image', 'video', 'audio', 'file', 'call_log'],
       required: true,
     },
     text: {
