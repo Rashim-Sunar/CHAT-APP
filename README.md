@@ -10,6 +10,7 @@ This codebase demonstrates engineering depth across security, realtime architect
 - Secure multi-device key continuity through device linking and encrypted key backup
 - Practical system design with REST + WebSocket coordination, state reconciliation, and rate limiting
 - Production concerns including strict TypeScript, CORS/cookie hardening, error handling, and deploy-ready env setup
+- Full CI/CD pipeline: automated quality gates on every push, monorepo-aware path filtering, and Continuous Delivery to Render via deploy hooks with a GitHub Environment approval gate
 - Real user workflows covering messaging lifecycle, media delivery, read receipts, profile, and conversation UX
 
 ## Documentation Index
@@ -18,6 +19,7 @@ This codebase demonstrates engineering depth across security, realtime architect
 - [E2EE Device Linking and Login Gating](E2EE-DEVICE-LINKING.README.md)
 - [E2EE Encrypted Key Backup and Recovery](E2EE-BACKUP.README.md)
 - [Docker Usage](DOCKER.README.md)
+- [CI/CD Pipeline](#cicd-pipeline)
 
 ## Security Highlights (Key Strength)
 
@@ -217,11 +219,67 @@ npm run build
 
 ## Deployment Notes
 
-- Designed for split frontend/backend deployment.
+- Designed for split frontend/backend deployment (backend Web Service + frontend Static Site / Web Service on Render).
 - Render-friendly backend setup with proxy-aware cookie behavior.
 - For cross-domain frontend/backend:
   - keep credentials enabled on client fetch
   - ensure frontend origin is included in CLIENT_ORIGINS
+- Deployments are driven by the CD pipeline — no manual dashboard clicks required after initial service setup.
+
+## CI/CD Pipeline
+
+The project ships a two-workflow GitHub Actions pipeline:
+
+### CI (`ci.yml`) — runs on every push and pull request to `master`
+
+| Job | What it does |
+|---|---|
+| Detect Changes | Path-filters the diff so only affected services run downstream jobs |
+| Frontend / Lint | `npm run lint` via ESLint |
+| Frontend / Build | `tsc` + `vite build` — catches type errors and bundle failures |
+| Backend / Build | `tsc` compile — catches type errors before deploy |
+| Backend / Security Audit | `npm audit --audit-level=high` — flags high-severity CVEs |
+| PR Report | Posts a structured check summary as a PR comment (auto-updates on re-push) |
+
+All jobs are path-filtered: a frontend-only change skips all backend jobs and vice versa.
+The `concurrency` block cancels stale in-progress runs when a new push arrives on the same branch.
+
+### CD (`cd.yml`) — runs on push to `master` only
+
+Continuous Delivery (not raw auto-deploy): every production deploy requires a one-click approval from a designated reviewer before it goes live.
+
+```
+git push master
+      │
+      ▼
+  CI workflow — lint / build / audit
+      │
+      ▼
+  CD workflow — detects which service changed
+  ├── deploy-backend  ──► ⏸  Awaiting approval (GitHub Environment: production)
+  └── deploy-frontend ──► ⏸  Awaiting approval (GitHub Environment: production)
+            │  (reviewer clicks ✅ Approve)
+            ▼
+      POST Render Deploy Hook URL
+            │
+            ▼
+      Render rebuilds + redeploys service ✅
+```
+
+**Key design decisions:**
+
+- **Deploy hooks over registry push** — Render rebuilds directly from the repo; no Docker registry credentials are stored in GitHub.
+- **GitHub Environment protection** — the `production` environment requires a named reviewer, providing an explicit change-management gate before any code reaches users.
+- **Monorepo path filtering** — `cd.yml` detects which service changed using the same git-diff approach as CI, so a frontend-only commit never triggers a backend redeploy and vice versa.
+- **`cancel-in-progress` concurrency** — rapid successive pushes cancel the previous CD run, preventing stale deploys from racing ahead.
+- **Job summaries** — each deploy job writes a structured summary (commit SHA, author, timestamp) to the GitHub Actions run for audit-trail observability.
+
+**Secrets required (GitHub → Settings → Secrets → Actions):**
+
+| Secret | Value |
+|---|---|
+| `RENDER_BACKEND_DEPLOY_HOOK_URL` | Deploy hook URL from the Render backend service |
+| `RENDER_FRONTEND_DEPLOY_HOOK_URL` | Deploy hook URL from the Render frontend service |
 
 ## Repository Structure
 
@@ -250,6 +308,10 @@ CHAT_APP/
 |  |- public/
 |  |- Dockerfile
 |  |- nginx.conf
+|- .github/
+|  |- workflows/
+|  |  |- ci.yml         # Lint, build, audit — runs on every push + PR
+|  |  |- cd.yml         # Continuous Delivery to Render via deploy hooks
 |- docker-compose.yml
 |- docker-compose.prod.yml
 |- E2EE.README.md
