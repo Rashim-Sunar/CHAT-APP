@@ -333,6 +333,7 @@ export interface ConversationState {
   conversations: Conversation[];
   messagesByConversation: Record<string, Message[]>;
   unreadByConversation: Record<string, number>;
+  hasMoreByConversation: Record<string, boolean>;
   uploadQueue: UploadJob[];
   detailsRefreshVersion: number;
   replyTarget: Message | null;
@@ -343,6 +344,7 @@ export interface ConversationState {
   ) => void;
   setConversations: (conversations: Conversation[]) => void;
   setMessagesForConversation: (conversationKey: string, messages: Message[]) => void;
+  prependMessagesToConversation: (conversationKey: string, messages: Message[]) => void;
   appendMessageToConversation: (conversationKey: string, newMessage: Message) => void;
   updateMessageInConversation: (
     conversationKey: string,
@@ -356,6 +358,7 @@ export interface ConversationState {
   upsertConversationFromMessage: (incomingMessage: Message, currentUserId: string) => void;
   getMessagesForConversation: (conversationKey: string) => Message[];
   resetConversationState: () => void;
+  setHasMore: (conversationKey: string, hasMore: boolean) => void;
   hydrateUnreadFromConversations: (conversations: Conversation[], currentUserId?: string) => void;
   markConversationSeen: (
     conversationId: string,

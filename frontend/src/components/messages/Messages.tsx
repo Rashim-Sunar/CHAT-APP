@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import Message from "./Message";
 import CallLogMessage from "./CallLogMessage";
 import useGetMessages from "../../hooks/useGetMessages";
@@ -26,10 +26,17 @@ const DateDivider = ({ label }: { label: string }) => (
   </div>
 );
 
+const getScrollContainer = (from: HTMLElement | null): HTMLElement | null =>
+  from?.closest("[data-messages-scroll-container]") ?? null;
+
 const Messages = () => {
-  const { loading, messages } = useGetMessages();
+  const { loading, loadingMore, messages, hasMore, loadMore } = useGetMessages();
   const { selectedConversation } = useConversation();
   const lastMessageRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const pendingScrollHeightRef = useRef<number | null>(null);
+  const skipScrollToBottomRef = useRef(false);
   const { authUser } = useAuthContext();
   const currentUserId = authUser?.data?.user?._id;
 
@@ -38,12 +45,29 @@ const Messages = () => {
   const conversationId = selectedConversation?._id;
   const previousConversationIdRef = useRef<string | undefined>(undefined);
   const previousMessageCountRef = useRef(0);
+  const oldestMessageId = messages.find((message) => message._id)?._id;
+
+  useLayoutEffect(() => {
+    const previousScrollHeight = pendingScrollHeightRef.current;
+    if (previousScrollHeight == null) return;
+
+    pendingScrollHeightRef.current = null;
+    const scrollContainer = getScrollContainer(listRef.current);
+    if (!scrollContainer) return;
+
+    scrollContainer.scrollTop += scrollContainer.scrollHeight - previousScrollHeight;
+  }, [messages]);
 
   useEffect(() => {
     const conversationChanged = conversationId !== previousConversationIdRef.current;
     const messageCountIncreased = visibleMessages.length > previousMessageCountRef.current;
     previousConversationIdRef.current = conversationId;
     previousMessageCountRef.current = visibleMessages.length;
+
+    if (skipScrollToBottomRef.current) {
+      skipScrollToBottomRef.current = false;
+      return;
+    }
 
     // An in-place edit/react/pin on an existing message keeps the same
     // message count and shouldn't yank the viewport to the bottom.
@@ -56,8 +80,52 @@ const Messages = () => {
     return () => window.clearTimeout(timer);
   }, [conversationId, visibleMessages.length]);
 
+  useEffect(() => {
+    if (loading || loadingMore || !hasMore || !conversationId) return;
+
+    const sentinel = sentinelRef.current;
+    const scrollContainer = getScrollContainer(listRef.current);
+    if (!sentinel || !scrollContainer) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+
+        const oldestId = oldestMessageId;
+        if (!oldestId) return;
+
+        pendingScrollHeightRef.current = scrollContainer.scrollHeight;
+        skipScrollToBottomRef.current = true;
+        void loadMore(oldestId).then((applied) => {
+          if (applied) return;
+          pendingScrollHeightRef.current = null;
+          skipScrollToBottomRef.current = false;
+        });
+      },
+      { root: scrollContainer, threshold: 0 }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [conversationId, hasMore, loading, loadingMore, loadMore, oldestMessageId]);
+
   return (
-    <div>
+    <div ref={listRef}>
+      <div ref={sentinelRef} aria-hidden="true" />
+
+      {loadingMore && (
+        <div className="mb-3 flex items-center justify-center gap-2 py-1 text-xs text-slate-400">
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-indigo-500" />
+          Loading older messages…
+        </div>
+      )}
+
+      {!loading && !loadingMore && visibleMessages.length > 0 && !hasMore && (
+        <div className="mb-3 flex items-center justify-center">
+          <span className="text-xs font-medium text-slate-400">Beginning of conversation</span>
+        </div>
+      )}
+
       {!loading &&
         visibleMessages.length > 0 &&
         visibleMessages.map((message: ChatMessage, index: number) => {

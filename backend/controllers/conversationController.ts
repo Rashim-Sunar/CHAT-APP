@@ -47,7 +47,7 @@ import {
 // membership, and this keeps encryption latency and payload size bounded.
 const MAX_GROUP_MEMBERS = 250;
 const INVITE_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-const DEFAULT_MESSAGE_PAGE_SIZE = 50;
+const DEFAULT_MESSAGE_PAGE_SIZE = 30;
 const MAX_MESSAGE_PAGE_SIZE = 100;
 
 type ConversationParticipantSummary = {
@@ -1021,7 +1021,7 @@ export const joinConversationByInviteLink = async (
 /**
  * @desc    Cursor-paginated message history for one conversation, replacing
  *          the old unbounded GET /messages/:id.
- * @route   GET /api/conversations/:id/messages?before=<messageId>&limit=50
+ * @route   GET /api/conversations/:id/messages?before=<messageId>&limit=30
  * @access  Private — requester must be a participant
  */
 export const getConversationMessages = async (
