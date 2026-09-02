@@ -39,7 +39,7 @@ const NewConversationMenu = () => {
         type="button"
         onClick={() => setMenuOpen((open) => !open)}
         aria-label="Start a new chat or group"
-        className="h-9 w-9 rounded-full hover:bg-slate-100 text-slate-600 flex items-center justify-center"
+        className="new-chat-trigger h-9 w-9 rounded-full hover:bg-slate-100 text-slate-600 flex items-center justify-center"
       >
         <BiPlus size={20} />
       </button>

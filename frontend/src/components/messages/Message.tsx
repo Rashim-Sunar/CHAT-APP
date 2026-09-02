@@ -246,7 +246,7 @@ const Message = ({ message, isGroupStart = true, isGroupEnd = true }: MessagePro
   const renderMessageBody = () => {
     if (message.deletedForEveryone) {
       return (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-100 px-4 py-3 text-sm italic text-slate-500 shadow-sm">
+        <div className="deleted-message rounded-2xl border border-dashed border-slate-300 bg-slate-100 px-4 py-3 text-sm italic text-slate-500 shadow-sm">
           {DELETED_MESSAGE_TEXT}
         </div>
       );
@@ -254,7 +254,7 @@ const Message = ({ message, isGroupStart = true, isGroupEnd = true }: MessagePro
 
     if (isEditing && message.messageType === "text") {
       return (
-        <div className={`px-4 py-3 rounded-2xl shadow-sm ${fromMe ? "bg-indigo-600" : "bg-white"}`}>
+        <div className={`chat-bubble ${fromMe ? "chat-bubble--outgoing bg-indigo-600" : "chat-bubble--incoming bg-white"} px-4 py-3 rounded-2xl shadow-sm`}>
           <input
             ref={editInputRef}
             type="text"
@@ -302,7 +302,7 @@ const Message = ({ message, isGroupStart = true, isGroupEnd = true }: MessagePro
         : `bg-white text-slate-800 ${isGroupEnd ? "rounded-bl-none" : ""}`;
 
       return (
-        <div className={`min-w-[220px] rounded-2xl px-3 py-2 shadow-sm ${bubbleClass}`}>
+        <div className={`chat-bubble ${fromMe ? "chat-bubble--outgoing" : "chat-bubble--incoming"} min-w-[220px] rounded-2xl px-3 py-2 shadow-sm ${bubbleClass}`}>
           <p className={`mb-1 text-xs font-medium ${fromMe ? "text-indigo-100" : "text-slate-500"}`}>Voice message</p>
           <audio controls preload="metadata" className="h-9 w-full max-w-[300px]" aria-label="Voice message">
             <source src={message.fileUrl} type={message.mimeType || "audio/webm"} />
@@ -318,7 +318,7 @@ const Message = ({ message, isGroupStart = true, isGroupEnd = true }: MessagePro
         : `bg-white text-slate-800 ${isGroupEnd ? "rounded-bl-none" : ""}`;
 
       return (
-        <div className={`px-4 py-3 rounded-2xl shadow-sm inline-flex flex-col gap-2 min-w-[220px] ${bubbleClass}`}>
+        <div className={`chat-bubble ${fromMe ? "chat-bubble--outgoing" : "chat-bubble--incoming"} px-4 py-3 rounded-2xl shadow-sm inline-flex flex-col gap-2 min-w-[220px] ${bubbleClass}`}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <span className="font-medium block truncate">{message.fileName || "Shared file"}</span>
@@ -379,7 +379,7 @@ const Message = ({ message, isGroupStart = true, isGroupEnd = true }: MessagePro
     const bodyText = getMessageBodyText(message);
 
     return (
-      <div className={`px-4 py-2 rounded-2xl shadow-sm ${bubbleClass}`}>
+      <div className={`chat-bubble ${fromMe ? "chat-bubble--outgoing" : "chat-bubble--incoming"} px-4 py-2 rounded-2xl shadow-sm ${bubbleClass}`}>
         {linkifyText(bodyText)}
       </div>
     );

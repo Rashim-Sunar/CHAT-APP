@@ -7,19 +7,22 @@ import { AuthContextProvider } from "./context/Auth-Context";
 import { SocketContextProvider } from "./context/SocketContext";
 import { DeviceLinkProvider } from "./context/DeviceLinkContext";
 import { CallProvider } from "./context/CallContext";
+import { ThemeProvider } from "./context/ThemeContext";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <BrowserRouter>
-      <AuthContextProvider>
-        <SocketContextProvider>
-          <DeviceLinkProvider>
-            <CallProvider>
-              <App />
-            </CallProvider>
-          </DeviceLinkProvider>
-        </SocketContextProvider>
-      </AuthContextProvider>
+      <ThemeProvider>
+        <AuthContextProvider>
+          <SocketContextProvider>
+            <DeviceLinkProvider>
+              <CallProvider>
+                <App />
+              </CallProvider>
+            </DeviceLinkProvider>
+          </SocketContextProvider>
+        </AuthContextProvider>
+      </ThemeProvider>
     </BrowserRouter>
   </React.StrictMode>
 );

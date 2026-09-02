@@ -56,7 +56,8 @@ const ConversationItem = ({ conversation }: ConversationProps) => {
 
         setSelectedConversation(conversation, currentUserId);
       }}
-      className={`flex items-center gap-3 px-6 py-3 cursor-pointer
+      data-selected={isSelected}
+      className={`conversation-item flex items-center gap-3 px-6 py-3 cursor-pointer
                   transition-all duration-200
                   ${isSelected ? "bg-indigo-50" : "hover:bg-slate-100"}`}
     >

@@ -14,7 +14,7 @@ interface ConversationFilterTabsProps {
 
 const ConversationFilterTabs = ({ active, onChange }: ConversationFilterTabsProps) => {
   return (
-    <div className="flex items-center gap-1" role="tablist" aria-label="Filter chats">
+    <div className="chat-filters flex items-center gap-1" role="tablist" aria-label="Filter chats">
       {FILTERS.map((filter) => {
         const isActive = filter.key === active;
 

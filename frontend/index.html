@@ -11,6 +11,13 @@
       content="A real-time chat app with true end-to-end encryption: hybrid RSA-OAEP + AES-GCM, a zero-knowledge server, and encrypted group messaging. Personal chats and groups, built to keep the server blind to your content."
     />
     <meta name="theme-color" content="#1B1035" />
+    <script>
+      (() => {
+        const theme = localStorage.getItem("chatapp-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.classList.toggle("dark", theme === "dark");
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
 
     <meta property="og:type" content="website" />
     <meta property="og:title" content="ChatApp — Private messaging, end to end" />

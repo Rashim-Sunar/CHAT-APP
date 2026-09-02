@@ -44,7 +44,7 @@ const SearchInput = () => {
         placeholder="Search"
         value={search}
         onChange={handleChange}
-        className="w-full h-9 pl-9 pr-4 rounded-full
+        className="sidebar-search w-full h-9 pl-9 pr-4 rounded-full
                    border border-slate-300
                    focus:outline-none focus:ring-2 focus:ring-indigo-500
                    transition duration-200 text-sm"

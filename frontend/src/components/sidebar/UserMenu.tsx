@@ -37,6 +37,8 @@
 
 import { useEffect, useRef } from "react";
 import { BiSolidUserCircle, BiSolidEdit, BiSolidImageAdd, BiSolidTrash, BiLogOut } from "react-icons/bi";
+import { FiMoon, FiSun } from "react-icons/fi";
+import { useTheme } from "../../context/useTheme";
 
 interface UserMenuProps {
   isOpen: boolean;
@@ -58,6 +60,7 @@ const UserMenu = ({
   onLogout,
 }: UserMenuProps) => {
   const menuRef = useRef<HTMLDivElement>(null);
+  const { theme, toggleTheme } = useTheme();
 
   // Handle click-outside to close menu
   useEffect(() => {
@@ -164,6 +167,23 @@ const UserMenu = ({
         }}
         aria-label="Upload or update your profile picture"
       />
+
+      <div className="mx-2 my-1 flex items-center justify-between rounded-lg px-2 py-2 text-slate-700 hover:bg-slate-100">
+        <span className="flex items-center gap-3 text-sm font-medium">
+          {theme === "dark" ? <FiMoon className="h-4 w-4" /> : <FiSun className="h-4 w-4" />}
+          Appearance
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={theme === "dark"}
+          aria-label="Toggle dark mode"
+          onClick={toggleTheme}
+          className={`relative h-6 w-10 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 ${theme === "dark" ? "bg-indigo-600" : "bg-slate-300"}`}
+        >
+          <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${theme === "dark" ? "translate-x-5" : "translate-x-1"}`} />
+        </button>
+      </div>
 
       {/* Delete Picture Option */}
       <MenuItem
