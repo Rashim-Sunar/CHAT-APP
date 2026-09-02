@@ -20,7 +20,7 @@ const isSameCluster = (a?: ChatMessage, b?: ChatMessage): boolean => {
 
 const DateDivider = ({ label }: { label: string }) => (
   <div className="my-4 flex items-center justify-center" aria-hidden="true">
-    <span className="rounded-full border border-slate-200/70 bg-white/85 px-3 py-1 text-xs font-medium text-slate-500 shadow-sm backdrop-blur-sm">
+    <span className="date-divider rounded-full border border-slate-200/70 bg-white/85 px-3 py-1 text-xs font-medium text-slate-500 shadow-sm backdrop-blur-sm">
       {label}
     </span>
   </div>

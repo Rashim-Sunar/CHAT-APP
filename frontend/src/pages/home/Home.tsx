@@ -16,12 +16,12 @@ const Home = () => {
   const [desktopDetailsOpen, setDesktopDetailsOpen] = useState(true);
 
   return (
-    <div className="h-dvh w-full bg-slate-100 flex flex-col md:flex-row overflow-hidden">
+    <div className="app-shell h-dvh w-full bg-slate-100 flex flex-col md:flex-row overflow-hidden">
       <div className="md:hidden flex-1 overflow-hidden bg-white">
         <MobileConversationBar />
       </div>
 
-      <div className="hidden md:flex md:w-[280px] xl:w-[320px] border-r border-slate-200 bg-white shrink-0">
+      <div className="sidebar-column hidden md:flex md:w-[280px] xl:w-[320px] border-r border-slate-200 bg-white shrink-0">
         <Sidebar />
       </div>
 
@@ -40,7 +40,7 @@ const Home = () => {
             animate={{ width: 320, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
-            className="hidden xl:flex bg-slate-50 shrink-0 overflow-hidden"
+            className="details-column hidden xl:flex bg-slate-50 shrink-0 overflow-hidden"
           >
             <div className="w-[320px] h-full shrink-0">
               <UserDetailsPanel isOpen variant="desktop" />

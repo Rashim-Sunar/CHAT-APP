@@ -70,7 +70,7 @@ const UserDetailsPanel = ({ isOpen, onClose, variant = "desktop" }: UserDetailsP
       initial="hidden"
       animate="visible"
       exit="exit"
-      className={`h-full flex flex-col bg-slate-50 border-l border-slate-200 ${variant === "desktop" ? "w-full" : "w-full md:w-[340px]"}`}
+      className={`details-panel h-full flex flex-col bg-slate-50 border-l border-slate-200 ${variant === "desktop" ? "w-full" : "w-full md:w-[340px]"}`}
       aria-label="User details panel"
       onKeyDown={onContainerKeyDown}
     >
@@ -91,14 +91,16 @@ const UserDetailsPanel = ({ isOpen, onClose, variant = "desktop" }: UserDetailsP
             )}
 
             <div className="flex flex-col items-center text-center">
-              <Avatar
-                src={baseAvatar}
-                gender={otherParticipant?.gender}
-                name={userName}
-                alt={`${userName} profile`}
-                className="h-20 w-20 rounded-full object-cover border border-slate-200 shadow-sm"
-                textClassName="text-2xl"
-              />
+              <div className="profile-avatar-halo">
+                <Avatar
+                  src={baseAvatar}
+                  gender={otherParticipant?.gender}
+                  name={userName}
+                  alt={`${userName} profile`}
+                  className="h-20 w-20 rounded-full object-cover border border-slate-200 shadow-sm"
+                  textClassName="text-2xl"
+                />
+              </div>
 
               <div className="mt-3 min-w-0">
                 <p className="text-lg font-semibold text-slate-900 truncate">{userName}</p>

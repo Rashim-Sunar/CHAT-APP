@@ -13,15 +13,18 @@ import CallButtons from "../calls/CallButtons";
 import GroupCallBanner from "../calls/GroupCallBanner";
 import PinnedMessageBanner from "./PinnedMessageBanner";
 import { getOtherParticipant } from "../../Utils/conversationDisplay";
+import { useTheme } from "../../context/useTheme";
 // WebP re-encode of chatsphere-background.png (~1MB -> ~9KB, no visible loss).
 import chatWallpaper from "../../assets/chatsphere-background.webp";
 
-const chatWallpaperStyle: CSSProperties = {
-  backgroundImage: `linear-gradient(180deg, rgba(238, 242, 255, 0.55), rgba(255, 255, 255, 0.35)), url(${chatWallpaper})`,
+const getChatWallpaperStyle = (isDark: boolean): CSSProperties => ({
+  backgroundImage: isDark
+    ? `linear-gradient(180deg, rgba(11, 18, 32, 0.93), rgba(8, 14, 26, 0.96)), url(${chatWallpaper})`
+    : `linear-gradient(180deg, rgba(238, 242, 255, 0.55), rgba(255, 255, 255, 0.35)), url(${chatWallpaper})`,
   backgroundRepeat: "no-repeat, repeat",
   backgroundSize: "cover, 420px",
   backgroundPosition: "center, center",
-};
+});
 
 interface MessageContainerProps {
   desktopDetailsOpen: boolean;
@@ -31,6 +34,7 @@ interface MessageContainerProps {
 const MessageContainer = ({ desktopDetailsOpen, onToggleDesktopDetails }: MessageContainerProps) => {
   const { selectedConversation, setSelectedConversation } = useConversation();
   const { authUser } = useAuthContext();
+  const { theme } = useTheme();
   const { onlineUsers } = useSocketContext();
   const currentUserId = authUser?.data?.user?._id;
 
@@ -56,7 +60,7 @@ const MessageContainer = ({ desktopDetailsOpen, onToggleDesktopDetails }: Messag
 
   if (!selectedConversation) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 bg-slate-50 px-6 text-center" style={chatWallpaperStyle}>
+      <div className="chat-canvas flex h-full flex-col items-center justify-center gap-3 bg-slate-50 px-6 text-center" style={getChatWallpaperStyle(theme === "dark")}>
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-100 bg-white text-indigo-500 shadow-sm">
           <IoChatbubblesOutline size={28} />
         </div>
@@ -70,8 +74,8 @@ const MessageContainer = ({ desktopDetailsOpen, onToggleDesktopDetails }: Messag
   }
 
   return (
-    <div className="flex flex-col h-full relative">
-      <div className="px-4 md:px-6 py-3 border-b border-slate-200 flex items-center justify-between bg-white">
+    <div className="chat-panel flex flex-col h-full relative">
+      <div className="chat-header px-4 md:px-6 py-3 border-b border-slate-200 flex items-center justify-between bg-white">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setSelectedConversation(null, currentUserId)}
@@ -133,13 +137,13 @@ const MessageContainer = ({ desktopDetailsOpen, onToggleDesktopDetails }: Messag
 
       <div
         data-messages-scroll-container
-        className="flex-1 overflow-y-auto overflow-x-hidden px-4 md:px-6 py-4 bg-slate-50 min-w-0"
-        style={chatWallpaperStyle}
+        className="chat-canvas flex-1 overflow-y-auto overflow-x-hidden px-4 md:px-6 py-4 bg-slate-50 min-w-0"
+        style={getChatWallpaperStyle(theme === "dark")}
       >
         <Messages />
       </div>
 
-      <div className="border-t border-slate-200 bg-white">
+      <div className="chat-composer border-t border-slate-200 bg-white">
         <MessageInput />
       </div>
 

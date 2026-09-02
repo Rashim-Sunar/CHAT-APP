@@ -102,3 +102,199 @@
 .message-highlight {
   animation: messageHighlight 1.5s ease-out forwards;
 }
+
+/* Dark mode tokens and component surfaces. Light mode deliberately keeps its
+   existing Tailwind values; all overrides below require the root .dark class. */
+.dark {
+  --night-base: #080b14;
+  --night-sidebar: #0a0e18;
+  --night-header: #0b0f1a;
+  --night-canvas: #0b1220;
+  --night-panel: #090d17;
+  --night-card: #101624;
+  --night-raised: #131a2a;
+  --night-input: #0d1422;
+  --night-hover: #171f31;
+  --night-border: rgba(255, 255, 255, 0.07);
+  --night-border-strong: rgba(255, 255, 255, 0.1);
+  --night-text: #f3f5fa;
+  --night-secondary: #a5aec0;
+  --night-muted: #727c91;
+  --night-purple: #7c3aed;
+  --night-purple-bright: #8b5cf6;
+}
+
+.dark,
+.dark body,
+.dark #root { background: var(--night-base); color: var(--night-text); }
+
+.dark input,
+.dark textarea,
+.dark select { background-color: var(--night-input); color: var(--night-text); }
+.dark input::placeholder,
+.dark textarea::placeholder { color: var(--night-muted); }
+
+.dark .app-shell { background: var(--night-base); }
+.dark .sidebar-column { background: var(--night-sidebar); border-color: var(--night-border); }
+.dark .app-sidebar { background: var(--night-sidebar); }
+.dark .details-column,
+.dark .details-panel { background: var(--night-panel); border-color: var(--night-border); }
+.dark .chat-panel { background: var(--night-canvas); }
+.dark .chat-header { background: var(--night-header); border-color: var(--night-border); }
+.dark .chat-canvas { background-color: var(--night-canvas); }
+.dark .chat-composer { background: var(--night-header); border-color: var(--night-border); }
+
+.dark .app-sidebar > div,
+.dark .chat-header,
+.dark .chat-composer,
+.dark .details-panel > div { border-color: var(--night-border); }
+
+.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: rgba(255, 255, 255, 0.06); }
+
+.dark .sidebar-search,
+.dark .composer-input {
+  background: var(--night-input);
+  border-color: var(--night-border);
+  color: var(--night-text);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.015);
+}
+
+.dark .sidebar-search { height: 3rem; border-radius: 0.8rem; }
+.dark .new-chat-trigger { height: 2.5rem; width: 2.5rem; border-radius: 0.75rem; }
+
+.dark .sidebar-search:focus,
+.dark .composer-input:focus {
+  border-color: rgba(139, 92, 246, 0.68);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.16);
+}
+
+.dark .new-chat-trigger {
+  color: #fff;
+  background: linear-gradient(145deg, #8b5cf6, #5b21b6);
+  box-shadow: 0 5px 14px rgba(76, 29, 149, 0.28);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.dark .new-chat-trigger:hover {
+  background: linear-gradient(145deg, #9b6df8, #6d28d9);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(76, 29, 149, 0.36);
+}
+
+.dark .chat-filters [aria-selected="true"] {
+  background: rgba(124, 58, 237, 0.2);
+  color: #ddd6fe;
+}
+
+.dark .app-sidebar section .border-dashed {
+  border-color: rgba(139, 92, 246, 0.78);
+  background: rgba(76, 29, 149, 0.08);
+}
+
+.dark .app-sidebar section .border-dashed:hover { background: rgba(76, 29, 149, 0.15); }
+
+.dark .conversation-item { border-left: 2px solid transparent; border-radius: 0.7rem; margin: 0 0.45rem; padding-left: 1.05rem; padding-right: 1.05rem; }
+.dark .conversation-item:hover { background: var(--night-hover); }
+.dark .conversation-item[data-selected="true"] {
+  background: rgba(124, 58, 237, 0.1);
+  border-left-color: var(--night-purple);
+  box-shadow: inset 0 1px 0 rgba(196, 181, 253, 0.04);
+}
+
+.dark .chat-bubble--outgoing {
+  background: linear-gradient(145deg, #6d28d9, #7c3aed) !important;
+  color: #fff;
+  box-shadow: 0 3px 9px rgba(38, 13, 84, 0.15);
+}
+
+.dark .chat-bubble--incoming {
+  background: var(--night-card) !important;
+  border: 1px solid var(--night-border);
+  color: var(--night-text);
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.07);
+}
+
+.dark .deleted-message {
+  background: rgba(19, 26, 42, 0.84);
+  border-color: var(--night-border-strong);
+  box-shadow: none;
+  color: var(--night-secondary);
+}
+
+.dark .date-divider {
+  background: rgba(16, 22, 36, 0.86);
+  border-color: var(--night-border);
+  color: var(--night-secondary);
+  box-shadow: none;
+}
+
+.dark .send-message-button {
+  background: linear-gradient(145deg, #8b5cf6, #6d28d9);
+  box-shadow: 0 5px 16px rgba(76, 29, 149, 0.3);
+  transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+}
+
+.dark .send-message-button:hover:not(:disabled) {
+  background: linear-gradient(145deg, #9b6df8, #7c3aed);
+  box-shadow: 0 8px 20px rgba(76, 29, 149, 0.38);
+  transform: translateY(-1px);
+}
+
+.dark .details-panel .bg-gradient-to-b { background-image: linear-gradient(to bottom, #0d1422, #090d17); }
+.dark .details-panel .bg-slate-100 { background-color: var(--night-raised); }
+.dark .details-panel .border-slate-200 { border-color: var(--night-border); }
+.dark .details-panel .hover\:bg-slate-50:hover { background-color: var(--night-hover); }
+.dark .details-panel section.rounded-2xl {
+  background-color: var(--night-card);
+  border-color: var(--night-border);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+.dark .profile-avatar-halo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 5.5rem;
+  height: 5.5rem;
+  padding: 2px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #9b6df8 0%, #7c3aed 42%, #222a3e 76%, #3b1c69 100%);
+  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.2), 0 10px 22px rgba(0, 0, 0, 0.54), 0 2px 8px rgba(76, 29, 149, 0.24);
+}
+
+.dark .profile-avatar-halo .h-20.w-20 {
+  border-color: #080b14;
+  box-shadow: none;
+}
+.dark .bg-white { background-color: var(--night-card); }
+.dark .bg-slate-50 { background-color: var(--night-canvas); }
+.dark .bg-slate-100 { background-color: var(--night-raised); }
+.dark .bg-slate-200 { background-color: #1d2637; }
+.dark .bg-slate-300 { background-color: #303b4e; }
+.dark .bg-indigo-50 { background-color: rgba(124, 58, 237, 0.12); }
+.dark .text-indigo-600 { color: #a78bfa; }
+.dark .border-indigo-100,
+.dark .border-indigo-200 { border-color: rgba(124, 58, 237, 0.2); }
+.dark .bg-rose-50 { background-color: rgba(190, 24, 93, 0.12); }
+.dark .hover\:bg-rose-50:hover { background-color: rgba(190, 24, 93, 0.18); }
+.dark .text-slate-900,
+.dark .text-slate-800 { color: var(--night-text); }
+.dark .text-slate-700,
+.dark .text-slate-600 { color: var(--night-secondary); }
+.dark .text-slate-500,
+.dark .text-slate-400 { color: var(--night-muted); }
+.dark .border-slate-100,
+.dark .border-slate-200 { border-color: var(--night-border); }
+.dark .border-slate-300 { border-color: var(--night-border-strong); }
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-slate-100:hover { background-color: var(--night-hover); }
+.dark .hover\:text-slate-600:hover,
+.dark .hover\:text-slate-700:hover,
+.dark .hover\:text-slate-800:hover { color: var(--night-text); }
+
+/* Keep immersive call controls intentionally light when their call surface is open. */
+.dark .fixed.bg-slate-900 .bg-white { background-color: #f8fafc; }
+.dark .fixed.bg-slate-900 .text-slate-900 { color: #0f172a; }
+
+.dark .sidebar-scroll { scrollbar-color: rgba(114, 124, 145, 0.45) transparent; }
+.dark .sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(114, 124, 145, 0.42); }
+.dark .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: rgba(165, 174, 192, 0.6); }
