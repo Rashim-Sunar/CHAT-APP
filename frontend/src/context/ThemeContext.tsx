@@ -6,7 +6,7 @@ const THEME_STORAGE_KEY = "chatapp-theme";
 const getInitialTheme = (): Theme => {
   const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
   if (savedTheme === "light" || savedTheme === "dark") return savedTheme;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return "light";
 };
 
 export const ThemeProvider = ({ children }: { children: ReactNode }) => {

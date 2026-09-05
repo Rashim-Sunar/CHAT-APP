@@ -11,7 +11,7 @@ import FinalCta from "./sections/FinalCta";
 import LandingFooter from "./sections/LandingFooter";
 
 const Landing = () => (
-  <div className="min-h-screen bg-white font-body text-ink antialiased">
+  <div className="landing-page min-h-screen bg-white font-body text-ink antialiased">
     <LandingNav />
     <main>
       <Hero />

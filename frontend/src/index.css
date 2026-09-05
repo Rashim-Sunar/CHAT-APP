@@ -139,10 +139,37 @@
 .dark .app-sidebar { background: var(--night-sidebar); }
 .dark .details-column,
 .dark .details-panel { background: var(--night-panel); border-color: var(--night-border); }
-.dark .chat-panel { background: var(--night-canvas); }
-.dark .chat-header { background: var(--night-header); border-color: var(--night-border); }
-.dark .chat-canvas { background-color: var(--night-canvas); }
-.dark .chat-composer { background: var(--night-header); border-color: var(--night-border); }
+.dark .chat-panel { background: #050505; }
+.dark .chat-header { background: rgba(11, 15, 26, 0.62); border-color: var(--night-border); backdrop-filter: blur(18px); }
+.dark .chat-canvas { background-color: #050505; }
+.dark .chat-composer { background: rgba(11, 15, 26, 0.62); border-color: var(--night-border); backdrop-filter: blur(18px); }
+
+.chat-panel { background: #eef0f5; }
+.chat-header,
+.chat-composer {
+  border-color: rgba(148, 163, 184, 0.24);
+  box-shadow: 0 8px 24px rgba(30, 41, 59, 0.05);
+}
+.chat-header { position: relative; z-index: 1; }
+.chat-composer { position: relative; z-index: 1; }
+.chat-bubble--incoming {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  box-shadow: 0 5px 16px rgba(30, 41, 59, 0.08);
+}
+.chat-bubble--outgoing {
+  background: linear-gradient(145deg, #6848ee, #4f35d1) !important;
+  box-shadow: 0 7px 18px rgba(79, 53, 209, 0.2);
+}
+.call-log-card {
+  border-color: rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.78);
+  color: #334155;
+}
+.call-log-icon--missed { background: #ffe4e6; color: #e11d48; }
+.call-log-icon--normal { background: #e0e7ff; color: #4f46e5; }
+.call-log-action { background: #eef2ff; color: #4f46e5; }
+.call-log-action:hover { background: #e0e7ff; }
 
 .dark .app-sidebar > div,
 .dark .chat-header,
@@ -213,6 +240,16 @@
   color: var(--night-text);
   box-shadow: 0 2px 7px rgba(0, 0, 0, 0.07);
 }
+
+.dark .call-log-card {
+  border-color: var(--night-border-strong);
+  background: rgba(19, 26, 42, 0.84);
+  color: var(--night-text);
+}
+.dark .call-log-icon--missed { background: rgba(225, 29, 72, 0.18); color: #fb7185; }
+.dark .call-log-icon--normal { background: rgba(99, 102, 241, 0.2); color: #a5b4fc; }
+.dark .call-log-action { background: rgba(99, 102, 241, 0.2); color: #c7d2fe; }
+.dark .call-log-action:hover { background: rgba(99, 102, 241, 0.3); }
 
 .dark .deleted-message {
   background: rgba(19, 26, 42, 0.84);
@@ -298,3 +335,25 @@
 .dark .sidebar-scroll { scrollbar-color: rgba(114, 124, 145, 0.45) transparent; }
 .dark .sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(114, 124, 145, 0.42); }
 .dark .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: rgba(165, 174, 192, 0.6); }
+
+/* Landing content uses its own marketing palette, so dark mode needs explicit
+  contrast instead of inheriting the light-page utility colors. */
+.dark .landing-page { background: #0d1020; color: #f8fafc; }
+.dark .landing-page header { border-color: rgba(255, 255, 255, 0.1); }
+.dark .landing-page header.bg-white\/80,
+.dark .landing-page header .bg-white { background-color: rgba(13, 16, 32, 0.88); }
+.dark .landing-page .text-ink { color: #f8fafc; }
+.dark .landing-page .text-slate-600,
+.dark .landing-page .text-slate-500 { color: #c1c8d8; }
+.dark .landing-page .text-slate-400 { color: #9aa5bb; }
+.dark .landing-page .text-slate-300 { color: #7f8ba3; }
+.dark .landing-page .border-slate-100,
+.dark .landing-page .border-slate-200 { border-color: rgba(255, 255, 255, 0.12); }
+.dark .landing-page .bg-white { background-color: #171c2d; }
+.dark .landing-page .bg-white\/60 { background-color: rgba(23, 28, 45, 0.72); }
+.dark .landing-page .bg-slate-50 { background-color: #20273a; }
+.dark .landing-page .bg-slate-100 { background-color: #252d42; }
+.dark .landing-page .text-brand-600 { color: #b8b1ff; }
+.dark .landing-page .text-mint-dark { color: #6ee7d4; }
+.dark .landing-page .hover\:bg-slate-50:hover { background-color: #252d42; }
+.dark .landing-page .hover\:text-ink:hover { color: #ffffff; }

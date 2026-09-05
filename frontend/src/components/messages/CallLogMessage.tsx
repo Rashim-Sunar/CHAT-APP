@@ -41,28 +41,25 @@ const CallLogMessage = ({ message }: CallLogMessageProps) => {
   const canCallBack = selectedConversation?.type === "direct" && isMissed && wasIncomingToMe;
 
   return (
-    <div className="my-3 flex items-center justify-center">
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/70 bg-white/85 px-3 py-1.5 text-xs text-slate-500 shadow-sm backdrop-blur-sm">
-        {isMissed ? (
-          <FiPhoneMissed size={13} className="text-rose-500" />
-        ) : isVideo ? (
-          <FiVideo size={13} className="text-slate-400" />
-        ) : (
-          <FiPhone size={13} className="text-slate-400" />
-        )}
-        <span>{label}</span>
-        <span className="text-slate-300">·</span>
-        <span>{extractTime(message.createdAt)}</span>
+    <div className="call-log-row my-4 flex justify-center">
+      <div className="call-log-card flex w-full max-w-[280px] items-center gap-3 rounded-2xl border px-3.5 py-3 shadow-sm backdrop-blur-md">
+        <span className={`call-log-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isMissed ? "call-log-icon--missed" : "call-log-icon--normal"}`}>
+          {isMissed ? <FiPhoneMissed size={18} /> : isVideo ? <FiVideo size={18} /> : <FiPhone size={18} />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold">{label}</span>
+          <span className="mt-0.5 block text-xs opacity-60">{extractTime(message.createdAt)}</span>
+        </span>
         {canCallBack && selectedConversation && (
           <button
             type="button"
             onClick={() => void startCall(selectedConversation._id, message.callType || "audio")}
-            className="ml-1 font-medium text-indigo-600 hover:text-indigo-700"
+            className="call-log-action rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors"
           >
             Call back
           </button>
         )}
-      </span>
+      </div>
     </div>
   );
 };
