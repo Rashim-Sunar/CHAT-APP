@@ -75,7 +75,7 @@ const MessageContainer = ({ desktopDetailsOpen, onToggleDesktopDetails }: Messag
   }
 
   return (
-    <div className="chat-panel flex flex-col h-full relative overflow-hidden">
+    <div className="chat-panel fixed inset-0 z-20 flex h-dvh w-full min-w-0 flex-col overflow-hidden md:static md:z-auto md:h-full">
       <div className="chat-header px-4 md:px-6 py-3 border-b border-slate-200 flex items-center justify-between bg-white/65 backdrop-blur-xl">
         <div className="flex items-center gap-3">
           <button
