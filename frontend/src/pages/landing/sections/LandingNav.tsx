@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { PiList, PiX } from "react-icons/pi";
+import { PiList, PiMoon, PiSun, PiX } from "react-icons/pi";
 import Logo from "../components/Logo";
+import { useTheme } from "../../../context/useTheme";
 
 const NAV_LINKS = [
   { label: "Security", href: "#security" },
@@ -12,6 +13,7 @@ const NAV_LINKS = [
 const LandingNav = () => {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -43,7 +45,16 @@ const LandingNav = () => {
           ))}
         </nav>
 
-        <div className="hidden items-center gap-5 md:flex">
+        <div className="hidden items-center gap-4 md:flex">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+            title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600"
+          >
+            {theme === "dark" ? <PiSun size={17} /> : <PiMoon size={17} />}
+          </button>
           <Link to="/login" className="text-sm font-medium text-slate-600 transition-colors hover:text-ink">
             Log in
           </Link>
@@ -81,6 +92,14 @@ const LandingNav = () => {
             ))}
           </nav>
           <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-ink"
+            >
+              {theme === "dark" ? <PiSun size={17} /> : <PiMoon size={17} />}
+              {theme === "dark" ? "Light theme" : "Dark theme"}
+            </button>
             <Link
               to="/login"
               onClick={() => setMobileOpen(false)}

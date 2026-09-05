@@ -16,13 +16,14 @@ import { getOtherParticipant } from "../../Utils/conversationDisplay";
 import { useTheme } from "../../context/useTheme";
 // WebP re-encode of chatsphere-background.png (~1MB -> ~9KB, no visible loss).
 import chatWallpaper from "../../assets/chatsphere-background.webp";
+import darkChatWallpaper from "../../assets/darktheme-bg.webp";
 
 const getChatWallpaperStyle = (isDark: boolean): CSSProperties => ({
   backgroundImage: isDark
-    ? `linear-gradient(180deg, rgba(11, 18, 32, 0.93), rgba(8, 14, 26, 0.96)), url(${chatWallpaper})`
-    : `linear-gradient(180deg, rgba(238, 242, 255, 0.55), rgba(255, 255, 255, 0.35)), url(${chatWallpaper})`,
+    ? `linear-gradient(180deg, rgba(0, 0, 0, 0.24), rgba(0, 0, 0, 0.42)), url(${darkChatWallpaper})`
+    : `linear-gradient(180deg, rgba(241, 243, 248, 0.48), rgba(248, 249, 252, 0.36)), url(${chatWallpaper})`,
   backgroundRepeat: "no-repeat, repeat",
-  backgroundSize: "cover, 420px",
+  backgroundSize: `cover, ${isDark ? "cover" : "560px"}`,
   backgroundPosition: "center, center",
 });
 
@@ -74,8 +75,8 @@ const MessageContainer = ({ desktopDetailsOpen, onToggleDesktopDetails }: Messag
   }
 
   return (
-    <div className="chat-panel flex flex-col h-full relative">
-      <div className="chat-header px-4 md:px-6 py-3 border-b border-slate-200 flex items-center justify-between bg-white">
+    <div className="chat-panel flex flex-col h-full relative overflow-hidden">
+      <div className="chat-header px-4 md:px-6 py-3 border-b border-slate-200 flex items-center justify-between bg-white/65 backdrop-blur-xl">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setSelectedConversation(null, currentUserId)}
@@ -137,13 +138,13 @@ const MessageContainer = ({ desktopDetailsOpen, onToggleDesktopDetails }: Messag
 
       <div
         data-messages-scroll-container
-        className="chat-canvas flex-1 overflow-y-auto overflow-x-hidden px-4 md:px-6 py-4 bg-slate-50 min-w-0"
+        className="chat-canvas flex-1 overflow-y-auto overflow-x-hidden px-4 md:px-6 py-5 bg-slate-50 min-w-0"
         style={getChatWallpaperStyle(theme === "dark")}
       >
         <Messages />
       </div>
 
-      <div className="chat-composer border-t border-slate-200 bg-white">
+      <div className="chat-composer border-t border-slate-200 bg-white/65 backdrop-blur-xl">
         <MessageInput />
       </div>
 
