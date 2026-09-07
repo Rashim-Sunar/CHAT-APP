@@ -16,12 +16,14 @@ import { updateUserName, uploadProfilePicture } from "../../../src/api/users";
 import { ApiFetchError } from "../../../src/api/client";
 import { useAuthContext } from "../../../src/context/AuthContext";
 import { useDeviceLinkContext } from "../../../src/context/DeviceLinkContext";
+import { useTheme } from "../../../src/context/ThemeContext";
 import Avatar from "../../../src/components/Avatar";
 import { colors } from "../../../src/constants/theme";
 
 export default function MenuScreen() {
   const { authUser, setAuthUser } = useAuthContext();
   const { backupEnabled, enableBackup } = useDeviceLinkContext();
+  const { isDark, toggleTheme } = useTheme();
   const user = authUser?.data?.user;
 
   const [editing, setEditing] = useState(false);
@@ -136,8 +138,8 @@ export default function MenuScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.profileCard}>
+    <View style={[styles.container, isDark && styles.darkContainer]}>
+      <View style={[styles.profileCard, isDark && styles.darkSurface]}>
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => void handleChangePhoto()}
@@ -171,22 +173,33 @@ export default function MenuScreen() {
           </View>
         ) : (
           <TouchableOpacity style={styles.nameRow} onPress={startEditing} activeOpacity={0.6}>
-            <Text style={styles.name}>{user.userName}</Text>
-            <Ionicons name="pencil" size={16} color={colors.textFaint} />
+            <Text style={[styles.name, isDark && styles.darkText]}>{user.userName}</Text>
+            <Ionicons name="pencil" size={16} color={isDark ? "#727c91" : colors.textFaint} />
           </TouchableOpacity>
         )}
 
         {error && <Text style={styles.error}>{error}</Text>}
 
-        <Text style={styles.email}>{user.email}</Text>
+        <Text style={[styles.email, isDark && styles.darkSecondaryText]}>{user.email}</Text>
         <View style={styles.genderChip}>
           <Text style={styles.genderChipText}>{user.gender}</Text>
         </View>
       </View>
 
       <View style={styles.menuList}>
+        <TouchableOpacity style={[styles.menuRow, isDark && styles.darkSurface]} activeOpacity={0.6} onPress={toggleTheme}>
+          <Ionicons name={isDark ? "moon" : "moon-outline"} size={22} color={isDark ? "#a78bfa" : colors.text} />
+          <View style={styles.menuRowTextGroup}>
+            <Text style={[styles.menuRowText, isDark && styles.darkText]}>Dark theme</Text>
+            <Text style={[styles.menuRowHint, isDark && styles.darkSecondaryText]}>
+              {isDark ? "Midnight chat atmosphere enabled" : "Use a darker chat experience"}
+            </Text>
+          </View>
+          <Ionicons name={isDark ? "checkmark-circle" : "ellipse-outline"} size={22} color={isDark ? "#a78bfa" : colors.textFaint} />
+        </TouchableOpacity>
+
         <TouchableOpacity
-          style={styles.menuRow}
+          style={[styles.menuRow, isDark && styles.darkSurface]}
           activeOpacity={0.6}
           disabled={backupEnabled}
           onPress={() => setBackupOpen(true)}
@@ -194,20 +207,20 @@ export default function MenuScreen() {
           <Ionicons
             name={backupEnabled ? "shield-checkmark" : "shield-outline"}
             size={22}
-            color={backupEnabled ? colors.online : colors.text}
+            color={backupEnabled ? colors.online : isDark ? "#f3f5fa" : colors.text}
           />
           <View style={styles.menuRowTextGroup}>
-            <Text style={styles.menuRowText}>Encrypted key backup</Text>
-            <Text style={styles.menuRowHint}>
+            <Text style={[styles.menuRowText, isDark && styles.darkText]}>Encrypted key backup</Text>
+            <Text style={[styles.menuRowHint, isDark && styles.darkSecondaryText]}>
               {backupEnabled
                 ? "Enabled — you can recover with your password"
                 : "Recover your messages if you lose every device"}
             </Text>
           </View>
-          {!backupEnabled && <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />}
+          {!backupEnabled && <Ionicons name="chevron-forward" size={18} color={isDark ? "#727c91" : colors.textFaint} />}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.menuRow} activeOpacity={0.6} onPress={() => void handleLogout()}>
+        <TouchableOpacity style={[styles.menuRow, isDark && styles.darkSurface]} activeOpacity={0.6} onPress={() => void handleLogout()}>
           <Ionicons name="log-out-outline" size={22} color={colors.danger} />
           <Text style={styles.menuRowTextDanger}>Log out</Text>
         </TouchableOpacity>
@@ -255,6 +268,10 @@ export default function MenuScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  darkContainer: { backgroundColor: "#050505" },
+  darkSurface: { backgroundColor: "#0b0f1a", borderBottomColor: "rgba(148, 163, 184, 0.18)" },
+  darkText: { color: "#f3f5fa" },
+  darkSecondaryText: { color: "#a5aec0" },
   profileCard: {
     alignItems: "center",
     backgroundColor: colors.surface,

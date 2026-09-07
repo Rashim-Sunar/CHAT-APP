@@ -34,7 +34,8 @@
           "microphonePermission": "ChatApp uses your microphone for audio and video calls."
         }
       ],
-      "expo-video"
+      "expo-video",
+      "expo-asset"
     ]
   }
 }

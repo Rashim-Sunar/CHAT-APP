@@ -19,11 +19,13 @@ import {
 } from "../../src/api/groups";
 import { listConversations } from "../../src/api/conversations";
 import useConversationStore from "../../src/store/useConversationStore";
+import { useTheme } from "../../src/context/ThemeContext";
 import Avatar from "../../src/components/Avatar";
 import { colors } from "../../src/constants/theme";
 
 export default function JoinGroupScreen() {
   const setConversations = useConversationStore((state) => state.setConversations);
+  const { isDark } = useTheme();
 
   const [input, setInput] = useState("");
   const [preview, setPreview] = useState<InvitePreview | null>(null);
@@ -65,17 +67,17 @@ export default function JoinGroupScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView style={[styles.container, isDark && styles.darkContainer]} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       {preview ? (
         <View style={styles.previewCard}>
           <Avatar id={token} name={preview.groupName} uri={preview.groupAvatar} isGroup size={80} />
-          <Text style={styles.groupName}>{preview.groupName}</Text>
-          <Text style={styles.memberCount}>{preview.memberCount} members</Text>
+          <Text style={[styles.groupName, isDark && styles.darkText]}>{preview.groupName}</Text>
+          <Text style={[styles.memberCount, isDark && styles.darkMutedText]}>{preview.memberCount} members</Text>
 
           {error && <Text style={styles.error}>{error}</Text>}
 
           <TouchableOpacity
-            style={[styles.primaryButton, busy && styles.buttonDisabled]}
+            style={[styles.primaryButton, busy && styles.buttonDisabled, isDark && busy && styles.darkButtonDisabled]}
             onPress={() => void handleJoin()}
             disabled={busy}
           >
@@ -93,22 +95,22 @@ export default function JoinGroupScreen() {
               setError(null);
             }}
           >
-            <Text style={styles.secondaryButtonText}>Use a different link</Text>
+            <Text style={[styles.secondaryButtonText, isDark && styles.darkMutedText]}>Use a different link</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <View style={styles.form}>
-          <View style={styles.iconCircle}>
-            <Ionicons name="link" size={28} color={colors.primary} />
+            <View style={[styles.iconCircle, isDark && styles.darkIconCircle]}>
+            <Ionicons name="link" size={28} color={isDark ? "#a78bfa" : colors.primary} />
           </View>
 
-          <Text style={styles.title}>Join with an invite link</Text>
-          <Text style={styles.body}>Paste the invite link someone shared with you.</Text>
+          <Text style={[styles.title, isDark && styles.darkText]}>Join with an invite link</Text>
+          <Text style={[styles.body, isDark && styles.darkMutedText]}>Paste the invite link someone shared with you.</Text>
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, isDark && styles.darkInput]}
             placeholder="https://…/join/abc123"
-            placeholderTextColor={colors.textFaint}
+            placeholderTextColor={isDark ? "#727c91" : colors.textFaint}
             value={input}
             onChangeText={setInput}
             autoCapitalize="none"
@@ -118,7 +120,7 @@ export default function JoinGroupScreen() {
           {error && <Text style={styles.error}>{error}</Text>}
 
           <TouchableOpacity
-            style={[styles.primaryButton, (busy || !input.trim()) && styles.buttonDisabled]}
+            style={[styles.primaryButton, (busy || !input.trim()) && styles.buttonDisabled, isDark && (busy || !input.trim()) && styles.darkButtonDisabled]}
             onPress={() => void handlePreview()}
             disabled={busy || !input.trim()}
           >
@@ -136,6 +138,9 @@ export default function JoinGroupScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface, justifyContent: "center", paddingHorizontal: 28 },
+  darkContainer: { backgroundColor: "#050505" },
+  darkText: { color: "#f3f5fa" },
+  darkMutedText: { color: "#a5aec0" },
   form: { alignItems: "center" },
   previewCard: { alignItems: "center" },
   iconCircle: {
@@ -147,6 +152,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 20,
   },
+  darkIconCircle: { backgroundColor: "rgba(124, 58, 237, 0.22)" },
+  darkInput: { backgroundColor: "#0b0f1a", borderColor: "rgba(148, 163, 184, 0.2)", color: "#f3f5fa" },
   title: { fontSize: 21, fontWeight: "700", color: colors.text, textAlign: "center" },
   body: { fontSize: 14.5, color: colors.textMuted, textAlign: "center", marginTop: 8 },
   groupName: { fontSize: 21, fontWeight: "700", color: colors.text, marginTop: 18 },
@@ -172,7 +179,8 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     marginTop: 22,
   },
-  buttonDisabled: { backgroundColor: colors.borderStrong },
+  buttonDisabled: { backgroundColor: "rgba(99, 102, 241, 0.68)" },
+  darkButtonDisabled: { backgroundColor: "rgba(99, 102, 241, 0.68)" },
   primaryButtonText: { color: "#fff", fontWeight: "600", fontSize: 15.5 },
   secondaryButton: { marginTop: 14, paddingVertical: 10 },
   secondaryButtonText: { color: colors.textMuted, fontWeight: "500", fontSize: 14 },

@@ -3,6 +3,7 @@ import { useAuthContext } from "../context/AuthContext";
 import { useSocketContext } from "../context/SocketContext";
 import { decryptMessageIfNeeded } from "../crypto/crypto";
 import useConversationStore from "../store/useConversationStore";
+import { getMessagePreviewText, saveConversationPreview } from "../utils/conversationPreviewCache";
 import type { Message } from "../types";
 
 const useListenMessages = (onNewMessage?: () => void) => {
@@ -10,6 +11,7 @@ const useListenMessages = (onNewMessage?: () => void) => {
   const { authUser } = useAuthContext();
   const currentUserId = authUser?.data?.user?._id;
   const appendMessageToConversation = useConversationStore((state) => state.appendMessageToConversation);
+  const updateConversationPreview = useConversationStore((state) => state.updateConversationPreview);
   const updateMessageInConversation = useConversationStore((state) => state.updateMessageInConversation);
   const removeMessageFromConversation = useConversationStore((state) => state.removeMessageFromConversation);
 
@@ -22,6 +24,12 @@ const useListenMessages = (onNewMessage?: () => void) => {
         if (!hydrated.conversationId) return;
 
         appendMessageToConversation(hydrated.conversationId, hydrated);
+        updateConversationPreview(hydrated.conversationId, {
+          lastMessage: getMessagePreviewText(hydrated),
+          lastMessageAt: hydrated.createdAt,
+          lastMessageSenderId: String(hydrated.senderId),
+        });
+        await saveConversationPreview(currentUserId, hydrated.conversationId, hydrated);
         onNewMessage?.();
       })();
     };
@@ -43,6 +51,12 @@ const useListenMessages = (onNewMessage?: () => void) => {
 
         const hydrated = await decryptMessageIfNeeded(incoming, currentUserId);
         updateMessageInConversation(conversationId, messageId, hydrated);
+        updateConversationPreview(conversationId, {
+          lastMessage: getMessagePreviewText(hydrated),
+          lastMessageAt: hydrated.createdAt,
+          lastMessageSenderId: String(hydrated.senderId),
+        });
+        await saveConversationPreview(currentUserId, conversationId, hydrated);
         onNewMessage?.();
       })();
     };
@@ -80,6 +94,7 @@ const useListenMessages = (onNewMessage?: () => void) => {
     socket,
     currentUserId,
     appendMessageToConversation,
+    updateConversationPreview,
     updateMessageInConversation,
     removeMessageFromConversation,
     onNewMessage,

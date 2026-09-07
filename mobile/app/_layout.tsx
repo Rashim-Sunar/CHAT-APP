@@ -9,6 +9,7 @@ import { AuthContextProvider, useAuthContext } from "../src/context/AuthContext"
 import { SocketContextProvider } from "../src/context/SocketContext";
 import { DeviceLinkProvider, useDeviceLinkContext } from "../src/context/DeviceLinkContext";
 import { CallProvider } from "../src/context/CallContext";
+import { ThemeProvider, useTheme } from "../src/context/ThemeContext";
 import DeviceLinkGate from "../src/components/DeviceLinkGate";
 import LinkRequestPrompt from "../src/components/LinkRequestPrompt";
 import CallOverlayHost from "../src/components/calls/CallOverlayHost";
@@ -48,18 +49,25 @@ function RootNavigator() {
   );
 }
 
+function ThemeAwareStatusBar() {
+  const { isDark } = useTheme();
+  return <StatusBar style={isDark ? "light" : "dark"} />;
+}
+
 export default function RootLayout() {
   return (
-    <AuthContextProvider>
-      <SocketContextProvider>
-        <DeviceLinkProvider>
-          <CallProvider>
-            <StatusBar style="dark" />
-            <RootNavigator />
-          </CallProvider>
-        </DeviceLinkProvider>
-      </SocketContextProvider>
-    </AuthContextProvider>
+    <ThemeProvider>
+      <AuthContextProvider>
+        <SocketContextProvider>
+          <DeviceLinkProvider>
+            <CallProvider>
+              <ThemeAwareStatusBar />
+              <RootNavigator />
+            </CallProvider>
+          </DeviceLinkProvider>
+        </SocketContextProvider>
+      </AuthContextProvider>
+    </ThemeProvider>
   );
 }
 

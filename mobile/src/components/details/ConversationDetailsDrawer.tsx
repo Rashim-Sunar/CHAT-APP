@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Animated, Modal, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ConversationDetailsPanel from "./ConversationDetailsPanel";
+import { useTheme } from "../../context/ThemeContext";
 import { colors } from "../../constants/theme";
 
 const OPEN_DURATION = 240;
@@ -19,6 +20,7 @@ export default function ConversationDetailsDrawer({
   onClose,
 }: ConversationDetailsDrawerProps) {
   const insets = useSafeAreaInsets();
+  const { isDark } = useTheme();
   const { width } = useWindowDimensions();
   // Kept mounted through the closing animation so the panel doesn't vanish
   // before it has finished sliding out.
@@ -53,7 +55,7 @@ export default function ConversationDetailsDrawer({
         <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]} pointerEvents="none" />
 
         <Animated.View
-          style={[styles.drawer, { width, paddingTop: insets.top, transform: [{ translateX }] }]}
+          style={[styles.drawer, isDark && styles.darkDrawer, { width, paddingTop: insets.top, transform: [{ translateX }] }]}
         >
           <ConversationDetailsPanel conversationId={conversationId} onClose={onClose} />
         </Animated.View>
@@ -81,4 +83,5 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 16,
   },
+  darkDrawer: { backgroundColor: "#050505" },
 });

@@ -6,6 +6,7 @@ interface ConversationStoreState {
   selectedConversationId: string | null;
   messagesByConversation: Record<string, Message[]>;
   setConversations: (conversations: Conversation[]) => void;
+  updateConversationPreview: (conversationId: string, preview: Pick<Conversation, "lastMessage" | "lastMessageAt" | "lastMessageSenderId">) => void;
   selectConversation: (conversationId: string | null) => void;
   setMessagesForConversation: (conversationId: string, messages: Message[]) => void;
   appendMessageToConversation: (conversationId: string, message: Message) => void;
@@ -30,6 +31,13 @@ const useConversationStore = create<ConversationStoreState>()((set) => ({
   messagesByConversation: {},
 
   setConversations: (conversations) => set({ conversations }),
+
+  updateConversationPreview: (conversationId, preview) =>
+    set((state) => ({
+      conversations: state.conversations.map((conversation) =>
+        conversation._id === conversationId ? { ...conversation, ...preview } : conversation
+      ),
+    })),
 
   selectConversation: (conversationId) => set({ selectedConversationId: conversationId }),
 

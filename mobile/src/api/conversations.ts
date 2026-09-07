@@ -1,9 +1,37 @@
 import { apiFetch } from "./client";
+import { mergeConversationPreviewsFromCache } from "../utils/conversationPreviewCache";
+import { decryptMessagesIfNeeded } from "../crypto/crypto";
+import { getMessagePreviewText } from "../utils/conversationPreviewCache";
 import type { Conversation, ConversationParticipant, ConversationType, Message, SharedContentResponse } from "../types";
 
-export const listConversations = async (): Promise<Conversation[]> => {
+export const listConversations = async (currentUserId?: string, hydrateLatestMessages = false): Promise<Conversation[]> => {
   const response = await apiFetch<{ status: string; data?: { conversations: Conversation[] } }>("/conversations");
-  return response.data?.conversations || [];
+  const conversations = await mergeConversationPreviewsFromCache(response.data?.conversations || [], currentUserId);
+  if (!currentUserId || !hydrateLatestMessages) return conversations;
+
+  return Promise.all(
+    conversations.map(async (conversation) => {
+      try {
+        const { messages } = await getConversationMessages(conversation._id);
+        const decryptedMessages = await decryptMessagesIfNeeded(messages, currentUserId);
+        const latestMessage = decryptedMessages.reduce<Message | undefined>((latest, message) => {
+          if (!latest || new Date(message.createdAt).getTime() > new Date(latest.createdAt).getTime()) return message;
+          return latest;
+        }, undefined);
+
+        if (!latestMessage || latestMessage.decryptionFailed) return conversation;
+
+        return {
+          ...conversation,
+          lastMessage: getMessagePreviewText(latestMessage),
+          lastMessageAt: latestMessage.createdAt,
+          lastMessageSenderId: String(latestMessage.senderId),
+        };
+      } catch {
+        return conversation;
+      }
+    })
+  );
 };
 
 export interface ConversationDetail {

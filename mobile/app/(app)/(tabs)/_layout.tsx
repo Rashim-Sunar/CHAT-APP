@@ -3,18 +3,21 @@ import { Tabs } from "expo-router/tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../../src/constants/theme";
+import { useTheme } from "../../../src/context/ThemeContext";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const { isDark } = useTheme();
 
   return (
     <Tabs
       screenOptions={{
-        headerStyle: { backgroundColor: colors.surface },
-        headerTitleStyle: { fontWeight: "700", color: colors.text },
+        headerStyle: { backgroundColor: isDark ? "#0b0f1a" : colors.surface },
+        headerTitleStyle: { fontWeight: "700", color: isDark ? "#f3f5fa" : colors.text },
         headerShadowVisible: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textFaint,
+        headerTintColor: isDark ? "#a5aec0" : colors.primary,
+        tabBarActiveTintColor: isDark ? "#a78bfa" : colors.primary,
+        tabBarInactiveTintColor: isDark ? "#727c91" : colors.textFaint,
         // iOS tab bars have no press feedback beyond the icon/label color
         // change — no ripple, no flash. Overriding the default Android
         // ripple keeps tab switches feeling instant instead of "Material".
@@ -25,7 +28,12 @@ export default function TabsLayout() {
         // matching how the chat composer offsets itself.
         tabBarStyle: [
           styles.tabBar,
-          { height: 58 + insets.bottom, paddingBottom: Math.max(insets.bottom, 8) },
+          {
+            height: 58 + insets.bottom,
+            paddingBottom: Math.max(insets.bottom, 8),
+            backgroundColor: isDark ? "#0b0f1a" : colors.surface,
+            borderTopColor: isDark ? "rgba(148, 163, 184, 0.18)" : colors.border,
+          },
         ],
         tabBarLabelStyle: styles.tabBarLabel,
         tabBarItemStyle: styles.tabBarItem,
@@ -66,9 +74,9 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: colors.surface,
+      backgroundColor: colors.surface,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+      borderTopColor: colors.border,
     elevation: 0,
     shadowOpacity: 0,
     paddingTop: 8,
