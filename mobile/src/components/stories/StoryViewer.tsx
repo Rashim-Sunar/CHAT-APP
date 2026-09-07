@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Image, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Video, ResizeMode } from "expo-av";
+import { useVideoPlayer, VideoView } from "expo-video";
 import Avatar from "../Avatar";
 import { colors } from "../../constants/theme";
 import type { StoryGroup, StoryItem } from "../../types";
@@ -35,14 +35,18 @@ export default function StoryViewer({
   onDeleteStory,
   onAddStory,
 }: StoryViewerProps) {
-  const videoRef = useRef<Video | null>(null);
   const [storyIndex, setStoryIndex] = useState(initialStoryIndex);
   const [progress, setProgress] = useState(0);
-  const [videoDuration, setVideoDuration] = useState<number | null>(null);
 
   const stories = group?.stories || [];
   const currentStory: StoryItem | null = stories[storyIndex] || null;
   const isOwn = Boolean(currentStory && String(currentStory.userId) === String(currentUserId));
+  const videoPlayer = useVideoPlayer(
+    currentStory?.type === "video" && currentStory.mediaUrl ? { uri: currentStory.mediaUrl } : null,
+    (player) => {
+      player.timeUpdateEventInterval = 0.1;
+    }
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -53,7 +57,6 @@ export default function StoryViewer({
     if (!open || !currentStory) return;
 
     setProgress(0);
-    setVideoDuration(null);
 
     if (!currentStory.viewedByMe && !currentStory.isOwn) {
       void onMarkViewed(currentStory._id);
@@ -82,10 +85,26 @@ export default function StoryViewer({
   }, [open, currentStory?._id]);
 
   useEffect(() => {
+    if (!open || currentStory?.type !== "video" || !currentStory.mediaUrl) {
+      videoPlayer.pause();
+      return undefined;
+    }
+
+    const timeSubscription = videoPlayer.addListener("timeUpdate", ({ currentTime }) => {
+      if (videoPlayer.duration > 0) {
+        setProgress(Math.min(100, (currentTime / videoPlayer.duration) * 100));
+      }
+    });
+    const endSubscription = videoPlayer.addListener("playToEnd", handleNext);
+
+    videoPlayer.play();
+
     return () => {
-      videoRef.current?.pauseAsync().catch(() => undefined);
+      timeSubscription.remove();
+      endSubscription.remove();
+      videoPlayer.pause();
     };
-  }, [currentStory?._id]);
+  }, [open, currentStory?._id, currentStory?.mediaUrl, videoPlayer]);
 
   const canGoPrevious = storyIndex > 0;
   const canGoNext = storyIndex < stories.length - 1;
@@ -134,25 +153,11 @@ export default function StoryViewer({
 
     if (currentStory.type === "video") {
       return (
-        <Video
-          ref={videoRef}
-          source={{ uri: currentStory.mediaUrl || undefined }}
+        <VideoView
+          player={videoPlayer}
           style={styles.media}
-          resizeMode={ResizeMode.CONTAIN}
-          shouldPlay
-          isLooping={false}
-          onPlaybackStatusUpdate={(status) => {
-            if (!status.isLoaded) return;
-            if (status.durationMillis) {
-              setProgress(Math.min(100, (status.positionMillis / status.durationMillis) * 100));
-            }
-            if (status.didJustFinish) {
-              handleNext();
-            }
-            if (status.isLoaded && !videoDuration && status.durationMillis) {
-              setVideoDuration(status.durationMillis);
-            }
-          }}
+          contentFit="contain"
+          nativeControls={false}
         />
       );
     }
