@@ -34,6 +34,7 @@ import {
   getRecipientPublicKeys,
 } from "../../../../src/crypto/crypto";
 import { useAuthContext } from "../../../../src/context/AuthContext";
+import { useTheme } from "../../../../src/context/ThemeContext";
 import { useSocketContext } from "../../../../src/context/SocketContext";
 import { useCallContext } from "../../../../src/context/CallContext";
 import useConversationStore from "../../../../src/store/useConversationStore";
@@ -45,6 +46,10 @@ import MessageActionSheet, { type MessageAction } from "../../../../src/componen
 import ConversationDetailsDrawer from "../../../../src/components/details/ConversationDetailsDrawer";
 import { colors } from "../../../../src/constants/theme";
 import { formatDateSeparator } from "../../../../src/utils/formatTime";
+import {
+  saveConversationPreview,
+  saveConversationPreviewText,
+} from "../../../../src/utils/conversationPreviewCache";
 import type {
   CallType,
   ConversationParticipant,
@@ -57,7 +62,8 @@ import type {
 const EMPTY_MESSAGES: Message[] = [];
 
 // Same tiled wallpaper as the web app's chat pane.
-const CHAT_WALLPAPER = require("../../../../assets/chat-wallpaper.webp");
+const CHAT_WALLPAPER = require("../../../../assets/chat-wallpaper.jpg");
+const DARK_CHAT_WALLPAPER = require("../../../../assets/darktheme-bg.jpg");
 
 type ChatListItem =
   | { type: "message"; key: string; message: Message }
@@ -85,6 +91,7 @@ export default function ChatScreen() {
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const { isDark } = useTheme();
   const { authUser } = useAuthContext();
   const currentUserId = authUser?.data?.user?._id as string;
   const { socket, onlineUsers } = useSocketContext();
@@ -96,6 +103,7 @@ export default function ChatScreen() {
   const messages = useConversationStore((state) => state.messagesByConversation[conversationId] || EMPTY_MESSAGES);
   const setMessagesForConversation = useConversationStore((state) => state.setMessagesForConversation);
   const appendMessageToConversation = useConversationStore((state) => state.appendMessageToConversation);
+  const updateConversationPreview = useConversationStore((state) => state.updateConversationPreview);
 
   const [participants, setParticipants] = useState<ConversationParticipant[]>(
     storedConversation?.participants || []
@@ -221,11 +229,11 @@ export default function ChatScreen() {
             online={!isGroup && isOtherParticipantOnline}
           />
           <View style={styles.headerTitleTextGroup}>
-            <Text style={styles.headerTitleText} numberOfLines={1}>
+            <Text style={[styles.headerTitleText, isDark && styles.darkHeaderText]} numberOfLines={1}>
               {headerTitle}
             </Text>
             {Boolean(headerSubtitle) && (
-              <Text style={[styles.headerSubtitleText, isGroup && styles.headerSubtitleMuted]}>
+              <Text style={[styles.headerSubtitleText, isGroup && styles.headerSubtitleMuted, isDark && styles.darkOnlineText]}>
                 {headerSubtitle}
               </Text>
             )}
@@ -235,16 +243,19 @@ export default function ChatScreen() {
       headerRight: () => (
         <View style={styles.headerActions}>
           <TouchableOpacity onPress={() => handleStartCall("audio")} hitSlop={8} style={styles.headerButton}>
-            <Ionicons name="call-outline" size={21} color={colors.primary} />
+            <Ionicons name="call-outline" size={21} color={isDark ? "#a78bfa" : colors.primary} />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => handleStartCall("video")} hitSlop={8} style={styles.headerButton}>
-            <Ionicons name="videocam-outline" size={22} color={colors.primary} />
+            <Ionicons name="videocam-outline" size={22} color={isDark ? "#a78bfa" : colors.primary} />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setDetailsOpen(true)} hitSlop={8} style={styles.headerButton}>
-            <Ionicons name="information-circle-outline" size={23} color={colors.primary} />
+            <Ionicons name="information-circle-outline" size={23} color={isDark ? "#a78bfa" : colors.primary} />
           </TouchableOpacity>
         </View>
       ),
+      headerStyle: { backgroundColor: isDark ? "#0b0f1a" : colors.surface },
+      headerTitleStyle: { fontWeight: "700", color: isDark ? "#f3f5fa" : colors.text },
+      headerTintColor: isDark ? "#a5aec0" : colors.primary,
     });
   }, [
     navigation,
@@ -256,6 +267,7 @@ export default function ChatScreen() {
     isOtherParticipantOnline,
     storedConversation?.displayAvatar,
     handleStartCall,
+    isDark,
   ]);
 
   useEffect(() => {
@@ -345,6 +357,13 @@ export default function ChatScreen() {
       const sentMessage = await sendTextMessage(conversationId, { ...payload, replyTo: replyToId });
       const hydrated = await decryptMessageIfNeeded(sentMessage, currentUserId);
       appendMessageToConversation(conversationId, hydrated);
+      const preview = {
+        lastMessage: text,
+        lastMessageAt: sentMessage.createdAt,
+        lastMessageSenderId: currentUserId,
+      };
+      updateConversationPreview(conversationId, preview);
+      await saveConversationPreviewText(currentUserId, conversationId, preview);
     } catch (error: unknown) {
       setDraft(text);
       setSendError(error instanceof ApiFetchError ? error.message : "Failed to send message");
@@ -364,6 +383,12 @@ export default function ChatScreen() {
         replyTo: replyTarget?._id,
       });
       appendMessageToConversation(conversationId, sentMessage);
+      updateConversationPreview(conversationId, {
+        lastMessage: sentMessage.fileName || (sentMessage.messageType === "image" ? "Photo" : "Video"),
+        lastMessageAt: sentMessage.createdAt,
+        lastMessageSenderId: currentUserId,
+      });
+      await saveConversationPreview(currentUserId, conversationId, sentMessage);
       resetComposerContext();
     } catch (error: unknown) {
       setSendError(error instanceof ApiFetchError ? error.message : "Failed to send attachment");
@@ -468,8 +493,8 @@ export default function ChatScreen() {
 
   if (loadingHistory && messages.length === 0) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} />
+      <View style={[styles.center, isDark && styles.darkScreen]}>
+        <ActivityIndicator color={isDark ? "#a78bfa" : colors.primary} />
       </View>
     );
   }
@@ -477,19 +502,19 @@ export default function ChatScreen() {
   const composerContext = editTarget || replyTarget;
 
   return (
-    <View style={[styles.flex, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + insets.bottom : 0 }]}>
+    <View style={[styles.flex, isDark && styles.darkScreen, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + insets.bottom : 0 }]}>
       {isGroup && activeBanner && (
-        <View style={styles.callBanner}>
+        <View style={[styles.callBanner, isDark && styles.darkCallBanner]}>
           <Ionicons
             name={activeBanner.callType === "video" ? "videocam" : "call"}
             size={18}
-            color={colors.primaryDark}
+            color={isDark ? "#a78bfa" : colors.primaryDark}
           />
-          <Text style={styles.callBannerText}>
+          <Text style={[styles.callBannerText, isDark && styles.darkSecondaryText]}>
             Ongoing {activeBanner.callType} call · {activeBanner.participantCount}
           </Text>
           <TouchableOpacity
-            style={styles.callBannerButton}
+            style={[styles.callBannerButton, isDark && styles.darkCallBannerButton]}
             onPress={() => void joinCall(conversationId, activeBanner.callType)}
           >
             <Text style={styles.callBannerButtonText}>Join</Text>
@@ -498,27 +523,31 @@ export default function ChatScreen() {
       )}
 
       {pinnedMessage && (
-        <View style={styles.pinnedBanner}>
-          <Ionicons name="pin" size={15} color={colors.primary} />
-          <Text style={styles.pinnedBannerText} numberOfLines={1}>
+        <View style={[styles.pinnedBanner, isDark && styles.darkPanel]}>
+          <Ionicons name="pin" size={15} color={isDark ? "#a78bfa" : colors.primary} />
+          <Text style={[styles.pinnedBannerText, isDark && styles.darkSecondaryText]} numberOfLines={1}>
             {pinnedMessage.text || pinnedMessage.message || pinnedMessage.fileName || "Pinned message"}
           </Text>
           <TouchableOpacity onPress={() => void togglePin(pinnedMessage)} hitSlop={8}>
-            <Ionicons name="close" size={17} color={colors.textFaint} />
+            <Ionicons name="close" size={17} color={isDark ? "#727c91" : colors.textFaint} />
           </TouchableOpacity>
         </View>
       )}
 
-      <ImageBackground source={CHAT_WALLPAPER} resizeMode="repeat" style={styles.flex}>
-        <View style={styles.wallpaperOverlay} pointerEvents="none" />
+      <ImageBackground
+        source={isDark ? DARK_CHAT_WALLPAPER : CHAT_WALLPAPER}
+        resizeMode={isDark ? "cover" : "repeat"}
+        style={[styles.flex, isDark && styles.darkScreen]}
+      >
+        <View style={[styles.wallpaperOverlay, isDark && styles.darkWallpaperOverlay]} pointerEvents="none" />
         {items.length === 0 ? (
           <View style={styles.emptyChat}>
-            <Ionicons name="chatbubble-ellipses-outline" size={44} color={colors.textFaint} />
-            <Text style={styles.emptyChatText}>No messages yet — say hi</Text>
+            <Ionicons name="chatbubble-ellipses-outline" size={44} color={isDark ? "#727c91" : colors.textFaint} />
+            <Text style={[styles.emptyChatText, isDark && styles.darkSecondaryText]}>No messages yet — say hi</Text>
           </View>
         ) : (
           <FlatList
-            style={styles.flex}
+            style={[styles.flex, styles.transparentList]}
             data={items}
             keyExtractor={(item) => item.key}
             inverted
@@ -552,6 +581,7 @@ export default function ChatScreen() {
                 <MessageBubble
                   message={item.message}
                   isMine={isMine}
+                  isDark={isDark}
                   senderName={participantNameById.get(item.message.senderId)}
                   showSenderName={isGroup && !isMine}
                   replyTarget={item.message.replyTo ? messagesById.get(item.message.replyTo) : undefined}
@@ -564,13 +594,13 @@ export default function ChatScreen() {
       </ImageBackground>
 
       {sendError && (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorBannerText}>{sendError}</Text>
+        <View style={[styles.errorBanner, isDark && styles.darkErrorBanner]}>
+          <Text style={[styles.errorBannerText, isDark && styles.darkErrorText]}>{sendError}</Text>
         </View>
       )}
 
       {isBlocked ? (
-        <View style={[styles.blockBanner, { paddingBottom: Math.max(insets.bottom, 10) + 8 }]}>
+        <View style={[styles.blockBanner, isDark && styles.darkPanel, { paddingBottom: Math.max(insets.bottom, 10) + 8 }]}>
           <View style={styles.blockIcon}>
             <Ionicons name="ban" size={18} color={colors.danger} />
           </View>
@@ -581,17 +611,17 @@ export default function ChatScreen() {
           </Text>
         </View>
       ) : (
-        <View style={styles.composerWrapper}>
+        <View style={[styles.composerWrapper, isDark && styles.darkComposer]}>
           {composerContext && (
             <View style={styles.composerContext}>
               <Ionicons
                 name={editTarget ? "create-outline" : "arrow-undo-outline"}
                 size={15}
-                color={colors.primary}
+                color={isDark ? "#a78bfa" : colors.primary}
               />
               <View style={styles.composerContextText}>
-                <Text style={styles.composerContextTitle}>{editTarget ? "Editing" : "Replying"}</Text>
-                <Text style={styles.composerContextBody} numberOfLines={1}>
+                <Text style={[styles.composerContextTitle, isDark && styles.darkContextTitle]}>{editTarget ? "Editing" : "Replying"}</Text>
+                <Text style={[styles.composerContextBody, isDark && styles.darkSecondaryText]} numberOfLines={1}>
                   {composerContext.text || composerContext.message || composerContext.fileName || "Attachment"}
                 </Text>
               </View>
@@ -602,7 +632,7 @@ export default function ChatScreen() {
                 }}
                 hitSlop={8}
               >
-                <Ionicons name="close" size={17} color={colors.textFaint} />
+                <Ionicons name="close" size={17} color={isDark ? "#727c91" : colors.textFaint} />
               </TouchableOpacity>
             </View>
           )}
@@ -619,16 +649,16 @@ export default function ChatScreen() {
               disabled={uploading || Boolean(editTarget)}
             >
               {uploading ? (
-                <ActivityIndicator color={colors.primary} size="small" />
+                <ActivityIndicator color={isDark ? "#a78bfa" : colors.primary} size="small" />
               ) : (
-                <Ionicons name="add-circle-outline" size={26} color={colors.primary} />
+                <Ionicons name="add-circle-outline" size={26} color={isDark ? "#a78bfa" : colors.primary} />
               )}
             </TouchableOpacity>
 
             <TextInput
-              style={styles.input}
+              style={[styles.input, isDark && styles.darkInput]}
               placeholder="Message"
-              placeholderTextColor={colors.textFaint}
+              placeholderTextColor={isDark ? "#727c91" : colors.textFaint}
               value={draft}
               onChangeText={setDraft}
               multiline
@@ -638,6 +668,7 @@ export default function ChatScreen() {
               style={[
                 styles.sendButton,
                 (sending || !draft.trim() || participants.length === 0) && styles.sendButtonDisabled,
+                isDark && styles.darkSendButton,
               ]}
               onPress={() => void handleSend()}
               disabled={sending || !draft.trim() || participants.length === 0}
@@ -676,6 +707,8 @@ export default function ChatScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
+  transparentList: { backgroundColor: "transparent" },
+  darkScreen: { backgroundColor: "#050505" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
   headerTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   headerTitleTextGroup: { maxWidth: 180 },
@@ -684,6 +717,8 @@ const styles = StyleSheet.create({
   headerSubtitleMuted: { color: colors.textMuted },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 16, marginRight: 4 },
   headerButton: { padding: 2 },
+  darkHeaderText: { color: "#f3f5fa" },
+  darkOnlineText: { color: "#86efac" },
   callBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -695,6 +730,9 @@ const styles = StyleSheet.create({
   callBannerText: { flex: 1, fontSize: 13.5, color: colors.primaryDark, fontWeight: "500" },
   callBannerButton: { backgroundColor: colors.primary, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 7 },
   callBannerButtonText: { color: "#fff", fontWeight: "600", fontSize: 13 },
+  darkCallBanner: { backgroundColor: "rgba(30, 27, 75, 0.86)" },
+  darkCallBannerButton: { backgroundColor: "#7c3aed" },
+  darkSecondaryText: { color: "#a5aec0" },
   pinnedBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -706,6 +744,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   pinnedBannerText: { flex: 1, fontSize: 13, color: colors.textMuted },
+  darkPanel: { backgroundColor: "rgba(11, 15, 26, 0.86)", borderBottomColor: "rgba(148, 163, 184, 0.18)" },
   wallpaperOverlay: {
     position: "absolute",
     top: 0,
@@ -714,6 +753,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: "rgba(238, 242, 255, 0.55)",
   },
+  darkWallpaperOverlay: { backgroundColor: "rgba(0, 0, 0, 0.42)" },
   list: { paddingHorizontal: 12, paddingVertical: 12 },
   emptyChat: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8, paddingBottom: 60 },
   emptyChatText: { color: colors.textMuted, fontSize: 14 },
@@ -730,6 +770,8 @@ const styles = StyleSheet.create({
   },
   errorBanner: { backgroundColor: colors.dangerBackground, paddingVertical: 6, paddingHorizontal: 14 },
   errorBannerText: { color: colors.danger, fontSize: 12.5, textAlign: "center" },
+  darkErrorBanner: { backgroundColor: "rgba(127, 29, 29, 0.8)" },
+  darkErrorText: { color: "#fecaca" },
   blockBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -754,6 +796,7 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     backgroundColor: colors.surface,
   },
+  darkComposer: { backgroundColor: "rgba(11, 15, 26, 0.9)", borderTopColor: "rgba(148, 163, 184, 0.18)" },
   composerContext: {
     flexDirection: "row",
     alignItems: "center",
@@ -763,6 +806,7 @@ const styles = StyleSheet.create({
   },
   composerContextText: { flex: 1 },
   composerContextTitle: { fontSize: 12, fontWeight: "700", color: colors.primary },
+  darkContextTitle: { color: "#a78bfa" },
   composerContextBody: { fontSize: 13, color: colors.textMuted, marginTop: 1 },
   composer: { flexDirection: "row", alignItems: "flex-end", gap: 8, paddingHorizontal: 10, paddingTop: 8 },
   attachButton: { paddingBottom: 9, paddingHorizontal: 2 },
@@ -778,6 +822,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.text,
   },
+  darkInput: { borderColor: "rgba(148, 163, 184, 0.2)", backgroundColor: "rgba(5, 5, 5, 0.72)", color: "#f3f5fa" },
   sendButton: {
     width: 42,
     height: 42,
@@ -787,4 +832,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   sendButtonDisabled: { backgroundColor: colors.borderStrong },
+  darkSendButton: { backgroundColor: "#7c3aed" },
 });

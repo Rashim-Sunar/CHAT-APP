@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import useStories from "../../hooks/useStories";
 import { useAuthContext } from "../../context/AuthContext";
+import { useTheme } from "../../context/ThemeContext";
 import { colors } from "../../constants/theme";
 import StoryItem from "./StoryItem";
 import StoryComposerModal from "./StoryComposerModal";
@@ -12,6 +13,7 @@ export default function StoriesSection() {
   const { authUser } = useAuthContext();
   const currentUser = authUser?.data?.user;
   const currentUserId = currentUser?._id;
+  const { isDark } = useTheme();
   const { stories, loading, publishStory, publishStoryMedia, markStoryViewed, removeStory } = useStories();
   const [composerOpen, setComposerOpen] = useState(false);
   const [viewerGroupIndex, setViewerGroupIndex] = useState<number | null>(null);
@@ -55,9 +57,9 @@ export default function StoriesSection() {
   const activeGroup = viewerGroupIndex !== null ? displayGroups[viewerGroupIndex] || null : null;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isDark && styles.darkContainer]}>
       <View style={styles.header}>
-        <Text style={styles.title}>Stories</Text>
+        <Text style={[styles.title, isDark && styles.darkText]}>Stories</Text>
         <Pressable
           onPress={() => {
             const firstIndex = displayGroups.findIndex((group) => group.stories.length > 0);
@@ -68,14 +70,14 @@ export default function StoriesSection() {
           hitSlop={8}
           style={styles.seeAll}
         >
-          <Text style={styles.seeAllText}>See all</Text>
-          <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+          <Text style={[styles.seeAllText, isDark && styles.darkAccentText]}>See all</Text>
+          <Ionicons name="chevron-forward" size={14} color={isDark ? "#a78bfa" : colors.primary} />
         </Pressable>
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
         {loading ? (
-          Array.from({ length: 4 }).map((_, index) => <View key={index} style={styles.skeleton} />)
+            Array.from({ length: 4 }).map((_, index) => <View key={index} style={[styles.skeleton, isDark && styles.darkSkeleton]} />)
         ) : (
           <>
             {displayGroups.map((group, index) => (
@@ -83,6 +85,7 @@ export default function StoriesSection() {
                 key={group.user._id}
                 group={group}
                 currentUserId={currentUserId}
+                isDark={isDark}
                 onPress={() => (group.user._id === currentUserId ? openMyStory() : openViewer(index, 0))}
               />
             ))}
@@ -90,7 +93,7 @@ export default function StoriesSection() {
         )}
       </ScrollView>
 
-      {stories.length === 0 && !loading ? <Text style={styles.empty}>No stories yet. Share a moment with your friends.</Text> : null}
+      {stories.length === 0 && !loading ? <Text style={[styles.empty, isDark && styles.darkMutedText]}>No stories yet. Share a moment with your friends.</Text> : null}
 
       <StoryComposerModal
         open={composerOpen}
@@ -115,11 +118,16 @@ export default function StoriesSection() {
 
 const styles = StyleSheet.create({
   container: { paddingTop: 10, paddingBottom: 12 },
+  darkContainer: { backgroundColor: "#050505" },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, marginBottom: 10 },
   title: { fontSize: 13, fontWeight: "800", color: colors.text, letterSpacing: 0.7, textTransform: "uppercase" },
+  darkText: { color: "#f3f5fa" },
+  darkAccentText: { color: "#a78bfa" },
   seeAll: { flexDirection: "row", alignItems: "center", gap: 2 },
   seeAllText: { color: colors.primary, fontSize: 12, fontWeight: "700" },
   row: { paddingHorizontal: 16, gap: 12 },
   skeleton: { width: 72, height: 80, borderRadius: 20, backgroundColor: colors.border },
+  darkSkeleton: { backgroundColor: "#1f2937" },
   empty: { paddingHorizontal: 16, marginTop: 8, fontSize: 12, color: colors.textFaint },
+  darkMutedText: { color: "#a5aec0" },
 });

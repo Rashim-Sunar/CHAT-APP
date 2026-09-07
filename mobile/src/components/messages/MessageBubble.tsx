@@ -8,6 +8,7 @@ import type { Message } from "../../types";
 interface MessageBubbleProps {
   message: Message;
   isMine: boolean;
+  isDark?: boolean;
   senderName?: string;
   showSenderName: boolean;
   replyTarget?: Message;
@@ -24,6 +25,7 @@ const formatFileSize = (bytes?: number): string => {
 function MessageBubble({
   message,
   isMine,
+  isDark = false,
   senderName,
   showSenderName,
   replyTarget,
@@ -45,7 +47,7 @@ function MessageBubble({
       return (
         <View style={styles.deletedRow}>
           <Ionicons name="ban-outline" size={13} color={isMine ? "rgba(255,255,255,0.7)" : colors.textFaint} />
-          <Text style={[styles.deletedText, isMine && styles.deletedTextMine]}>{body}</Text>
+          <Text style={[styles.deletedText, isMine && styles.deletedTextMine, isDark && styles.deletedTextDark]}>{body}</Text>
         </View>
       );
     }
@@ -82,11 +84,11 @@ function MessageBubble({
             <Ionicons name="document" size={18} color={isMine ? "#fff" : colors.primary} />
           </View>
           <View style={styles.fileMeta}>
-            <Text style={[styles.fileName, isMine && styles.textMine]} numberOfLines={1}>
+              <Text style={[styles.fileName, isMine && styles.textMine, isDark && !isMine && styles.textTheirsDark]} numberOfLines={1}>
               {message.fileName || "Attachment"}
             </Text>
             {Boolean(message.fileSize) && (
-              <Text style={[styles.fileSize, isMine && styles.fileSizeMine]}>
+                <Text style={[styles.fileSize, isMine && styles.fileSizeMine, isDark && !isMine && styles.fileSizeDark]}>
                 {formatFileSize(message.fileSize)}
               </Text>
             )}
@@ -95,12 +97,12 @@ function MessageBubble({
       );
     }
 
-    return <Text style={isMine ? styles.textMine : styles.textTheirs}>{body}</Text>;
+    return <Text style={[isMine ? styles.textMine : styles.textTheirs, isDark && !isMine && styles.textTheirsDark]}>{body}</Text>;
   };
 
   return (
     <View style={[styles.row, isMine ? styles.rowMine : styles.rowTheirs]}>
-      {showSenderName && !isMine && <Text style={styles.senderName}>{senderName}</Text>}
+      {showSenderName && !isMine && <Text style={[styles.senderName, isDark && styles.senderNameDark]}>{senderName}</Text>}
 
       <TouchableOpacity
         activeOpacity={0.85}
@@ -109,6 +111,7 @@ function MessageBubble({
         style={[
           styles.bubble,
           isMine ? styles.bubbleMine : styles.bubbleTheirs,
+          isDark && (isMine ? styles.bubbleMineDark : styles.bubbleTheirsDark),
           isMine ? styles.tailMine : styles.tailTheirs,
         ]}
       >
@@ -125,7 +128,7 @@ function MessageBubble({
 
         {replyTarget && (
           <View style={[styles.replyQuote, isMine && styles.replyQuoteMine]}>
-            <Text style={[styles.replyBody, isMine && styles.replyBodyMine]} numberOfLines={2}>
+            <Text style={[styles.replyBody, isMine && styles.replyBodyMine, isDark && !isMine && styles.replyBodyDark]} numberOfLines={2}>
               {replyTarget.deletedForEveryone
                 ? "Message deleted"
                 : replyTarget.text || replyTarget.message || replyTarget.fileName || "Attachment"}
@@ -142,7 +145,7 @@ function MessageBubble({
           {message.edited && !isDeleted && (
             <Text style={[styles.footerText, isMine && styles.footerTextMine]}>edited</Text>
           )}
-          <Text style={[styles.footerText, isMine && styles.footerTextMine]}>
+            <Text style={[styles.footerText, isMine && styles.footerTextMine, isDark && styles.footerTextDark]}>
             {formatClockTime(message.createdAt)}
           </Text>
         </View>
@@ -172,10 +175,13 @@ const styles = StyleSheet.create({
   bubble: { maxWidth: "78%", borderRadius: 18, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 6 },
   bubbleMine: { backgroundColor: colors.bubbleMine },
   bubbleTheirs: { backgroundColor: colors.bubbleTheirs, borderWidth: 1, borderColor: colors.border },
+  bubbleMineDark: { backgroundColor: "#5b3fc7" },
+  bubbleTheirsDark: { backgroundColor: "rgba(11, 15, 26, 0.9)", borderColor: "rgba(148, 163, 184, 0.2)" },
   tailMine: { borderBottomRightRadius: 4 },
   tailTheirs: { borderBottomLeftRadius: 4 },
   textMine: { color: colors.bubbleTextMine, fontSize: 15.5, lineHeight: 20 },
   textTheirs: { color: colors.bubbleTextTheirs, fontSize: 15.5, lineHeight: 20 },
+  textTheirsDark: { color: "#f3f5fa" },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 3 },
   metaText: { fontSize: 11, fontStyle: "italic", color: colors.textFaint },
   metaTextMine: { color: "rgba(255,255,255,0.7)" },
@@ -191,9 +197,11 @@ const styles = StyleSheet.create({
   replyQuoteMine: { backgroundColor: "rgba(255,255,255,0.16)", borderLeftColor: "rgba(255,255,255,0.8)" },
   replyBody: { fontSize: 12.5, color: colors.textMuted },
   replyBodyMine: { color: "rgba(255,255,255,0.85)" },
+  replyBodyDark: { color: "#a5aec0" },
   deletedRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   deletedText: { fontSize: 14.5, fontStyle: "italic", color: colors.textFaint },
   deletedTextMine: { color: "rgba(255,255,255,0.7)" },
+  deletedTextDark: { color: "#a5aec0" },
   mediaImage: { width: 220, height: 220, borderRadius: 12, backgroundColor: colors.background },
   videoTile: {
     width: 220,
@@ -219,9 +227,12 @@ const styles = StyleSheet.create({
   fileName: { fontSize: 14, fontWeight: "500", color: colors.text },
   fileSize: { fontSize: 11.5, color: colors.textFaint, marginTop: 1 },
   fileSizeMine: { color: "rgba(255,255,255,0.7)" },
+  fileSizeDark: { color: "#727c91" },
+  senderNameDark: { color: "#a5aec0" },
   footer: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 4, marginTop: 3 },
   footerText: { fontSize: 10.5, color: colors.textFaint },
   footerTextMine: { color: "rgba(255,255,255,0.75)" },
+  footerTextDark: { color: "#727c91" },
   reactions: { flexDirection: "row", gap: 4, marginTop: -6 },
   reactionsMine: { marginRight: 8 },
   reactionsTheirs: { marginLeft: 8 },

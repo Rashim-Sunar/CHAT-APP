@@ -31,6 +31,7 @@ import {
 } from "../../api/groups";
 import { decryptMessagesIfNeeded } from "../../crypto/crypto";
 import { useAuthContext } from "../../context/AuthContext";
+import { useTheme } from "../../context/ThemeContext";
 import { useSocketContext } from "../../context/SocketContext";
 import useConversationStore from "../../store/useConversationStore";
 import Avatar from "../Avatar";
@@ -50,6 +51,7 @@ export default function ConversationDetailsPanel({
   onClose,
 }: ConversationDetailsPanelProps) {
   const { authUser } = useAuthContext();
+  const { isDark } = useTheme();
   const { onlineUsers } = useSocketContext();
   const currentUserId = authUser?.data?.user?._id as string;
 
@@ -195,44 +197,44 @@ export default function ConversationDetailsPanel({
   };
 
   return (
-    <View style={styles.flex}>
-      <View style={styles.panelHeader}>
-        <Text style={styles.panelHeaderTitle}>Details</Text>
+    <View style={[styles.flex, isDark && styles.darkFlex]}>
+      <View style={[styles.panelHeader, isDark && styles.darkSurface]}>
+        <Text style={[styles.panelHeaderTitle, isDark && styles.darkText]}>Details</Text>
         <TouchableOpacity onPress={onClose} hitSlop={10}>
-          <Ionicons name="close" size={24} color={colors.text} />
+          <Ionicons name="close" size={24} color={isDark ? "#f3f5fa" : colors.text} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.flex} contentContainerStyle={styles.content}>
+      <ScrollView style={styles.flex} contentContainerStyle={[styles.content, isDark && styles.darkFlex]}>
       <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => setRenameOpen(false)}>
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Rename group</Text>
+          <View style={[styles.modalCard, isDark && styles.darkModalCard]}>
+            <Text style={[styles.modalTitle, isDark && styles.darkText]}>Rename group</Text>
             <TextInput
-              style={styles.modalInput}
+              style={[styles.modalInput, isDark && styles.darkInput]}
               value={renameDraft}
               onChangeText={setRenameDraft}
               autoFocus
               placeholder="Group name"
-              placeholderTextColor={colors.textFaint}
+              placeholderTextColor={isDark ? "#727c91" : colors.textFaint}
             />
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalButton} onPress={() => setRenameOpen(false)}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={[styles.modalCancelText, isDark && styles.darkMutedText]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.modalButton}
                 onPress={() => void submitRename()}
                 disabled={!renameDraft.trim()}
               >
-                <Text style={[styles.modalSaveText, !renameDraft.trim() && styles.modalSaveDisabled]}>Save</Text>
+                <Text style={[styles.modalSaveText, isDark && styles.darkAccentText, !renameDraft.trim() && styles.modalSaveDisabled]}>Save</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      <View style={styles.profileSection}>
+      <View style={[styles.profileSection, isDark && styles.darkSurface]}>
         <Avatar
           id={isGroup ? conversation._id : otherParticipant?._id || conversation._id}
           name={conversation.displayName}
@@ -242,28 +244,28 @@ export default function ConversationDetailsPanel({
           size={88}
         />
         <View style={styles.nameRow}>
-          <Text style={styles.name}>{conversation.displayName}</Text>
+          <Text style={[styles.name, isDark && styles.darkText]}>{conversation.displayName}</Text>
           {isGroup && isAdmin && (
             <TouchableOpacity onPress={openRename} hitSlop={8} disabled={busy}>
-              <Ionicons name="pencil" size={16} color={colors.textFaint} />
+              <Ionicons name="pencil" size={16} color={isDark ? "#727c91" : colors.textFaint} />
             </TouchableOpacity>
           )}
         </View>
-        {isGroup && <Text style={styles.subtitle}>{conversation.participants.length} members</Text>}
+        {isGroup && <Text style={[styles.subtitle, isDark && styles.darkMutedText]}>{conversation.participants.length} members</Text>}
       </View>
 
-      <View style={styles.card}>
+      <View style={[styles.card, isDark && styles.darkSurface]}>
         <View style={styles.row}>
           <Ionicons name="notifications-off-outline" size={20} color={colors.textMuted} />
-          <Text style={styles.rowLabel}>Mute notifications</Text>
+          <Text style={[styles.rowLabel, isDark && styles.darkText]}>Mute notifications</Text>
           <Switch
             value={isMuted}
             onValueChange={(next) =>
               void runAction(() => setConversationMuted(conversationId, next), "Couldn't update mute setting.")
             }
             disabled={busy}
-            trackColor={{ false: colors.border, true: colors.primarySoft }}
-            thumbColor={isMuted ? colors.primary : "#fff"}
+            trackColor={{ false: isDark ? "#374151" : colors.border, true: isDark ? "#7c3aed" : colors.primarySoft }}
+            thumbColor={isMuted ? (isDark ? "#a78bfa" : colors.primary) : isDark ? "#a5aec0" : "#fff"}
           />
         </View>
       </View>
@@ -271,9 +273,9 @@ export default function ConversationDetailsPanel({
       {isGroup ? (
         <>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Members</Text>
+            <Text style={[styles.sectionTitle, isDark && styles.darkMutedText]}>Members</Text>
           </View>
-          <View style={styles.card}>
+          <View style={[styles.card, isDark && styles.darkSurface]}>
             {isAdmin && (
               <TouchableOpacity
                 style={styles.row}
@@ -283,10 +285,10 @@ export default function ConversationDetailsPanel({
                   router.push({ pathname: "/chat/[conversationId]/add-members", params: { conversationId } });
                 }}
               >
-                <View style={styles.addIcon}>
+                <View style={[styles.addIcon, isDark && styles.darkAccentSurface]}>
                   <Ionicons name="person-add" size={17} color={colors.primary} />
                 </View>
-                <Text style={[styles.rowLabel, styles.primaryText]}>Add members</Text>
+                <Text style={[styles.rowLabel, styles.primaryText, isDark && styles.darkAccentText]}>Add members</Text>
               </TouchableOpacity>
             )}
 
@@ -307,12 +309,12 @@ export default function ConversationDetailsPanel({
                   size={40}
                   online={onlineUsers.includes(participant._id)}
                 />
-                <Text style={styles.rowLabel}>
+                <Text style={[styles.rowLabel, isDark && styles.darkText]}>
                   {participant._id === currentUserId ? "You" : participant.userName}
                 </Text>
                 {participant.isAdmin && (
-                  <View style={styles.adminBadge}>
-                    <Text style={styles.adminBadgeText}>Admin</Text>
+                  <View style={[styles.adminBadge, isDark && styles.darkAccentSurface]}>
+                    <Text style={[styles.adminBadgeText, isDark && styles.darkAccentText]}>Admin</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -320,7 +322,7 @@ export default function ConversationDetailsPanel({
           </View>
 
           {isAdmin && (
-            <View style={styles.card}>
+            <View style={[styles.card, isDark && styles.darkSurface]}>
               <TouchableOpacity
                 style={styles.row}
                 activeOpacity={0.6}
@@ -328,17 +330,17 @@ export default function ConversationDetailsPanel({
                 onPress={() => void handleInviteLink()}
               >
                 <Ionicons name="link-outline" size={20} color={colors.primary} />
-                <Text style={[styles.rowLabel, styles.primaryText]}>Share invite link</Text>
+                <Text style={[styles.rowLabel, styles.primaryText, isDark && styles.darkAccentText]}>Share invite link</Text>
               </TouchableOpacity>
-              <View style={styles.divider} />
+              <View style={[styles.divider, isDark && styles.darkDivider]} />
               <TouchableOpacity style={styles.row} activeOpacity={0.6} disabled={busy} onPress={handleRevokeInvite}>
                 <Ionicons name="close-circle-outline" size={20} color={colors.textMuted} />
-                <Text style={styles.rowLabel}>Revoke invite link</Text>
+                <Text style={[styles.rowLabel, isDark && styles.darkText]}>Revoke invite link</Text>
               </TouchableOpacity>
             </View>
           )}
 
-          <View style={styles.card}>
+          <View style={[styles.card, isDark && styles.darkSurface]}>
             <TouchableOpacity style={styles.row} activeOpacity={0.6} disabled={busy} onPress={handleLeaveGroup}>
               <Ionicons name="exit-outline" size={20} color={colors.danger} />
               <Text style={[styles.rowLabel, styles.dangerText]}>Leave group</Text>
@@ -346,7 +348,7 @@ export default function ConversationDetailsPanel({
           </View>
         </>
       ) : (
-        <View style={styles.card}>
+        <View style={[styles.card, isDark && styles.darkSurface]}>
           {blockedByMe && (
             <Text style={styles.blockHint}>You blocked this contact. Unblock to send and receive messages.</Text>
           )}
@@ -370,20 +372,20 @@ export default function ConversationDetailsPanel({
       )}
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Pinned messages</Text>
+        <Text style={[styles.sectionTitle, isDark && styles.darkMutedText]}>Pinned messages</Text>
       </View>
-      <View style={styles.card}>
+      <View style={[styles.card, isDark && styles.darkSurface]}>
         {pinnedMessages.length === 0 ? (
-          <Text style={styles.emptyText}>{loading ? "Loading…" : "No pinned messages"}</Text>
+          <Text style={[styles.emptyText, isDark && styles.darkMutedText]}>{loading ? "Loading…" : "No pinned messages"}</Text>
         ) : (
           pinnedMessages.map((message) => (
             <View key={message._id} style={styles.pinnedItem}>
               <Ionicons name="pin" size={14} color={colors.primary} style={styles.pinnedIcon} />
               <View style={styles.pinnedTextGroup}>
-                <Text style={styles.pinnedText} numberOfLines={2}>
+                <Text style={[styles.pinnedText, isDark && styles.darkText]} numberOfLines={2}>
                   {message.text || message.message || ""}
                 </Text>
-                <Text style={styles.pinnedMeta}>{formatRelativeTime(message.createdAt)}</Text>
+                <Text style={[styles.pinnedMeta, isDark && styles.darkMutedText]}>{formatRelativeTime(message.createdAt)}</Text>
               </View>
             </View>
           ))
@@ -391,16 +393,16 @@ export default function ConversationDetailsPanel({
       </View>
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Shared media</Text>
+        <Text style={[styles.sectionTitle, isDark && styles.darkMutedText]}>Shared media</Text>
       </View>
-      <View style={styles.card}>
+      <View style={[styles.card, isDark && styles.darkSurface]}>
         {sharedContent.media.length === 0 ? (
-          <Text style={styles.emptyText}>{loading ? "Loading…" : "No media shared yet"}</Text>
+          <Text style={[styles.emptyText, isDark && styles.darkMutedText]}>{loading ? "Loading…" : "No media shared yet"}</Text>
         ) : (
           <View style={styles.mediaGrid}>
             {sharedContent.media.map((item) => (
               <TouchableOpacity key={item.url} onPress={() => void Linking.openURL(item.url)}>
-                <View style={styles.mediaThumb}>
+                <View style={[styles.mediaThumb, isDark && styles.darkMediaThumb]}>
                   <Ionicons name={item.type === "video" ? "videocam" : "image"} size={22} color={colors.textFaint} />
                 </View>
               </TouchableOpacity>
@@ -410,11 +412,11 @@ export default function ConversationDetailsPanel({
       </View>
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Links</Text>
+        <Text style={[styles.sectionTitle, isDark && styles.darkMutedText]}>Links</Text>
       </View>
-      <View style={styles.card}>
+      <View style={[styles.card, isDark && styles.darkSurface]}>
         {sharedContent.links.length === 0 ? (
-          <Text style={styles.emptyText}>{loading ? "Loading…" : "No links shared yet"}</Text>
+          <Text style={[styles.emptyText, isDark && styles.darkMutedText]}>{loading ? "Loading…" : "No links shared yet"}</Text>
         ) : (
           sharedContent.links.map((link) => (
             <TouchableOpacity
@@ -424,7 +426,7 @@ export default function ConversationDetailsPanel({
               onPress={() => void Linking.openURL(link.url)}
             >
               <Ionicons name="link-outline" size={18} color={colors.primary} />
-              <Text style={styles.linkText} numberOfLines={1}>
+              <Text style={[styles.linkText, isDark && styles.darkAccentText]} numberOfLines={1}>
                 {link.title || link.url}
               </Text>
             </TouchableOpacity>
@@ -433,11 +435,11 @@ export default function ConversationDetailsPanel({
       </View>
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Documents</Text>
+        <Text style={[styles.sectionTitle, isDark && styles.darkMutedText]}>Documents</Text>
       </View>
-      <View style={styles.card}>
+      <View style={[styles.card, isDark && styles.darkSurface]}>
         {sharedContent.documents.length === 0 ? (
-          <Text style={styles.emptyText}>{loading ? "Loading…" : "No documents shared yet"}</Text>
+          <Text style={[styles.emptyText, isDark && styles.darkMutedText]}>{loading ? "Loading…" : "No documents shared yet"}</Text>
         ) : (
           sharedContent.documents.map((doc) => (
             <TouchableOpacity
@@ -447,7 +449,7 @@ export default function ConversationDetailsPanel({
               onPress={() => void Linking.openURL(doc.url)}
             >
               <Ionicons name="document-outline" size={18} color={colors.primary} />
-              <Text style={styles.linkText} numberOfLines={1}>
+              <Text style={[styles.linkText, isDark && styles.darkAccentText]} numberOfLines={1}>
                 {doc.name}
               </Text>
             </TouchableOpacity>
@@ -461,6 +463,13 @@ export default function ConversationDetailsPanel({
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
+  darkFlex: { backgroundColor: "#050505" },
+  darkSurface: { backgroundColor: "#0b0f1a", borderBottomColor: "rgba(148, 163, 184, 0.18)" },
+  darkText: { color: "#f3f5fa" },
+  darkMutedText: { color: "#a5aec0" },
+  darkAccentText: { color: "#a78bfa" },
+  darkAccentSurface: { backgroundColor: "rgba(124, 58, 237, 0.22)" },
+  darkDivider: { backgroundColor: "rgba(148, 163, 184, 0.14)" },
   panelHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -518,6 +527,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  darkMediaThumb: { backgroundColor: "#111827", borderColor: "rgba(148, 163, 184, 0.2)" },
   linkText: { flex: 1, fontSize: 14, color: colors.primary },
   modalBackdrop: {
     flex: 1,
@@ -527,6 +537,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   modalCard: { width: "100%", backgroundColor: colors.surface, borderRadius: 18, padding: 22 },
+  darkModalCard: { backgroundColor: "#111827" },
   modalTitle: { fontSize: 17, fontWeight: "700", color: colors.text },
   modalInput: {
     borderWidth: 1,
@@ -538,6 +549,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginTop: 16,
   },
+  darkInput: { backgroundColor: "#0b0f1a", borderColor: "rgba(148, 163, 184, 0.2)", color: "#f3f5fa" },
   modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 18 },
   modalButton: { paddingHorizontal: 16, paddingVertical: 9 },
   modalCancelText: { fontSize: 15, color: colors.textMuted, fontWeight: "500" },
