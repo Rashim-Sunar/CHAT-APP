@@ -33,7 +33,8 @@
           "cameraPermission": "ChatApp uses your camera for video calls.",
           "microphonePermission": "ChatApp uses your microphone for audio and video calls."
         }
-      ]
+      ],
+      "expo-video"
     ]
   }
 }
