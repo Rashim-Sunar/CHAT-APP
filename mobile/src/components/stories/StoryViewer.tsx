@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Image, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useVideoPlayer, VideoView } from "expo-video";
+import { StatusBar } from "expo-status-bar";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Avatar from "../Avatar";
 import { colors } from "../../constants/theme";
 import type { StoryGroup, StoryItem } from "../../types";
@@ -37,6 +39,7 @@ export default function StoryViewer({
 }: StoryViewerProps) {
   const [storyIndex, setStoryIndex] = useState(initialStoryIndex);
   const [progress, setProgress] = useState(0);
+  const insets = useSafeAreaInsets();
 
   const stories = group?.stories || [];
   const currentStory: StoryItem | null = stories[storyIndex] || null;
@@ -167,7 +170,8 @@ export default function StoryViewer({
 
   return (
     <Modal visible={open} animationType="fade" presentationStyle="fullScreen" onRequestClose={onClose}>
-      <View style={styles.container}>
+      <StatusBar style="light" />
+      <View style={[styles.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}>
         <View style={styles.progressRow}>
           {stories.map((item, index) => (
             <View key={item._id} style={styles.progressTrack}>
@@ -244,7 +248,7 @@ function ImageContent({ uri }: { uri?: string }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#000" , paddingTop: 12, paddingHorizontal: 12, paddingBottom: 12},
+  container: { flex: 1, backgroundColor: "#000", paddingHorizontal: 12 },
   progressRow: { flexDirection: "row", gap: 4, marginBottom: 10 },
   progressTrack: { flex: 1, height: 3, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.22)", overflow: "hidden" },
   progressFill: { height: "100%", borderRadius: 999, backgroundColor: colors.surface },

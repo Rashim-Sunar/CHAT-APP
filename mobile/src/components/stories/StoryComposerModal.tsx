@@ -13,6 +13,8 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
+import { StatusBar } from "expo-status-bar";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { StoryCreatePayload, StoryItem } from "../../types";
 import { colors } from "../../constants/theme";
 
@@ -37,6 +39,7 @@ const backgrounds = [
 ];
 
 export default function StoryComposerModal({ open, onClose, onPublishText, onPublishMedia }: StoryComposerModalProps) {
+  const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<ComposerMode>("menu");
   const [selectedAsset, setSelectedAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [caption, setCaption] = useState("");
@@ -134,8 +137,9 @@ export default function StoryComposerModal({ open, onClose, onPublishText, onPub
 
   return (
     <Modal visible={open} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+      <StatusBar style="dark" />
       <View style={styles.container}>
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
           <TouchableOpacity onPress={onClose} style={styles.headerButton}>
             <Ionicons name="chevron-back" size={22} color={colors.text} />
           </TouchableOpacity>
@@ -145,10 +149,10 @@ export default function StoryComposerModal({ open, onClose, onPublishText, onPub
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content}>
-          {mode === "menu" && (
+        {mode === "menu" ? (
+          <ScrollView contentContainerStyle={styles.content}>
             <View style={styles.menuList}>
-              <TouchableOpacity style={styles.menuItem} onPress={() => void openPicker("camera")}> 
+              <TouchableOpacity style={styles.menuItem} onPress={() => void openPicker("camera")}>
                 <View style={styles.menuIcon}><Ionicons name="camera-outline" size={22} color={colors.primary} /></View>
                 <View>
                   <Text style={styles.menuTitle}>Camera</Text>
@@ -156,7 +160,7 @@ export default function StoryComposerModal({ open, onClose, onPublishText, onPub
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.menuItem} onPress={() => void openPicker("gallery")}> 
+              <TouchableOpacity style={styles.menuItem} onPress={() => void openPicker("gallery")}>
                 <View style={styles.menuIcon}><Ionicons name="image-outline" size={22} color={colors.primary} /></View>
                 <View>
                   <Text style={styles.menuTitle}>Gallery</Text>
@@ -164,7 +168,7 @@ export default function StoryComposerModal({ open, onClose, onPublishText, onPub
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.menuItem} onPress={() => setMode("text")}> 
+              <TouchableOpacity style={styles.menuItem} onPress={() => setMode("text")}>
                 <View style={styles.menuIcon}><Ionicons name="text-outline" size={22} color={colors.primary} /></View>
                 <View>
                   <Text style={styles.menuTitle}>Text Story</Text>
@@ -172,112 +176,125 @@ export default function StoryComposerModal({ open, onClose, onPublishText, onPub
                 </View>
               </TouchableOpacity>
             </View>
-          )}
-
-          {mode === "text" && (
-            <View style={styles.textLayout}>
-              <View
-                style={[
-                  styles.textPreview,
-                  { alignItems: textAlign === "left" ? "flex-start" : textAlign === "right" ? "flex-end" : "center" },
-                  {
-                    backgroundColor:
-                      background === "night-gradient" ? "#020617" : background === "sunset-gradient" ? "#f43f5e" : "#4f46e5",
-                  },
-                ]}
-              >
-                <TextInput
-                  value={storyText}
-                  onChangeText={setStoryText}
-                  placeholder="Share a moment"
-                  placeholderTextColor="rgba(255,255,255,0.75)"
-                  multiline
-                  style={[styles.textInput, { textAlign }]}
-                />
+          </ScrollView>
+        ) : (
+          <View style={styles.editor}>
+            {mode === "text" && (
+              <View style={styles.editorPreview}>
+                <View
+                  style={[
+                    styles.textPreview,
+                    { alignItems: textAlign === "left" ? "flex-start" : textAlign === "right" ? "flex-end" : "center" },
+                    {
+                      backgroundColor:
+                        background === "night-gradient" ? "#020617" : background === "sunset-gradient" ? "#f43f5e" : "#4f46e5",
+                    },
+                  ]}
+                >
+                  <TextInput
+                    value={storyText}
+                    onChangeText={setStoryText}
+                    placeholder="Share a moment"
+                    placeholderTextColor="rgba(255,255,255,0.75)"
+                    multiline
+                    style={[styles.textInput, { textAlign }]}
+                  />
+                </View>
               </View>
+            )}
 
-              <View style={styles.panel}>
-                <Text style={styles.panelTitle}>Background</Text>
-                <View style={styles.backgroundRow}>
-                  {backgrounds.map((option) => (
-                    <TouchableOpacity
-                      key={option.id}
-                      onPress={() => setBackground(option.id)}
-                      style={[
-                        styles.backgroundSwatch,
-                        { backgroundColor: option.colors[0] },
-                        background === option.id && styles.backgroundSwatchActive,
-                      ]}
+            {mode === "media" && selectedAsset && (
+              <View style={styles.editorPreview}>
+                <View style={styles.mediaPreview}>
+                  {isVideo ? (
+                    <View style={styles.videoPlaceholder}>
+                      <Ionicons name="play-circle-outline" size={56} color={colors.surface} />
+                      <Text style={styles.videoText}>Video preview</Text>
+                    </View>
+                  ) : (
+                    <Image source={{ uri: selectedAsset.uri }} style={styles.previewImage} resizeMode="contain" />
+                  )}
+                </View>
+              </View>
+            )}
+
+            <View style={styles.editorSheet}>
+              {mode === "text" ? (
+                <>
+                  <Text style={styles.sheetLabel}>Style your story</Text>
+                  <View style={styles.styleControls}>
+                    <View style={styles.backgroundRow}>
+                      {backgrounds.map((option) => (
+                        <TouchableOpacity
+                          key={option.id}
+                          onPress={() => setBackground(option.id)}
+                          style={[
+                            styles.backgroundSwatch,
+                            { backgroundColor: option.colors[0] },
+                            background === option.id && styles.backgroundSwatchActive,
+                          ]}
+                        />
+                      ))}
+                    </View>
+                    <View style={styles.alignmentRow}>
+                      {(["left", "center", "right"] as const).map((align) => (
+                        <TouchableOpacity
+                          key={align}
+                          onPress={() => setTextAlign(align)}
+                          style={[styles.alignButton, textAlign === align && styles.alignButtonActive]}
+                        >
+                          <Ionicons
+                            name={align === "left" ? "text" : align === "right" ? "reorder-three" : "reorder-four"}
+                            size={18}
+                            color={textAlign === align ? colors.primary : colors.textMuted}
+                          />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.captionHeader}>
+                    <Ionicons name="create-outline" size={18} color={colors.textMuted} />
+                    <TextInput
+                      value={caption}
+                      onChangeText={setCaption}
+                      placeholder="Add a caption..."
+                      placeholderTextColor={colors.textFaint}
+                      style={styles.captionInput}
                     />
-                  ))}
-                </View>
-
-                <Text style={styles.panelTitle}>Alignment</Text>
-                <View style={styles.alignmentRow}>
-                  {(["left", "center", "right"] as const).map((align) => (
-                    <TouchableOpacity
-                      key={align}
-                      onPress={() => setTextAlign(align)}
-                      style={[styles.alignButton, textAlign === align && styles.alignButtonActive]}
-                    >
-                      <Text style={[styles.alignText, textAlign === align && styles.alignTextActive]}>{align}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
+                  </View>
+                  <View style={styles.privacyHeader}>
+                    <View style={styles.privacyTitleRow}>
+                      <Ionicons name="lock-open-outline" size={16} color={colors.textMuted} />
+                      <Text style={styles.sheetLabel}>Who can see this story?</Text>
+                    </View>
+                    <View style={styles.privacyRow}>
+                      <TouchableOpacity style={[styles.privacyItem, privacy === "everyone" && styles.privacyItemActive]} onPress={() => setPrivacy("everyone")}>
+                        <Text style={styles.privacyLabel}>Everyone</Text>
+                        <View style={[styles.radio, privacy === "everyone" && styles.radioActive]} />
+                      </TouchableOpacity>
+                      <View style={[styles.privacyItem, styles.privacyDisabled]}>
+                        <Text style={styles.privacyLabel}>Close Friends</Text>
+                        <View style={styles.radio} />
+                      </View>
+                    </View>
+                  </View>
+                  {uploadProgress > 0 && (
+                    <View style={styles.progressWrap}>
+                      <View style={styles.progressBar}><View style={[styles.progressFill, { width: `${uploadProgress}%` }]} /></View>
+                      <Text style={styles.progressText}>Uploading... {uploadProgress}%</Text>
+                    </View>
+                  )}
+                </>
+              )}
+              {error && <Text style={styles.error}>{error}</Text>}
             </View>
-          )}
+          </View>
+        )}
 
-          {mode === "media" && selectedAsset && (
-            <View style={styles.mediaLayout}>
-              <View style={styles.mediaPreview}>
-                {isVideo ? (
-                  <View style={styles.videoPlaceholder}>
-                    <Ionicons name="play-circle-outline" size={56} color={colors.surface} />
-                    <Text style={styles.videoText}>Video preview</Text>
-                  </View>
-                ) : (
-                  <Image source={{ uri: selectedAsset.uri }} style={styles.previewImage} />
-                )}
-              </View>
-
-              <View style={styles.panel}>
-                <Text style={styles.panelTitle}>Add a caption</Text>
-                <TextInput
-                  value={caption}
-                  onChangeText={setCaption}
-                  placeholder="Optional caption"
-                  placeholderTextColor={colors.textFaint}
-                  multiline
-                  style={styles.captionInput}
-                />
-
-                <Text style={styles.panelTitle}>Who can see this story?</Text>
-                <View style={styles.privacyRow}>
-                  <TouchableOpacity style={styles.privacyItem} onPress={() => setPrivacy("everyone")}>
-                    <Text style={styles.privacyLabel}>Everyone</Text>
-                    <View style={[styles.radio, privacy === "everyone" && styles.radioActive]} />
-                  </TouchableOpacity>
-                  <View style={[styles.privacyItem, styles.privacyDisabled]}>
-                    <Text style={styles.privacyLabel}>Close Friends</Text>
-                    <View style={styles.radio} />
-                  </View>
-                </View>
-
-                {uploadProgress > 0 && (
-                  <View style={styles.progressWrap}>
-                    <View style={styles.progressBar}><View style={[styles.progressFill, { width: `${uploadProgress}%` }]} /></View>
-                    <Text style={styles.progressText}>Uploading... {uploadProgress}%</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          )}
-
-          {error && <Text style={styles.error}>{error}</Text>}
-        </ScrollView>
-
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
           {mode !== "menu" ? (
             <TouchableOpacity
               onPress={() => {
@@ -314,13 +331,20 @@ const styles = StyleSheet.create({
   headerButton: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
   headerTitle: { fontSize: 16, fontWeight: "700", color: colors.text },
   content: { padding: 16, gap: 16, paddingBottom: 24 },
+  editor: { flex: 1, padding: 12, gap: 12 },
+  editorPreview: { flex: 1, minHeight: 0, borderRadius: 24, overflow: "hidden", backgroundColor: "#0f172a" },
+  editorSheet: { borderRadius: 22, backgroundColor: "#f8fafc", padding: 14, gap: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  sheetLabel: { fontSize: 13, fontWeight: "700", color: colors.text },
+  styleControls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  captionHeader: { flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, paddingBottom: 8 },
+  privacyHeader: { gap: 8 },
+  privacyTitleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   menuList: { gap: 12 },
   menuItem: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: 18, padding: 14, backgroundColor: colors.surface },
   menuIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.primaryLight, alignItems: "center", justifyContent: "center" },
   menuTitle: { fontSize: 15, fontWeight: "700", color: colors.text },
   menuSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  textLayout: { gap: 14 },
-  textPreview: { minHeight: 280, borderRadius: 24, padding: 18, justifyContent: "center" },
+  textPreview: { flex: 1, borderRadius: 24, padding: 18, justifyContent: "center" },
   textInput: { minHeight: 180, color: colors.surface, fontSize: 28, fontWeight: "700" },
   panel: { borderRadius: 22, backgroundColor: "#f8fafc", padding: 14, gap: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   panelTitle: { fontSize: 14, fontWeight: "700", color: colors.text },
@@ -332,14 +356,14 @@ const styles = StyleSheet.create({
   alignButtonActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
   alignText: { fontSize: 13, fontWeight: "600", color: colors.textMuted, textTransform: "capitalize" },
   alignTextActive: { color: colors.primary },
-  mediaLayout: { gap: 14 },
-  mediaPreview: { borderRadius: 24, overflow: "hidden", backgroundColor: colors.text, minHeight: 320, alignItems: "center", justifyContent: "center" },
-  previewImage: { width: "100%", height: 320 },
+  mediaPreview: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.text },
+  previewImage: { width: "100%", height: "100%" },
   videoPlaceholder: { height: 320, width: "100%", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: "#0f172a" },
   videoText: { color: colors.surface, fontSize: 14, fontWeight: "600" },
-  captionInput: { minHeight: 92, borderWidth: 1, borderColor: colors.border, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: colors.surface, color: colors.text, textAlignVertical: "top" },
-  privacyRow: { gap: 10 },
-  privacyItem: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 14, paddingVertical: 12 },
+  captionInput: { flex: 1, minHeight: 34, paddingHorizontal: 0, paddingVertical: 4, backgroundColor: "transparent", color: colors.text },
+  privacyRow: { flexDirection: "row", gap: 10 },
+  privacyItem: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 12, paddingVertical: 10 },
+  privacyItemActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
   privacyDisabled: { opacity: 0.55 },
   privacyLabel: { fontSize: 14, fontWeight: "600", color: colors.text },
   radio: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: colors.borderStrong },
